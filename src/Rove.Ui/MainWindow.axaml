@@ -1,0 +1,120 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fs="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
+        xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
+        x:Class="Rove.Ui.MainWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="rove"
+        Width="1000" Height="680">
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+T"         Command="{Binding NewTabCommand}"/>
+    <KeyBinding Gesture="Ctrl+W"         Command="{Binding CloseTabCommand}"/>
+    <KeyBinding Gesture="Ctrl+Tab"       Command="{Binding NextTabCommand}"/>
+    <KeyBinding Gesture="Ctrl+Shift+Tab" Command="{Binding PreviousTabCommand}"/>
+    <KeyBinding Gesture="Alt+Left"       Command="{Binding ActiveTab.GoBackCommand}"/>
+    <KeyBinding Gesture="Alt+Right"      Command="{Binding ActiveTab.GoForwardCommand}"/>
+    <KeyBinding Gesture="Alt+Up"         Command="{Binding ActiveTab.GoUpCommand}"/>
+    <KeyBinding Gesture="F5"             Command="{Binding ActiveTab.RefreshCommand}"/>
+  </Window.KeyBindings>
+
+  <DockPanel>
+
+    <!-- Stock TabStrip rather than a hand-rolled ItemsControl. SelectedItem
+         binds straight to ActiveTab, which removes the $parent[Window] command
+         plumbing the previous version needed to select a tab. -->
+    <Border DockPanel.Dock="Top" Background="#141414" Padding="6,4,6,0">
+      <TabStrip ItemsSource="{Binding Tabs}"
+                SelectedItem="{Binding ActiveTab}">
+        <TabStrip.ItemTemplate>
+          <DataTemplate x:DataType="vm:PaneViewModel">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding Title}" FontSize="12"
+                         VerticalAlignment="Center"/>
+              <Button Content="&#x2715;" FontSize="9" Opacity="0.45"
+                      Background="Transparent" BorderThickness="0"
+                      Padding="2" VerticalAlignment="Center"
+                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseTabCommand}"
+                      CommandParameter="{Binding}"/>
+            </StackPanel>
+          </DataTemplate>
+        </TabStrip.ItemTemplate>
+      </TabStrip>
+    </Border>
+
+    <Border DockPanel.Dock="Top" Padding="8,6" Background="#181818">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="&#x2190;" Command="{Binding ActiveTab.GoBackCommand}"
+                IsEnabled="{Binding ActiveTab.CanGoBack}" Width="32"/>
+        <Button Content="&#x2192;" Command="{Binding ActiveTab.GoForwardCommand}"
+                IsEnabled="{Binding ActiveTab.CanGoForward}" Width="32"/>
+        <Button Content="&#x2191;" Command="{Binding ActiveTab.GoUpCommand}"
+                IsEnabled="{Binding ActiveTab.CanGoUp}" Width="32"/>
+        <TextBox x:Name="PathBox" Text="{Binding ActiveTab.PathText}" Width="560"
+                 FontFamily="monospace" FontSize="12"/>
+        <CheckBox Content="hidden" IsChecked="{Binding ActiveTab.ShowHidden}"/>
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Padding="8,4" Background="#181818">
+      <TextBlock Text="{Binding ActiveTab.Status}" FontFamily="monospace"
+                 FontSize="11" Opacity="0.7"/>
+    </Border>
+
+    <Border DockPanel.Dock="Top" Padding="8,3" Background="#202020">
+      <Grid ColumnDefinitions="*,100,170">
+        <TextBlock Grid.Column="0" Text="name"     FontSize="11" Opacity="0.45"/>
+        <TextBlock Grid.Column="1" Text="size"     FontSize="11" Opacity="0.45"/>
+        <TextBlock Grid.Column="2" Text="modified" FontSize="11" Opacity="0.45"/>
+      </Grid>
+    </Border>
+
+    <!-- Every pane's view stays alive and is toggled by IsVisible rather than
+         being swapped through a ContentControl. Recreating the view on tab
+         switch would reset scroll position every time, which is exactly the
+         kind of forgetting this project exists to avoid. -->
+    <ItemsControl ItemsSource="{Binding Tabs}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <Grid/>
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:PaneViewModel">
+          <ListBox ItemsSource="{Binding Entries}"
+                   SelectedItem="{Binding SelectedEntry}"
+                   IsVisible="{Binding IsActive}"
+                   SelectionMode="Multiple" Background="Transparent" Padding="0">
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+              </Style>
+            </ListBox.Styles>
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <VirtualizingStackPanel/>
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="fs:FileEntry">
+                <Grid ColumnDefinitions="*,100,170" Height="22" Margin="8,0">
+                  <TextBlock Grid.Column="0" Text="{Binding Name}"
+                             FontSize="12" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Length}"
+                             FontSize="11" FontFamily="monospace" Opacity="0.55"
+                             VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="2" Text="{Binding LastWriteTime}"
+                             FontSize="11" FontFamily="monospace" Opacity="0.55"
+                             VerticalAlignment="Center"/>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+  </DockPanel>
+</Window>
