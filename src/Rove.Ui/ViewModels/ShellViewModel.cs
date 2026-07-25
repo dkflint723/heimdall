@@ -17,16 +17,63 @@ namespace Rove.Ui.ViewModels;
 public sealed partial class ShellViewModel : ObservableObject
 {
     private readonly IFileSystemProvider _fs;
+    private readonly IFileOperations? _ops;
     private readonly ISessionStore? _store;
     private bool _restoring;
     private bool _started;
 
-    public ShellViewModel(IFileSystemProvider fs, ISessionStore? store = null)
+    public ShellViewModel(
+        IFileSystemProvider fs,
+        IFileOperations? ops = null,
+        ISessionStore? store = null)
     {
         _fs = fs;
+        _ops = ops;
         _store = store;
         Tabs.CollectionChanged += OnTabsChanged;
     }
+
+    /// <summary>Progress line for whatever operation is running, or empty.</summary>
+    [ObservableProperty] private string _operationStatus = "";
+
+    /// <summary>The running operation, so the view can offer pause and cancel.</summary>
+    [ObservableProperty] private IOperationHandle? _activeOperation;
+
+    private PaneViewModel NewPane()
+    {
+        var pane = new PaneViewModel(_fs, _ops);
+        pane.OperationStarted += OnOperationStarted;
+        return pane;
+    }
+
+    private void OnOperationStarted(object? sender, IOperationHandle handle)
+    {
+        ActiveOperation = handle;
+
+        if (handle is Rove.Linux.OperationHandle concrete)
+        {
+            concrete.Progressed += (_, p) =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    OperationStatus = p.ItemsTotal <= 1 && p.BytesTotal == 0
+                        ? p.CurrentItem ?? ""
+                        : $"{p.ItemsDone}/{p.ItemsTotal}  {Format(p.BytesDone)}/{Format(p.BytesTotal)}  {p.CurrentItem}");
+        }
+
+        _ = handle.Completion.ContinueWith(_ =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                OperationStatus = "";
+                ActiveOperation = null;
+            }), TaskScheduler.Default);
+    }
+
+    private static string Format(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB",
+    };
 
     public ObservableCollection<PaneViewModel> Tabs { get; } = new();
 
@@ -61,7 +108,7 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             foreach (var tab in tabs)
             {
-                var pane = new PaneViewModel(_fs);
+                var pane = NewPane();
                 pane.RestoreFrom(tab);
                 Tabs.Add(pane);
             }
@@ -151,12 +198,15 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public PaneViewModel AddTab(string path)
     {
-        var pane = new PaneViewModel(_fs);
+        var pane = NewPane();
         Tabs.Add(pane);
         ActiveTab = pane;
         _ = pane.NavigateAsync(path);
         return pane;
     }
+
+    [RelayCommand]
+    private void CancelOperation() => ActiveOperation?.Cancel();
 
     [RelayCommand]
     private void NewTab()

@@ -16,6 +16,8 @@
     <KeyBinding Gesture="Alt+Right"      Command="{Binding ActiveTab.GoForwardCommand}"/>
     <KeyBinding Gesture="Alt+Up"         Command="{Binding ActiveTab.GoUpCommand}"/>
     <KeyBinding Gesture="F5"             Command="{Binding ActiveTab.RefreshCommand}"/>
+    <KeyBinding Gesture="F2"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
+    <KeyBinding Gesture="Ctrl+Z"         Command="{Binding ActiveTab.UndoCommand}"/>
   </Window.KeyBindings>
 
   <DockPanel>
@@ -61,6 +63,32 @@
                  FontSize="11" Opacity="0.7"/>
     </Border>
 
+    <!-- Operation progress. Present only while something is running, so the
+         common case costs no vertical space. -->
+    <Border DockPanel.Dock="Bottom" Padding="8,5" Background="#1d1d1d"
+            IsVisible="{Binding ActiveOperation, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <TextBlock Text="{Binding OperationStatus}" FontFamily="monospace"
+                   FontSize="11" VerticalAlignment="Center"/>
+        <Button Content="cancel" FontSize="11" Padding="8,2"
+                Command="{Binding CancelOperationCommand}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- Inline prompt for rename and for confirming an irreversible delete.
+         A bar rather than a modal dialog: it keeps the listing visible, which
+         matters when you are about to destroy something in it. -->
+    <Border x:Name="PromptBar" DockPanel.Dock="Bottom" Padding="8,6"
+            Background="#232323" IsVisible="False">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock x:Name="PromptLabel" FontSize="12" VerticalAlignment="Center"/>
+        <TextBox x:Name="PromptInput" Width="320" FontFamily="monospace"
+                 FontSize="12" IsVisible="False"/>
+        <TextBlock x:Name="PromptHint" FontSize="11" Opacity="0.5"
+                   VerticalAlignment="Center"/>
+      </StackPanel>
+    </Border>
+
     <Border DockPanel.Dock="Top" Padding="8,3" Background="#202020">
       <Grid ColumnDefinitions="*,100,170">
         <TextBlock Grid.Column="0" Text="name"     FontSize="11" Opacity="0.45"/>
@@ -83,6 +111,7 @@
         <DataTemplate x:DataType="vm:PaneViewModel">
           <ListBox ItemsSource="{Binding Entries}"
                    SelectedItem="{Binding SelectedEntry}"
+                   SelectedItems="{Binding SelectedEntries}"
                    IsVisible="{Binding IsActive}"
                    SelectionMode="Multiple" Background="Transparent" Padding="0">
             <ListBox.Styles>

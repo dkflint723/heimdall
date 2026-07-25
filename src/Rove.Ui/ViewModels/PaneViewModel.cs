@@ -20,12 +20,30 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     private const int FlushIntervalMs = 100;
 
     private readonly IFileSystemProvider _fs;
+    private readonly IFileOperations? _ops;
     private readonly Stack<string> _back = new();
     private readonly Stack<string> _forward = new();
     private CancellationTokenSource? _cts;
     private bool _suppressReload;
 
-    public PaneViewModel(IFileSystemProvider fs) => _fs = fs;
+    public PaneViewModel(IFileSystemProvider fs, IFileOperations? ops = null)
+    {
+        _fs = fs;
+        _ops = ops;
+    }
+
+    /// <summary>
+    /// Bound to the list's SelectedItems. Operations act on this, not on
+    /// SelectedEntry — deleting one of five selected files would be a nasty
+    /// surprise.
+    /// </summary>
+    public System.Collections.ObjectModel.ObservableCollection<FileEntry> SelectedEntries { get; } = new();
+
+    /// <summary>Raised when an operation starts, so the shell can show progress.</summary>
+    public event EventHandler<IOperationHandle>? OperationStarted;
+
+    /// <summary>Raised when a rename is requested, so the view can prompt.</summary>
+    public event EventHandler<FileEntry>? RenameRequested;
 
     public BulkObservableCollection<FileEntry> Entries { get; } = new();
 
@@ -91,6 +109,84 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     public Task OpenSelectedAsync()
         => SelectedEntry is { } entry ? OpenAsync(entry) : Task.CompletedTask;
+
+    private IReadOnlyList<string> SelectionPaths()
+        => SelectedEntries.Count > 0
+            ? SelectedEntries.Select(e => e.FullPath).ToList()
+            : SelectedEntry is { } one ? [one.FullPath] : [];
+
+    /// <summary>Delete key. Recoverable, so no confirmation prompt.</summary>
+    [RelayCommand]
+    public void TrashSelected()
+    {
+        if (_ops is null) return;
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) return;
+
+        Track(_ops.Trash(paths));
+    }
+
+    /// <summary>Shift+Delete. Irreversible — the view must confirm first.</summary>
+    [RelayCommand]
+    public void DeleteSelected()
+    {
+        if (_ops is null) return;
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) return;
+
+        Track(_ops.Delete(paths));
+    }
+
+    [RelayCommand]
+    public void BeginRename()
+    {
+        if (SelectedEntry is { } entry) RenameRequested?.Invoke(this, entry);
+    }
+
+    public async Task RenameAsync(FileEntry entry, string newName)
+    {
+        if (_ops is null) return;
+
+        try
+        {
+            await _ops.RenameAsync(entry.FullPath, newName, CancellationToken.None)
+                      .ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() => _ = RefreshAsync());
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    public async Task UndoAsync()
+    {
+        if (_ops is null || !_ops.CanUndo) return;
+
+        try
+        {
+            await _ops.UndoAsync(CancellationToken.None).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() => _ = RefreshAsync());
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+        }
+    }
+
+    private void Track(IOperationHandle handle)
+    {
+        OperationStarted?.Invoke(this, handle);
+
+        // The listing is only refreshed once, at the end — refreshing per item
+        // would rebuild the view thousands of times during a large copy.
+        _ = handle.Completion.ContinueWith(
+            _ => Dispatcher.UIThread.Post(() => _ = RefreshAsync()),
+            TaskScheduler.Default);
+    }
 
     partial void OnCurrentPathChanged(string value)
     {

@@ -5,8 +5,8 @@ using Avalonia.Interactivity;
 using Rove.Core.FileSystem;
 using Rove.Core.Session;
 using Rove.Linux;
-using Rove.Ui.Session;
 using Rove.Ui.ViewModels;
+using Rove.Ui.Session;
 
 namespace Rove.Ui;
 
@@ -24,6 +24,7 @@ public partial class MainWindow : Window
         // becomes DI resolution once Rove.Windows exists — the window must
         // never name a platform type beyond this line.
         IFileSystemProvider fs = new LinuxFileSystemProvider();
+        IFileOperations ops = new LinuxFileOperations();
 
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
@@ -33,10 +34,11 @@ public partial class MainWindow : Window
         var state = _store.Load();
         ApplyGeometry(state);
 
-        _shell = new ShellViewModel(fs, _store) { GeometryProvider = CaptureGeometry };
+        _shell = new ShellViewModel(fs, ops, _store) { GeometryProvider = CaptureGeometry };
         DataContext = _shell;
 
         PathBox.KeyDown += OnPathBoxKeyDown;
+        PromptInput.KeyDown += OnPromptKeyDown;
 
         // Handled at the window because the list lives inside a DataTemplate,
         // so there is no named control to attach to.
@@ -48,6 +50,82 @@ public partial class MainWindow : Window
         PositionChanged += (_, _) => _shell.NotifyWindowChanged();
 
         _shell.Start(state);
+
+        foreach (var pane in _shell.Tabs) pane.RenameRequested += OnRenameRequested;
+        _shell.Tabs.CollectionChanged += (_, e) =>
+        {
+            foreach (var pane in e.NewItems?.OfType<PaneViewModel>() ?? [])
+                pane.RenameRequested += OnRenameRequested;
+        };
+    }
+
+    // ---- inline prompt -------------------------------------------------
+
+    private enum PromptMode { None, Rename, ConfirmDelete }
+
+    private PromptMode _prompt = PromptMode.None;
+    private FileEntry _renameTarget;
+
+    private void OnRenameRequested(object? sender, FileEntry entry)
+    {
+        _prompt = PromptMode.Rename;
+        _renameTarget = entry;
+
+        PromptLabel.Text = "rename to";
+        PromptInput.Text = entry.Name;
+        PromptInput.IsVisible = true;
+        PromptHint.Text = "enter to confirm · esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptInput.Focus();
+        PromptInput.SelectAll();
+    }
+
+    private void AskConfirmDelete()
+    {
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var count = pane.SelectedEntries.Count > 0
+            ? pane.SelectedEntries.Count
+            : pane.SelectedEntry is null ? 0 : 1;
+
+        if (count == 0) return;
+
+        _prompt = PromptMode.ConfirmDelete;
+
+        PromptLabel.Text = $"permanently delete {count} item(s)? this cannot be undone";
+        PromptInput.IsVisible = false;
+        PromptHint.Text = "enter to delete · esc to cancel";
+        PromptBar.IsVisible = true;
+        PromptBar.Focus();
+    }
+
+    private void ClosePrompt()
+    {
+        _prompt = PromptMode.None;
+        PromptBar.IsVisible = false;
+        PromptInput.IsVisible = false;
+    }
+
+    private void OnPromptKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_prompt != PromptMode.Rename) return;
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                e.Handled = true;
+                var name = PromptInput.Text ?? "";
+                ClosePrompt();
+                if (!string.IsNullOrWhiteSpace(name) && name != _renameTarget.Name)
+                    _ = _shell.ActiveTab?.RenameAsync(_renameTarget, name);
+                break;
+
+            case Key.Escape:
+                e.Handled = true;
+                ClosePrompt();
+                break;
+        }
     }
 
     private void ApplyGeometry(SessionState? state)
@@ -125,6 +203,24 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        // The prompt owns the keyboard while it is open.
+        if (_prompt == PromptMode.ConfirmDelete)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                ClosePrompt();
+                _shell.ActiveTab?.DeleteSelectedCommand.Execute(null);
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                ClosePrompt();
+            }
+            return;
+        }
+
+        if (_prompt == PromptMode.Rename) return;
         if (PathBox.IsFocused) return;
 
         // Ctrl+1..9 jumps to a tab, browser-style.
@@ -148,6 +244,18 @@ public partial class MainWindow : Window
             case Key.Back:
                 e.Handled = true;
                 _ = pane.GoBackAsync();
+                break;
+
+            // Delete trashes, which is recoverable and needs no prompt.
+            // Shift+Delete is irreversible and always confirms first.
+            case Key.Delete when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                e.Handled = true;
+                AskConfirmDelete();
+                break;
+
+            case Key.Delete:
+                e.Handled = true;
+                pane.TrashSelectedCommand.Execute(null);
                 break;
         }
     }
