@@ -1334,6 +1334,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // The whole scan in one hop rather than an await per file: this reads an
         // extended attribute for every entry in the folder, and doing that from
         // the UI thread froze the window on a large directory.
+        //
+        // Which also means it can take a while, and the folder can change under
+        // it — so the same generation guard the listing uses applies here.
+        var generation = _generation;
         var snapshot = _all.ToList();
         var store = _tags;
 
@@ -1354,6 +1358,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
+            // Navigating away mid-scan is the failure case, and it is not
+            // harmless: `set` holds paths from the folder that was being
+            // scanned, while `_all` is now the new folder's entries, so the
+            // Where below matches nothing and REPLACES THE NEW LISTING WITH AN
+            // EMPTY ONE. The folder would simply appear empty.
+            if (generation != _generation) return;
+
             var set = matches.ToHashSet(StringComparer.Ordinal);
 
             Entries.ReplaceAll(_all.Where(e => set.Contains(e.FullPath)).ToList());
