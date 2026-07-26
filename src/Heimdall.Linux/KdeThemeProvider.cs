@@ -102,6 +102,11 @@ public sealed class KdeThemeProvider : IThemeProvider, IDisposable
             FontSize = size,
             IsDark = IsDark(colours.GetValueOrDefault(ThemeRole.ViewBackground)),
             IconTheme = ini.GetValueOrDefault("Icons")?.GetValueOrDefault("Theme"),
+
+            // [KDE] SingleClick, the same key Dolphin obeys. Absent means the
+            // user never set it, so it stays null.
+            SingleClick = ini.GetValueOrDefault("KDE")?.GetValueOrDefault("SingleClick")
+                is { } single && bool.TryParse(single, out var parsed) ? parsed : null,
         };
     }
 

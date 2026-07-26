@@ -50,6 +50,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
         _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
 
+        _openWithSystem = current.Navigation.OpenItemsWith == ActivationClick.System;
+        _openWithSingle = current.Navigation.OpenItemsWith == ActivationClick.Single;
+        _openWithDouble = current.Navigation.OpenItemsWith == ActivationClick.Double;
+
         var menu = current.ContextMenu;
 
         _menuCopyTo = menu.ShowCopyTo;
@@ -207,6 +211,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _absoluteDates;
     [ObservableProperty] private bool _showFolderItemCounts;
 
+    // ---- Navigation -------------------------------------------------------
+    //
+    // One setting. Dolphin has no control of its own here at all — it points at
+    // System Settings — but Heimdall keeps an override because it also has to
+    // run on Windows, where there is nothing to defer to.
+    //
+    // "Open folders during drag" (spring-loaded folders) is the other item on
+    // Dolphin's page and is not built, so it is not offered.
+
+    [ObservableProperty] private bool _openWithSystem;
+    [ObservableProperty] private bool _openWithSingle;
+    [ObservableProperty] private bool _openWithDouble;
+
     /// <summary>Set when the dialog was dismissed with Save.</summary>
     public bool Saved { get; private set; }
 
@@ -270,6 +287,13 @@ public sealed partial class SettingsViewModel : ObservableObject
                             : _original.Views.Details.FolderSize)
                         : Core.Settings.FolderSizeMode.None,
                 },
+            },
+
+            Navigation = _original.Navigation with
+            {
+                OpenItemsWith = OpenWithSingle ? ActivationClick.Single
+                    : OpenWithDouble ? ActivationClick.Double
+                    : ActivationClick.System,
             },
 
             ContextMenu = _original.ContextMenu with

@@ -203,6 +203,43 @@
         </StackPanel>
       </TabItem>
 
+      <TabItem Header="Navigation">
+        <StackPanel Spacing="14" Margin="0,12,0,0">
+
+          <TextBlock Text="Open files and folders with"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="6">
+            <RadioButton GroupName="activation"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         IsChecked="{Binding OpenWithSystem}">
+              <StackPanel>
+                <TextBlock Text="Whatever the desktop is set to"/>
+                <TextBlock Text="Follows Plasma's own single-click setting, so this matches Dolphin without being configured twice."
+                           FontSize="{DynamicResource FontSizeTiny}"
+                           Foreground="{DynamicResource ViewDimText}"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </RadioButton>
+
+            <RadioButton Content="A single click" GroupName="activation"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         IsChecked="{Binding OpenWithSingle}"/>
+
+            <RadioButton Content="A double click" GroupName="activation"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         IsChecked="{Binding OpenWithDouble}"/>
+          </StackPanel>
+
+          <TextBlock Text="Takes effect immediately — the setting is read when you click, not when a row is drawn."
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"
+                     TextWrapping="Wrap"/>
+
+        </StackPanel>
+      </TabItem>
+
       <TabItem Header="Context menu">
         <StackPanel Spacing="14" Margin="0,12,0,0">
 

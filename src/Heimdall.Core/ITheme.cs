@@ -35,6 +35,17 @@ public sealed record ThemePalette
 
     /// <summary>The desktop's icon theme name, for when icons are wired up.</summary>
     public string? IconTheme { get; init; }
+
+    /// <summary>
+    /// Whether the desktop opens items on a single click. Null when the desktop
+    /// does not say, which is not the same as "double" — it means fall back to
+    /// this application's own default rather than assert something about a
+    /// desktop that never expressed a preference.
+    ///
+    /// Here rather than in a separate provider because it comes out of the same
+    /// file, in the same read, as everything else on this record.
+    /// </summary>
+    public bool? SingleClick { get; init; }
 }
 
 public interface IThemeProvider

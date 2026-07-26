@@ -185,6 +185,11 @@ public static class ThemeApplier
         // Always set, so the markup can bind unconditionally. A configured font
         // wins over the desktop's, which is the whole point of configuring one;
         // blank means follow Plasma, which stays the default.
+        // Published here rather than at each call site: Apply is the one place
+        // every palette read funnels through — startup, a Plasma change, and a
+        // settings save all reach it — so this cannot fall out of step.
+        DoubleClick.SystemSingleClick = palette?.SingleClick;
+
         var chosen = Settings.AppSettings.Current.Views.CustomFontFamily;
 
         target["AppFontFamily"] =
