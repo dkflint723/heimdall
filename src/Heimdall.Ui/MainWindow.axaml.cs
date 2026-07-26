@@ -12,8 +12,10 @@ using Heimdall.Core;
 using Heimdall.Core.Places;
 using Heimdall.Core.Search;
 using Heimdall.Core.Session;
+using Heimdall.Core.Settings;
 using Heimdall.Linux;
 using Heimdall.Ui.Session;
+using Heimdall.Ui.Settings;
 using Heimdall.Ui.ViewModels;
 
 namespace Heimdall.Ui;
@@ -22,6 +24,11 @@ public partial class MainWindow : Window
 {
     private readonly ShellViewModel _shell;
     private readonly JsonSessionStore _store;
+
+    // Preferences, as distinct from the session. Read before it, because the
+    // startup setting decides whether the session is consulted at all.
+    private readonly JsonSettingsStore _settingsStore;
+    private readonly SettingsState _settings;
     private readonly IPropertiesProvider _properties;
     private readonly IThemeProvider? _theme;
     private readonly IAccessEditor? _accessEditor;
@@ -86,6 +93,16 @@ public partial class MainWindow : Window
 
         // Not platform-specific: the clipboard comes from the toolkit.
         IClipboardService clipboard = ClipboardService.ForWindow(this);
+
+        // Settings first. Nothing reads them yet — they are threaded into the
+        // call sites that currently hardcode these behaviours as a separate
+        // step, so that this one cannot change how anything works. Writing the
+        // defaults out on a first run makes the file readable and hand-editable
+        // before any dialog exists, and proves the source-generated serializer
+        // survives trimming, which is where reflection-based JSON fails.
+        _settingsStore = new JsonSettingsStore(JsonSessionStore.DefaultDirectory());
+        _settings = _settingsStore.Load();
+        _settingsStore.EnsureFileExists(_settings);
 
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
