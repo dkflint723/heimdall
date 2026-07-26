@@ -4,6 +4,9 @@ namespace Rove.Core.Session;
 
 public enum SortField { Name, Size, Modified, Kind }
 
+/// <summary>Ctrl+B cycles full → rail only → hidden.</summary>
+public enum RailState { Full, RailOnly, Hidden }
+
 /// <summary>
 /// State for one tab. Deliberately only fields that are actually read and
 /// written — a schema that claims to store scroll position and doesn't is worse
@@ -45,16 +48,23 @@ public sealed record WindowSession
 
     public IReadOnlyList<PaneState> Panes { get; init; } = [];
     public int ActivePaneIndex { get; init; }
+
+    // Re-added in v3 now that the sidebar exists. These were removed in v2
+    // precisely because nothing read or wrote them.
+    public string ActiveSidebarPanel { get; init; } = "places";
+    public double SidebarWidth { get; init; } = 210;
+    public RailState Rail { get; init; } = RailState.Full;
 }
 
 public sealed record SessionState
 {
     /// <summary>
-    /// Bumped to 2 when scroll/selection/view/column fields were removed and
-    /// ShowHidden added. An unrecognised version is ignored rather than
-    /// migrated or thrown on — a session file must never prevent startup.
+    /// v2 removed scroll/selection/view/column fields and added ShowHidden.
+    /// v3 added the sidebar fields back, once there was a sidebar to store.
+    /// An unrecognised version is ignored rather than migrated or thrown on —
+    /// a session file must never prevent startup.
     /// </summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     public int Version { get; init; } = CurrentVersion;
     public IReadOnlyList<WindowSession> Windows { get; init; } = [];

@@ -18,6 +18,12 @@
     <KeyBinding Gesture="F5"             Command="{Binding ActiveTab.RefreshCommand}"/>
     <KeyBinding Gesture="F2"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
     <KeyBinding Gesture="Ctrl+Z"         Command="{Binding ActiveTab.UndoCommand}"/>
+    <KeyBinding Gesture="Ctrl+B"         Command="{Binding Sidebar.CycleRailCommand}"/>
+    <KeyBinding Gesture="Ctrl+D"         Command="{Binding PinCurrentCommand}"/>
+    <!-- Alt rather than Ctrl for panels: Ctrl+1..9 already switches tabs,
+         browser-style, and that convention is the stronger one. -->
+    <KeyBinding Gesture="Alt+D1"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"/>
+    <KeyBinding Gesture="Alt+D2"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="tree"/>
   </Window.KeyBindings>
 
   <DockPanel>
@@ -101,6 +107,81 @@
          being swapped through a ContentControl. Recreating the view on tab
          switch would reset scroll position every time, which is exactly the
          kind of forgetting this project exists to avoid. -->
+    <!-- Icon rail. Narrow enough to be nearly free, and a state of the
+         sidebar rather than a separate design. -->
+    <Border DockPanel.Dock="Left" Background="#141414" Width="38"
+            IsVisible="{Binding Sidebar.IsRailVisible}">
+      <StackPanel Orientation="Vertical" Spacing="4" Margin="0,8">
+        <Button Content="&#x2605;" FontSize="15" Width="38" Height="34"
+                Background="Transparent" BorderThickness="0"
+                Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"
+                ToolTip.Tip="places  (alt+1)"/>
+        <Button Content="&#x25B8;" FontSize="15" Width="38" Height="34"
+                Background="Transparent" BorderThickness="0"
+                Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="tree"
+                ToolTip.Tip="tree  (alt+2)"/>
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Left" Background="#181818"
+            Width="{Binding Sidebar.Width}"
+            IsVisible="{Binding Sidebar.IsPanelVisible}">
+      <Panel>
+
+        <ScrollViewer IsVisible="{Binding Sidebar.IsPlacesVisible}">
+          <ItemsControl ItemsSource="{Binding Sidebar.Groups}" Margin="0,8">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PlaceGroupViewModel">
+                <StackPanel Margin="0,0,0,10">
+                  <TextBlock Text="{Binding Label}" FontSize="11" Opacity="0.4"
+                             Margin="12,0,0,4"/>
+                  <ItemsControl ItemsSource="{Binding Places}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:PlaceItemViewModel">
+                        <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
+                                CommandParameter="{Binding Path}"
+                                Background="Transparent" BorderThickness="0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,3" Opacity="{Binding Opacity}">
+                          <StackPanel>
+                            <TextBlock Text="{Binding Label}" FontSize="12"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
+                                         Height="3" Margin="0,4,8,0"
+                                         IsVisible="{Binding HasCapacity}"/>
+                            <TextBlock Text="{Binding CapacityText}" FontSize="10"
+                                       Opacity="0.4" IsVisible="{Binding HasCapacity}"/>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+
+        <TreeView ItemsSource="{Binding Sidebar.Tree.Roots}"
+                  IsVisible="{Binding Sidebar.IsTreeVisible}"
+                  Background="Transparent" Margin="4,8">
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate x:DataType="vm:FolderNode" ItemsSource="{Binding Children}">
+              <TextBlock Text="{Binding Label}" FontSize="12"
+                         TextTrimming="CharacterEllipsis"/>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem" x:DataType="vm:FolderNode">
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            </Style>
+          </TreeView.Styles>
+        </TreeView>
+
+      </Panel>
+    </Border>
+
     <ItemsControl ItemsSource="{Binding Tabs}">
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>

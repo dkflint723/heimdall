@@ -4,6 +4,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Rove.Core.FileSystem;
+using Rove.Core.Places;
 using Rove.Core.Session;
 
 namespace Rove.Ui.ViewModels;
@@ -25,12 +26,39 @@ public sealed partial class ShellViewModel : ObservableObject
     public ShellViewModel(
         IFileSystemProvider fs,
         IFileOperations? ops = null,
-        ISessionStore? store = null)
+        ISessionStore? store = null,
+        IPlacesProvider? places = null)
     {
         _fs = fs;
         _ops = ops;
         _store = store;
+        Sidebar = new SidebarViewModel(fs, places);
+        Sidebar.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(SidebarViewModel.ActivePanel)
+                               or nameof(SidebarViewModel.Rail)
+                               or nameof(SidebarViewModel.Width))
+                MarkDirty();
+        };
         Tabs.CollectionChanged += OnTabsChanged;
+    }
+
+    public SidebarViewModel Sidebar { get; }
+
+    /// <summary>Clicking a place navigates the active tab rather than opening
+    /// a new one — the sidebar is navigation, not tab management.</summary>
+    [RelayCommand]
+    private void GoToPlace(string? path)
+    {
+        if (!string.IsNullOrEmpty(path))
+            _ = ActiveTab?.NavigateAsync(path);
+    }
+
+    [RelayCommand]
+    private void PinCurrent()
+    {
+        if (ActiveTab?.CurrentPath is { Length: > 0 } path)
+            _ = Sidebar.PinAsync(path);
     }
 
     /// <summary>Progress line for whatever operation is running, or empty.</summary>
@@ -95,6 +123,15 @@ public sealed partial class ShellViewModel : ObservableObject
         if (_started) return;
         _started = true;
 
+        if (state?.Windows.FirstOrDefault() is { } w)
+        {
+            Sidebar.ActivePanel = w.ActiveSidebarPanel;
+            Sidebar.Width = w.SidebarWidth;
+            Sidebar.Rail = w.Rail;
+        }
+
+        _ = Sidebar.InitializeAsync();
+
         var tabs = state?.Windows.FirstOrDefault()?.Panes.FirstOrDefault()?.Tabs;
 
         if (tabs is null || tabs.Count == 0)
@@ -136,6 +173,9 @@ public sealed partial class ShellViewModel : ObservableObject
             [
                 geometry with
                 {
+                    ActiveSidebarPanel = Sidebar.ActivePanel,
+                    SidebarWidth = Sidebar.Width,
+                    Rail = Sidebar.Rail,
                     Panes =
                     [
                         new PaneState

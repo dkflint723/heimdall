@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Rove.Core.FileSystem;
+using Rove.Core.Places;
 using Rove.Core.Session;
 using Rove.Linux;
 using Rove.Ui.ViewModels;
@@ -25,6 +26,7 @@ public partial class MainWindow : Window
         // never name a platform type beyond this line.
         IFileSystemProvider fs = new LinuxFileSystemProvider();
         IFileOperations ops = new LinuxFileOperations();
+        IPlacesProvider places = new LinuxPlacesProvider(JsonSessionStore.DefaultDirectory());
 
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
@@ -34,7 +36,7 @@ public partial class MainWindow : Window
         var state = _store.Load();
         ApplyGeometry(state);
 
-        _shell = new ShellViewModel(fs, ops, _store) { GeometryProvider = CaptureGeometry };
+        _shell = new ShellViewModel(fs, ops, _store, places) { GeometryProvider = CaptureGeometry };
         DataContext = _shell;
 
         PathBox.KeyDown += OnPathBoxKeyDown;
