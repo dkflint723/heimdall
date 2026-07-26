@@ -97,13 +97,26 @@ public partial class MainWindow : Window
         _shell = new ShellViewModel(
             platform.FileSystem, platform.Operations, _store,
             platform.Places, platform.Launcher, clipboard, platform.Search,
-            platform.Scripts, platform.Tags, platform.Templates)
+            platform.Scripts, platform.Tags, platform.Templates, platform.Sharing)
         {
             GeometryProvider = CaptureGeometry,
         };
         _shell.PaneCreated += (_, pane) => WirePane(pane);
         _shell.PropertiesRequested += (_, _) => ShowProperties();
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
+
+        // The clipboard belongs to the view, so the shell asks rather than reaches.
+        _shell.ShareUrlCopyRequested += async (_, url) =>
+        {
+            try
+            {
+                if (Clipboard is { } clipboard) await clipboard.SetTextAsync(url);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[rove] clipboard: {ex.Message}");
+            }
+        };
         _shell.ScaleApplier = ApplyScales;
         DataContext = _shell;
 
@@ -603,6 +616,10 @@ public partial class MainWindow : Window
 
         try
         {
+            // Servers we started are ours to stop; a share outliving the window
+            // would keep a folder on the network with nothing showing it.
+            await _shell.StopAllSharesAsync();
+
             await _store.FlushAsync(CancellationToken.None);
             await _store.DisposeAsync();
         }

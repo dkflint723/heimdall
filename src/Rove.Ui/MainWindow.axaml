@@ -5,6 +5,7 @@
         xmlns:core="clr-namespace:Rove.Core;assembly=Rove.Core"
         xmlns:th="clr-namespace:Rove.Ui.Thumbnails"
         xmlns:local="clr-namespace:Rove.Ui"
+        xmlns:sh="clr-namespace:Rove.Core.Sharing;assembly=Rove.Core"
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="rove"
@@ -389,6 +390,24 @@
               <Separator/>
               <!-- Sorting by type has existed since the first build with no way
                    to reach it: there is no type column to click. -->
+              <!-- Read-only and read-write are separate commands, not a toggle:
+                   the difference is "people can look" versus "people can
+                   overwrite", which is not a checkbox decision. -->
+              <MenuItem Header="Share over network"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}">
+                <MenuItem Header="Read-only"
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderCommand}"/>
+                <MenuItem Header="Allow uploads"
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderWritableCommand}"/>
+              </MenuItem>
+
+              <!-- When the backend is missing the menu says so and offers to
+                   fix it, rather than hiding a feature with no explanation.
+                   The click is the consent — nothing installs on its own. -->
+              <MenuItem Header="Share over network — install copyparty…"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanInstallSharing}"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).InstallSharingCommand}"/>
+              <Separator/>
               <MenuItem Header="Sort by">
                 <MenuItem Header="Name" ToggleType="Radio"
                           IsChecked="{Binding ActiveTab.IsSortedByName, Mode=OneWay}"
@@ -1073,6 +1092,47 @@
               <!-- The tree is the one section worth collapsing: it is tall, and
                    it is the least reached for of the four. -->
               <StackPanel Margin="0,10,0,0">
+                <!-- Active shares. Deliberately always visible while running:
+                     a folder open to the network must never be something you
+                     have to remember. -->
+                <StackPanel IsVisible="{Binding HasShares}" Margin="0,4,0,8">
+                  <TextBlock Text="sharing" Margin="12,0,0,2"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             Foreground="{DynamicResource ViewDimText}"/>
+                  <ItemsControl ItemsSource="{Binding Shares}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="sh:ShareSession">
+                        <Border Margin="8,2" Padding="6,4" CornerRadius="4"
+                                Background="{DynamicResource HoverBackground}">
+                          <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="&#x2715;" Padding="4,0"
+                                    Background="Transparent" BorderThickness="0"
+                                    FontSize="{DynamicResource FontSizeTiny}"
+                                    ToolTip.Tip="stop sharing"
+                                    Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).StopShareCommand}"
+                                    CommandParameter="{Binding}"/>
+                            <Button DockPanel.Dock="Right" Content="copy" Padding="6,0"
+                                    Background="Transparent" BorderThickness="0"
+                                    FontSize="{DynamicResource FontSizeTiny}"
+                                    ToolTip.Tip="copy the address"
+                                    Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyShareUrlCommand}"
+                                    CommandParameter="{Binding}"/>
+                            <StackPanel>
+                              <TextBlock Text="{Binding Label}"
+                                         FontSize="{DynamicResource FontSizeSmall}"
+                                         TextTrimming="CharacterEllipsis"/>
+                              <TextBlock Text="{Binding Url}"
+                                         FontSize="{DynamicResource FontSizeTiny}"
+                                         Foreground="{DynamicResource ViewDimText}"
+                                         TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                          </DockPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
                 <!-- A disclosure arrow, so a collapsed section reads as
                      collapsed rather than as a heading with nothing under it. -->
                 <Button Command="{Binding Sidebar.ToggleTreeCommand}"

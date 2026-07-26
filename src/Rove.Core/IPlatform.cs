@@ -1,4 +1,5 @@
 using Rove.Core.FileSystem;
+using Rove.Core.Sharing;
 using Rove.Core.Places;
 using Rove.Core.Search;
 
@@ -34,6 +35,9 @@ public interface IPlatform
     ITagStore Tags { get; }
 
     ITemplateProvider Templates { get; }
+
+    /// <summary>Null where no sharing backend is known for this platform.</summary>
+    IFileSharing? Sharing { get; }
 
     /// <summary>Null where the desktop exposes no readable theme.</summary>
     IThemeProvider? Theme { get; }

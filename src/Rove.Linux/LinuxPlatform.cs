@@ -1,5 +1,6 @@
 using Rove.Core;
 using Rove.Core.FileSystem;
+using Rove.Core.Sharing;
 using Rove.Core.Places;
 using Rove.Core.Search;
 
@@ -42,6 +43,8 @@ public sealed class LinuxPlatform : IPlatform
     public ITagStore Tags { get; }
 
     public ITemplateProvider Templates { get; } = new XdgTemplates();
+
+    public IFileSharing? Sharing { get; } = new CopypartyShare();
 
     public IThemeProvider? Theme { get; } = new KdeThemeProvider();
 

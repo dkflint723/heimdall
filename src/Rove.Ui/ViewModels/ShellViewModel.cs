@@ -1,9 +1,12 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia.Threading;
 using Rove.Core;
 using Rove.Core.FileSystem;
+using Rove.Core.Sharing;
 using Rove.Core.Places;
 using Rove.Core.Search;
 using Rove.Core.Session;
@@ -24,6 +27,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IScriptRunner? _scripts;
     private readonly ITagStore? _tags;
     private readonly ITemplateProvider? _templates;
+    private readonly IFileSharing? _sharing;
     private readonly ISessionStore? _store;
     private bool _restoring;
     private bool _started;
@@ -44,8 +48,24 @@ public sealed partial class ShellViewModel : ObservableObject
         ISearchProvider? search = null,
         IScriptRunner? scripts = null,
         ITagStore? tags = null,
-        ITemplateProvider? templates = null)
+        ITemplateProvider? templates = null,
+        IFileSharing? sharing = null)
     {
+        _sharing = sharing;
+
+        if (sharing is not null)
+        {
+            sharing.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                RefreshShares();
+
+                // Discovery re-runs after an install, so availability can change
+                // while the app is open.
+                OnPropertyChanged(nameof(CanShare));
+                OnPropertyChanged(nameof(CanInstallSharing));
+            });
+        }
+
         _scripts = scripts;
         _tags = tags;
         _templates = templates;
@@ -175,6 +195,129 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     [RelayCommand] private void ZoomIn()  => ScalePane(ActiveTab, 0.1, 0.15);
     [RelayCommand] private void ZoomOut() => ScalePane(ActiveTab, -0.1, -0.15);
+
+    // ---- network sharing -------------------------------------------------
+
+    public ObservableCollection<ShareSession> Shares { get; } = new();
+
+    public bool HasShares => Shares.Count > 0;
+
+    public bool CanShare => _sharing?.IsAvailable == true;
+
+    /// <summary>A backend exists for this platform, but is not installed yet.</summary>
+    public bool CanInstallSharing => _sharing is { IsAvailable: false } && !IsInstalling;
+
+    [ObservableProperty] private bool _isInstalling;
+
+    partial void OnIsInstallingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanInstallSharing));
+    }
+
+    /// <summary>
+    /// Installs the sharing backend on request. Not automatic on first share:
+    /// putting software on someone's machine should be something they chose,
+    /// and a half-finished install in the middle of sharing a folder is a
+    /// confusing place to discover a network problem.
+    /// </summary>
+    [RelayCommand]
+    private async Task InstallSharingAsync()
+    {
+        if (_sharing is null || _sharing.IsAvailable || IsInstalling) return;
+
+        IsInstalling = true;
+
+        var pane = ActiveTab;
+        var progress = new Progress<string>(line =>
+        {
+            if (pane is not null) pane.Status = line;
+        });
+
+        try
+        {
+            await _sharing.InstallAsync(progress, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            if (pane is not null) pane.Status = $"install failed: {ex.Message}";
+        }
+        finally
+        {
+            IsInstalling = false;
+            OnPropertyChanged(nameof(CanShare));
+            OnPropertyChanged(nameof(CanInstallSharing));
+        }
+    }
+
+    private void RefreshShares()
+    {
+        Shares.Clear();
+        foreach (var share in _sharing?.Active ?? []) Shares.Add(share);
+
+        OnPropertyChanged(nameof(HasShares));
+    }
+
+    /// <summary>
+    /// Serves the current folder read-only. Read-only is not a setting here on
+    /// purpose — writable sharing is a separate, explicit command, because the
+    /// difference is "people can look" versus "people can overwrite".
+    /// </summary>
+    [RelayCommand]
+    private Task ShareFolderAsync() => ShareAsync(writable: false);
+
+    [RelayCommand]
+    private Task ShareFolderWritableAsync() => ShareAsync(writable: true);
+
+    private async Task ShareAsync(bool writable)
+    {
+        if (ActiveTab is not { } pane) return;
+
+        if (_sharing is not { IsAvailable: true })
+        {
+            pane.Status = _sharing?.UnavailableReason ?? "sharing is not available";
+            return;
+        }
+
+        try
+        {
+            var session = await _sharing.StartAsync(pane.CurrentPath, writable, CancellationToken.None)
+                                        .ConfigureAwait(true);
+
+            pane.Status = writable
+                ? $"sharing {session.Label} read-write at {session.Url}"
+                : $"sharing {session.Label} at {session.Url}";
+        }
+        catch (Exception ex)
+        {
+            pane.Status = $"could not share: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task StopShareAsync(ShareSession? session)
+    {
+        if (_sharing is null || session is null) return;
+
+        await _sharing.StopAsync(session).ConfigureAwait(true);
+
+        if (ActiveTab is { } pane) pane.Status = $"stopped sharing {session.Label}";
+    }
+
+    /// <summary>Nothing served should outlive the window that started it.</summary>
+    public Task StopAllSharesAsync() => _sharing?.StopAllAsync() ?? Task.CompletedTask;
+
+    [RelayCommand]
+    private void CopyShareUrl(ShareSession? session)
+    {
+        if (session is null) return;
+
+        ShareUrlCopyRequested?.Invoke(this, session.Url);
+
+        if (ActiveTab is { } pane) pane.Status = $"copied {session.Url}";
+    }
+
+    /// <summary>The view owns the clipboard, so the command just asks.</summary>
+    public event EventHandler<string>? ShareUrlCopyRequested;
 
     public bool IsSplit => Right is not null;
 

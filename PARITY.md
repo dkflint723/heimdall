@@ -81,7 +81,7 @@ list column, priority-based column dropping, file-age shading.
 
 ## Large gaps — weeks, need a decision first
 
-17. **Network transparency (KIO).** This is the big one. Dolphin browses
+17. **Network transparency (KIO).** ✅ **DECIDED: consume, do not reimplement.** Dolphin browses
     `sftp://`, `smb://`, `ftp://`, `webdav://`, `mtp://`, `gphoto://` and
     `archive:` URLs natively through KIO workers, with credential handling and
     Places integration.
@@ -96,9 +96,21 @@ list column, priority-based column dropping, file-age shading.
     - A "Connect to server" action can ask the existing desktop machinery to
       mount, then navigate to the resulting local path.
 
-    That gets SMB and SFTP — the two the user actually named — for a fraction of
-    the cost, at the price of depending on a mount helper being installed.
-    **Decision needed:** consume mounts, or implement protocols directly.
+    That gets SMB and SFTP — the two actually named — for a fraction of the
+    cost, at the price of depending on a mount helper being installed.
+
+    **The same principle applies to the outbound direction.** Rove now drives
+    [copyparty](https://github.com/9001/copyparty) as a subprocess to serve a
+    folder over HTTP/WebDAV — see "sharing" below. Writing a server with
+    resumable uploads, dedup and a browser UI is a project in its own right and
+    a good one already exists under MIT.
+
+    Remaining work on the inbound half:
+
+    - "Connect to server" action driving `gio mount` / kio-fuse
+    - Discover existing mounts under `/run/user/$UID/gvfs` and
+      `/run/user/$UID/kio-fuse-*` and show them in Places
+    - Treat a disconnected mount as an error state rather than an empty folder
 
 18. **Terminal panel** (F4 docked Konsole). Dolphin embeds Konsole via KParts,
     which has no equivalent for us. Doing it properly means running a PTY and
@@ -111,6 +123,22 @@ list column, priority-based column dropping, file-age shading.
     request; this would revive that decision in a different form.
 
 ---
+
+## Sharing (done)
+
+Right-click a folder → **Share over network**, read-only or with uploads
+allowed. Rove launches copyparty scoped to that folder on a free port and shows
+the address; active shares appear in the sidebar with copy and stop buttons, and
+everything is torn down when the window closes.
+
+Read-only and read-write are separate commands rather than a toggle, because the
+difference is "people can look" versus "people can overwrite". The share list is
+always visible while anything is running — a folder open to the network must not
+be something you have to remember.
+
+copyparty is located, not bundled: a `copyparty` binary on PATH, then
+`python3 -m copyparty`, then a downloaded `copyparty-sfx.py`. The feature hides
+itself when none is found.
 
 ## Deliberately not doing
 
