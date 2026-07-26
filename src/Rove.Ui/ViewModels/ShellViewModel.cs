@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Rove.Core.FileSystem;
 using Rove.Core.Places;
+using Rove.Core.Search;
 using Rove.Core.Session;
 
 namespace Rove.Ui.ViewModels;
@@ -35,7 +36,8 @@ public sealed partial class ShellViewModel : ObservableObject
         ISessionStore? store = null,
         IPlacesProvider? places = null,
         IApplicationLauncher? launcher = null,
-        IClipboardService? clipboard = null)
+        IClipboardService? clipboard = null,
+        ISearchProvider? search = null)
     {
         _fs = fs;
         _ops = ops;
@@ -43,7 +45,23 @@ public sealed partial class ShellViewModel : ObservableObject
         _launcher = launcher;
         _clipboard = clipboard;
 
-        Sidebar = new SidebarViewModel(fs, places);
+        Sidebar = new SidebarViewModel(fs, places, search, () => ActiveTab?.CurrentPath);
+
+        // A chosen result navigates the active tab to its folder and selects it,
+        // rather than opening the file — search is for finding, not launching.
+        Sidebar.Search.ResultChosen += (_, entry) =>
+        {
+            var folder = entry.IsDirectory
+                ? entry.FullPath
+                : Path.GetDirectoryName(entry.FullPath);
+
+            if (folder is null || ActiveTab is not { } pane) return;
+
+            _ = pane.NavigateAsync(folder).ContinueWith(
+                _ => Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => pane.SelectedEntry = entry),
+                TaskScheduler.Default);
+        };
 
         Left = CreateGroup();
         ActiveGroup = Left;

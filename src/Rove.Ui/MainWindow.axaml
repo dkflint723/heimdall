@@ -176,6 +176,8 @@
          browser-style, and that convention is the stronger one. -->
     <KeyBinding Gesture="Alt+D1"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"/>
     <KeyBinding Gesture="Alt+D2"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="tree"/>
+    <KeyBinding Gesture="Alt+D3"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="search"/>
+    <KeyBinding Gesture="Ctrl+F"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="search"/>
   </Window.KeyBindings>
 
   <DockPanel>
@@ -246,6 +248,10 @@
                 Background="Transparent" BorderThickness="0"
                 Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="tree"
                 ToolTip.Tip="tree  (alt+2)"/>
+        <Button Content="&#x2315;" FontSize="16" Width="38" Height="34"
+                Background="Transparent" BorderThickness="0"
+                Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="search"
+                ToolTip.Tip="search  (ctrl+f)"/>
       </StackPanel>
     </Border>
 
@@ -288,6 +294,50 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
+
+        <DockPanel IsVisible="{Binding Sidebar.IsSearchVisible}" Margin="8,8">
+          <StackPanel DockPanel.Dock="Top" Spacing="6">
+            <TextBox x:Name="SearchBox" Text="{Binding Sidebar.Search.Query}"
+                     PlaceholderText="search…" FontSize="12"/>
+            <CheckBox Content="this folder only" FontSize="11"
+                      IsChecked="{Binding Sidebar.Search.ScopeToCurrentFolder}"/>
+            <TextBlock Text="{Binding Sidebar.Search.Status}" FontSize="10"
+                       Opacity="0.45" FontFamily="monospace"
+                       TextWrapping="Wrap" Margin="0,0,0,4"/>
+          </StackPanel>
+
+          <ListBox ItemsSource="{Binding Sidebar.Search.Results}"
+                   Background="Transparent" Padding="0">
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+              </Style>
+            </ListBox.Styles>
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <VirtualizingStackPanel/>
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="fs:FileEntry">
+                <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.OpenCommand}"
+                        CommandParameter="{Binding}"
+                        Background="Transparent" BorderThickness="0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left" Padding="4,3">
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" FontSize="12"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding FullPath}" FontSize="10" Opacity="0.35"
+                               FontFamily="monospace"
+                               TextTrimming="CharacterEllipsis"/>
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
 
         <TreeView ItemsSource="{Binding Sidebar.Tree.Roots}"
                   IsVisible="{Binding Sidebar.IsTreeVisible}"

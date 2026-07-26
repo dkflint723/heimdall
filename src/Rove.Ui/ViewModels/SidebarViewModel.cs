@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
 using Rove.Core.FileSystem;
 using Rove.Core.Places;
+using Rove.Core.Search;
 using Rove.Core.Session;
 
 namespace Rove.Ui.ViewModels;
@@ -20,10 +21,15 @@ public sealed partial class SidebarViewModel : ObservableObject
 {
     private readonly IPlacesProvider? _places;
 
-    public SidebarViewModel(IFileSystemProvider fs, IPlacesProvider? places)
+    public SidebarViewModel(
+        IFileSystemProvider fs,
+        IPlacesProvider? places,
+        ISearchProvider? search = null,
+        Func<string?>? currentPath = null)
     {
         _places = places;
         Tree = new FolderTreeViewModel(fs);
+        Search = new SearchViewModel(search, currentPath ?? (() => null));
 
         if (places is not null)
             places.PlacesChanged += (_, _) => Dispatcher.UIThread.Post(() => _ = ReloadAsync());
@@ -31,6 +37,7 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public ObservableCollection<PlaceGroupViewModel> Groups { get; } = new();
     public FolderTreeViewModel Tree { get; }
+    public SearchViewModel Search { get; }
 
     [ObservableProperty] private string _activePanel = "places";
     [ObservableProperty] private RailState _rail = RailState.Full;
@@ -38,6 +45,7 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public bool IsPlacesVisible => Rail == RailState.Full && ActivePanel == "places";
     public bool IsTreeVisible   => Rail == RailState.Full && ActivePanel == "tree";
+    public bool IsSearchVisible => Rail == RailState.Full && ActivePanel == "search";
     public bool IsRailVisible   => Rail != RailState.Hidden;
     public bool IsPanelVisible  => Rail == RailState.Full;
 
@@ -48,6 +56,7 @@ public sealed partial class SidebarViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsPlacesVisible));
         OnPropertyChanged(nameof(IsTreeVisible));
+        OnPropertyChanged(nameof(IsSearchVisible));
         OnPropertyChanged(nameof(IsRailVisible));
         OnPropertyChanged(nameof(IsPanelVisible));
     }

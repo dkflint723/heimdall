@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Rove.Core.FileSystem;
 using Rove.Core.Places;
+using Rove.Core.Search;
 using Rove.Core.Session;
 using Rove.Linux;
 using Rove.Ui.Session;
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
         IPlacesProvider places = new LinuxPlacesProvider(JsonSessionStore.DefaultDirectory());
         IApplicationLauncher launcher = new LinuxLauncher();
         IClipboardService clipboard = ClipboardService.ForWindow(this);
+        ISearchProvider search = new LinuxSearchProvider();
 
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
@@ -41,7 +43,7 @@ public partial class MainWindow : Window
         var state = _store.Load();
         ApplyGeometry(state);
 
-        _shell = new ShellViewModel(fs, ops, _store, places, launcher, clipboard)
+        _shell = new ShellViewModel(fs, ops, _store, places, launcher, clipboard, search)
         {
             GeometryProvider = CaptureGeometry,
         };
@@ -326,6 +328,9 @@ public partial class MainWindow : Window
         // fields; if markup and code-behind ever drift, a plain `.IsFocused`
         // throws on every single keypress and takes the process with it.
         if (PathBox is { IsFocused: true }) return;
+
+        // The search box owns typing while it has focus.
+        if (SearchBox is { IsFocused: true }) return;
 
         if (FilterBox is { IsFocused: true })
         {
