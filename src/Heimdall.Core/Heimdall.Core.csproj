@@ -5,7 +5,7 @@
        by reading this file rather than by grepping the codebase. -->
 
   <PropertyGroup>
-    <RootNamespace>Rove.Core</RootNamespace>
+    <RootNamespace>Heimdall.Core</RootNamespace>
   </PropertyGroup>
 
 </Project>

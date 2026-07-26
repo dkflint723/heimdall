@@ -1,6 +1,6 @@
-# Rove — decisions
+# Heimdall — decisions
 
-`Rove` is a placeholder codename. Rename the namespace before it spreads.
+`Heimdall` is a placeholder codename. Rename the namespace before it spreads.
 
 A cross-platform file manager for Windows and Fedora KDE. Personal daily driver,
 not a shell replacement. This file is the record of what was decided and why;
@@ -60,19 +60,19 @@ accent colour (`kdeglobals` vs `UISettings`).
 ## Architecture
 
 ```
-Rove.Core          platform-agnostic. No InteropServices reference, ever.
-Rove.Ui            Avalonia. Depends only on Core.
-Rove.Windows       IFileSystemProvider etc. via the broker.  net10.0-windows
-Rove.Linux         same interfaces via syscalls + D-Bus.
-Rove.Shell.Broker  separate .exe. All COM lives here.        net10.0-windows
+Heimdall.Core          platform-agnostic. No InteropServices reference, ever.
+Heimdall.Ui            Avalonia. Depends only on Core.
+Heimdall.Windows       IFileSystemProvider etc. via the broker.  net10.0-windows
+Heimdall.Linux         same interfaces via syscalls + D-Bus.
+Heimdall.Shell.Broker  separate .exe. All COM lives here.        net10.0-windows
 ```
 
-Providers are resolved through DI at startup. `Rove.Ui` never names a platform
+Providers are resolved through DI at startup. `Heimdall.Ui` never names a platform
 type. The Windows projects are conditionally referenced so `dotnet build` works
 on Fedora:
 
 ```xml
-<ProjectReference Include="..\Rove.Windows\Rove.Windows.csproj"
+<ProjectReference Include="..\Heimdall.Windows\Heimdall.Windows.csproj"
                   Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
 ```
 

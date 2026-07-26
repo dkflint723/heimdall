@@ -1,7 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Rove.Core/Rove.Core.csproj" />
-    <Project Path="src/Rove.Linux/Rove.Linux.csproj" />
-    <Project Path="src/Rove.Ui/Rove.Ui.csproj" />
-  </Folder>
-</Solution>

@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <RootNamespace>Rove.Linux</RootNamespace>
+    <RootNamespace>Heimdall.Linux</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Rove.Core\Rove.Core.csproj" />
+    <ProjectReference Include="..\Heimdall.Core\Heimdall.Core.csproj" />
   </ItemGroup>
 
 </Project>

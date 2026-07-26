@@ -19,6 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Rove.Linux\Rove.Linux.csproj" />
+    <ProjectReference Include="..\Heimdall.Linux\Heimdall.Linux.csproj" />
   </ItemGroup>
 </Project>
