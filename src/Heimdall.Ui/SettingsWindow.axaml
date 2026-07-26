@@ -54,7 +54,7 @@
           </StackPanel>
 
           <TextBox Text="{Binding StartupFolder}"
-                   Watermark="/home/…"
+                   PlaceholderText="/home/…"
                    IsEnabled="{Binding CanEditStartupFolder}"
                    FontSize="{DynamicResource FontSizeSmall}"
                    Margin="24,0,0,0"/>
