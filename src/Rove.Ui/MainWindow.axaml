@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fs="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
+        xmlns:fsys="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
         xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
@@ -20,6 +21,12 @@
     <KeyBinding Gesture="Ctrl+Z"         Command="{Binding ActiveTab.UndoCommand}"/>
     <KeyBinding Gesture="Ctrl+B"         Command="{Binding Sidebar.CycleRailCommand}"/>
     <KeyBinding Gesture="Ctrl+D"         Command="{Binding PinCurrentCommand}"/>
+    <KeyBinding Gesture="Ctrl+C"         Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
+    <KeyBinding Gesture="Ctrl+X"         Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
+    <KeyBinding Gesture="Ctrl+V"         Command="{Binding ActiveTab.PasteCommand}"/>
+    <KeyBinding Gesture="Ctrl+I"         Command="{Binding ActiveTab.ToggleFilterCommand}"/>
+    <KeyBinding Gesture="Ctrl+Shift+N"   Command="{Binding ActiveTab.NewFolderCommand}"/>
+    <KeyBinding Gesture="F4"             Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
     <!-- Alt rather than Ctrl for panels: Ctrl+1..9 already switches tabs,
          browser-style, and that convention is the stronger one. -->
     <KeyBinding Gesture="Alt+D1"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"/>
@@ -91,6 +98,17 @@
         <TextBox x:Name="PromptInput" Width="320" FontFamily="monospace"
                  FontSize="12" IsVisible="False"/>
         <TextBlock x:Name="PromptHint" FontSize="11" Opacity="0.5"
+                   VerticalAlignment="Center"/>
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" Padding="8,5" Background="#1d1d1d"
+            IsVisible="{Binding ActiveTab.IsFilterVisible}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="filter" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
+        <TextBox x:Name="FilterBox" Text="{Binding ActiveTab.FilterText}"
+                 Width="300" FontFamily="monospace" FontSize="12"/>
+        <TextBlock Text="esc to clear" FontSize="11" Opacity="0.35"
                    VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
@@ -182,7 +200,50 @@
       </Panel>
     </Border>
 
-    <ItemsControl ItemsSource="{Binding Tabs}">
+    <!-- The context menu lives here rather than inside the item template.
+         Inside the template its DataContext depended on which pane instantiated
+         it; here it is always the ShellViewModel, so every entry routes through
+         ActiveTab exactly like the keyboard shortcuts do. -->
+    <ItemsControl ItemsSource="{Binding Tabs}" Background="#0F0F0F">
+      <ItemsControl.ContextMenu>
+        <ContextMenu x:DataType="vm:ShellViewModel">
+          <ContextMenu.Styles>
+            <!-- The stock template wraps items in a ScrollViewer, which shows a
+                 bar the moment it thinks it is constrained. With a menu this
+                 short that is pure noise. -->
+            <Style Selector="ContextMenu ScrollViewer">
+              <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+              <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+            </Style>
+          </ContextMenu.Styles>
+          <MenuItem Header="Open"               Command="{Binding ActiveTab.OpenSelectedCommand}"/>
+          <MenuItem Header="Open with"
+                    ItemsSource="{Binding ActiveTab.OpenWithOptions}">
+            <MenuItem.ItemTemplate>
+              <DataTemplate x:DataType="fsys:LaunchOption">
+                <TextBlock Text="{Binding Name}"/>
+              </DataTemplate>
+            </MenuItem.ItemTemplate>
+            <MenuItem.Styles>
+              <Style Selector="MenuItem > MenuItem" x:DataType="fsys:LaunchOption">
+                <Setter Property="Command"
+                        Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.OpenWithAppCommand}"/>
+                <Setter Property="CommandParameter" Value="{Binding}"/>
+              </Style>
+            </MenuItem.Styles>
+          </MenuItem>
+          <Separator/>
+          <MenuItem Header="Copy"               Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
+          <MenuItem Header="Cut"                Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
+          <MenuItem Header="Paste"              Command="{Binding ActiveTab.PasteCommand}"/>
+          <Separator/>
+          <MenuItem Header="Rename"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
+          <MenuItem Header="Move to trash"      Command="{Binding ActiveTab.TrashSelectedCommand}"/>
+          <Separator/>
+          <MenuItem Header="New folder"         Command="{Binding ActiveTab.NewFolderCommand}"/>
+          <MenuItem Header="Open terminal here" Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
+        </ContextMenu>
+      </ItemsControl.ContextMenu>
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>
           <Grid/>

@@ -19,6 +19,8 @@ public sealed partial class ShellViewModel : ObservableObject
 {
     private readonly IFileSystemProvider _fs;
     private readonly IFileOperations? _ops;
+    private readonly IApplicationLauncher? _launcher;
+    private readonly IClipboardService? _clipboard;
     private readonly ISessionStore? _store;
     private bool _restoring;
     private bool _started;
@@ -27,10 +29,14 @@ public sealed partial class ShellViewModel : ObservableObject
         IFileSystemProvider fs,
         IFileOperations? ops = null,
         ISessionStore? store = null,
-        IPlacesProvider? places = null)
+        IPlacesProvider? places = null,
+        IApplicationLauncher? launcher = null,
+        IClipboardService? clipboard = null)
     {
+        _clipboard = clipboard;
         _fs = fs;
         _ops = ops;
+        _launcher = launcher;
         _store = store;
         Sidebar = new SidebarViewModel(fs, places);
         Sidebar.PropertyChanged += (_, e) =>
@@ -44,6 +50,10 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     public SidebarViewModel Sidebar { get; }
+
+    /// <summary>The view subscribes here to wire clipboard and rename prompts
+    /// onto every pane, including ones created later.</summary>
+    public event EventHandler<PaneViewModel>? PaneCreated;
 
     /// <summary>Clicking a place navigates the active tab rather than opening
     /// a new one — the sidebar is navigation, not tab management.</summary>
@@ -69,8 +79,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private PaneViewModel NewPane()
     {
-        var pane = new PaneViewModel(_fs, _ops);
+        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard);
         pane.OperationStarted += OnOperationStarted;
+        PaneCreated?.Invoke(this, pane);
         return pane;
     }
 

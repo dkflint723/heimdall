@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -21,15 +22,35 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     private readonly IFileSystemProvider _fs;
     private readonly IFileOperations? _ops;
+    private readonly IApplicationLauncher? _launcher;
+    private readonly IClipboardService? _clipboard;
+    private readonly List<FileEntry> _all = new();
+    private CancellationTokenSource? _filterDebounce;
+    private IDisposable? _watcher;
+
+    /// <summary>
+    /// Incremented on every load. Watcher events capture it before going async
+    /// and re-check it before touching the collections: an event that passes
+    /// the IsLoading check, then gets delayed by an await, would otherwise land
+    /// in the middle of a later listing and insert an entry the enumeration is
+    /// about to add again.
+    /// </summary>
+    private int _generation;
     private readonly Stack<string> _back = new();
     private readonly Stack<string> _forward = new();
     private CancellationTokenSource? _cts;
     private bool _suppressReload;
 
-    public PaneViewModel(IFileSystemProvider fs, IFileOperations? ops = null)
+    public PaneViewModel(
+        IFileSystemProvider fs,
+        IFileOperations? ops = null,
+        IApplicationLauncher? launcher = null,
+        IClipboardService? clipboard = null)
     {
         _fs = fs;
         _ops = ops;
+        _launcher = launcher;
+        _clipboard = clipboard;
     }
 
     /// <summary>
@@ -56,6 +77,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isLoaded;
     [ObservableProperty] private bool _showHidden;
     [ObservableProperty] private FileEntry? _selectedEntry;
+    [ObservableProperty] private string _filterText = "";
+    [ObservableProperty] private bool _isFilterVisible;
     [ObservableProperty] private SortField _sort = SortField.Name;
     [ObservableProperty] private bool _sortDescending;
 
@@ -102,11 +125,143 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     public Task OpenAsync(FileEntry entry)
-        => entry.IsDirectory ? NavigateAsync(entry.FullPath) : Task.CompletedTask;
+    {
+        if (entry.IsDirectory) return NavigateAsync(entry.FullPath);
+
+        _launcher?.Open(entry.FullPath);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Applications offered by the "open with" submenu, rebuilt as the
+    /// selection changes so the list always matches the highlighted file.</summary>
+    public ObservableCollection<LaunchOption> OpenWithOptions { get; } = new();
+
+    partial void OnSelectedEntryChanged(FileEntry? value)
+    {
+        OpenWithOptions.Clear();
+        if (_launcher is null || value is not { IsDirectory: false } entry) return;
+
+        // Enumeration shells out to xdg-mime, so keep it off the UI thread.
+        var path = entry.FullPath;
+        _ = Task.Run(() =>
+        {
+            var options = _launcher.GetOpenWithOptions(path);
+            Dispatcher.UIThread.Post(() =>
+            {
+                OpenWithOptions.Clear();
+                foreach (var option in options) OpenWithOptions.Add(option);
+            });
+        });
+    }
+
+    [RelayCommand]
+    public void OpenWithApp(LaunchOption? option)
+    {
+        if (option is null || SelectedEntry is not { } entry) return;
+        _launcher?.OpenWith(entry.FullPath, option);
+    }
+
+    [RelayCommand]
+    public void OpenTerminalHere() => _launcher?.OpenTerminal(CurrentPath);
+
+    // Self-contained: the pane owns its clipboard rather than raising an event
+    // for the window to service. The old chain had three links and no way to
+    // tell which one had broken when copy silently did nothing.
+
+    [RelayCommand]
+    public Task CopySelectionToClipboardAsync() => WriteClipboardAsync(ClipboardAction.Copy);
+
+    [RelayCommand]
+    public Task CutSelectionToClipboardAsync() => WriteClipboardAsync(ClipboardAction.Cut);
+
+    private async Task WriteClipboardAsync(ClipboardAction action)
+    {
+        if (_clipboard is null) { Status = "clipboard unavailable"; return; }
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) { Status = "nothing selected"; return; }
+
+        try
+        {
+            var ok = await _clipboard.SetFilesAsync(action, paths).ConfigureAwait(false);
+            var verb = action == ClipboardAction.Cut ? "cut" : "copied";
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                Status = ok ? $"{paths.Count} item(s) {verb}" : "clipboard unavailable");
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = $"copy failed: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task PasteAsync()
+    {
+        if (_clipboard is null) { Status = "clipboard unavailable"; return; }
+
+        try
+        {
+            var payload = await _clipboard.GetFilesAsync().ConfigureAwait(false);
+
+            if (payload is null)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() => Status = "clipboard has no files");
+                return;
+            }
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                PasteInto(payload.Paths, payload.Action == ClipboardAction.Cut));
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = $"paste failed: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public async Task NewFolderAsync()
+    {
+        var baseName = Path.Combine(CurrentPath, "New folder");
+        var target = Directory.Exists(baseName) ? XdgDeduplicate(baseName) : baseName;
+
+        try
+        {
+            Directory.CreateDirectory(target);
+            await RefreshAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+        }
+    }
+
+    private static string XdgDeduplicate(string path)
+    {
+        for (var i = 2; i < 1000; i++)
+        {
+            var candidate = $"{path} {i}";
+            if (!Directory.Exists(candidate) && !File.Exists(candidate)) return candidate;
+        }
+        return path + " " + Guid.NewGuid().ToString("N")[..6];
+    }
+
+    /// <summary>Runs a copy or move into this directory, from the view's paste.</summary>
+    public void PasteInto(IReadOnlyList<string> paths, bool move)
+    {
+        if (_ops is null || paths.Count == 0) return;
+
+        var handle = move
+            ? _ops.Move(paths, CurrentPath, _ => ValueTask.FromResult(ConflictResolution.KeepBoth))
+            : _ops.Copy(paths, CurrentPath, _ => ValueTask.FromResult(ConflictResolution.KeepBoth));
+
+        Track(handle);
+    }
 
     [RelayCommand]
     public Task RefreshAsync() => LoadAsync(CurrentPath);
 
+    [RelayCommand]
     public Task OpenSelectedAsync()
         => SelectedEntry is { } entry ? OpenAsync(entry) : Task.CompletedTask;
 
@@ -269,6 +424,46 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         if (!_suppressReload) ResortInPlace();
     }
 
+    /// <summary>
+    /// Debounced because filtering rebuilds the visible collection, and doing
+    /// that per keystroke on a 200k listing would stutter badly.
+    /// </summary>
+    partial void OnFilterTextChanged(string value)
+    {
+        _filterDebounce?.Cancel();
+        _filterDebounce?.Dispose();
+        _filterDebounce = new CancellationTokenSource();
+        var ct = _filterDebounce.Token;
+
+        _ = Task.Delay(120, ct).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            Dispatcher.UIThread.Post(ApplyFilter);
+        }, TaskScheduler.Default);
+    }
+
+    [RelayCommand]
+    public void ToggleFilter()
+    {
+        IsFilterVisible = !IsFilterVisible;
+        if (!IsFilterVisible && FilterText.Length > 0) FilterText = "";
+    }
+
+    private void ApplyFilter()
+    {
+        var filtered = string.IsNullOrWhiteSpace(FilterText)
+            ? _all
+            : _all.Where(e => e.Name.Contains(FilterText, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var sorted = filtered.ToList();
+        sorted.Sort(Compare);
+        Entries.ReplaceAll(sorted);
+
+        Status = filtered.Count == _all.Count
+            ? $"{_all.Count:N0} items"
+            : $"{filtered.Count:N0} of {_all.Count:N0} items";
+    }
+
     partial void OnSortDescendingChanged(bool value)
     {
         if (!_suppressReload) ResortInPlace();
@@ -285,9 +480,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
 
+        var generation = ++_generation;
+
         CurrentPath = path;
         PathText = path;
         IsLoading = true;
+        _all.Clear();
         Entries.Reset();
         NotifyNavigationState();
 
@@ -312,6 +510,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    _all.AddRange(flush);
                     Entries.AddRange(flush);
                     count += flush.Count;
                     Status = $"{count:N0} items…";
@@ -323,6 +522,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 var tail = pending;
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    _all.AddRange(tail);
                     Entries.AddRange(tail);
                     count += tail.Count;
                 });
@@ -333,7 +533,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             // listing completes — which keeps first paint at a few milliseconds.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                ResortInPlace();
+                if (FilterText.Length > 0) ApplyFilter(); else ResortInPlace();
+                StartWatching(path);
                 sw.Stop();
                 Status = $"{count:N0} items · {sw.ElapsedMilliseconds:N0} ms";
                 IsLoading = false;
@@ -357,11 +558,144 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ---- live updates --------------------------------------------------
+
+    /// <summary>
+    /// Watches the open directory so changes made by anything else — Dolphin,
+    /// a terminal, a download finishing — appear without a manual refresh.
+    /// Updates are applied entry by entry; re-enumerating on every event would
+    /// throw away the whole point of streaming the listing in the first place.
+    /// </summary>
+    private void StartWatching(string path)
+    {
+        _watcher?.Dispose();
+        _watcher = null;
+
+        try
+        {
+            var generation = _generation;
+            _watcher = _fs.Watch(path, change =>
+                Dispatcher.UIThread.Post(() => ApplyChange(path, generation, change)));
+        }
+        catch
+        {
+            // A directory we cannot watch still lists fine; F5 remains.
+        }
+    }
+
+    private void ApplyChange(string watchedPath, int generation, FileSystemChange change)
+    {
+        // Events can arrive after the user has navigated away, or mid-load.
+        if (IsLoading || generation != _generation || CurrentPath != watchedPath) return;
+
+        // Direct children only — nothing nested is on screen.
+        if (Path.GetDirectoryName(change.Path) != watchedPath) return;
+
+        switch (change.Kind)
+        {
+            case ChangeKind.Removed:
+                RemoveByPath(change.Path);
+                break;
+
+            case ChangeKind.Renamed:
+                if (change.OldPath is { } old) RemoveByPath(old);
+                _ = AddOrUpdateAsync(change.Path, generation);
+                break;
+
+            default:
+                _ = AddOrUpdateAsync(change.Path, generation);
+                break;
+        }
+    }
+
+    private void RemoveByPath(string path)
+    {
+        var masterIndex = _all.FindIndex(e => e.FullPath == path);
+        if (masterIndex >= 0) _all.RemoveAt(masterIndex);
+
+        for (var i = 0; i < Entries.Count; i++)
+        {
+            if (Entries[i].FullPath != path) continue;
+            Entries.RemoveAt(i);
+            break;
+        }
+
+        UpdateCountStatus();
+    }
+
+    private async Task AddOrUpdateAsync(string path, int generation)
+    {
+        var name = Path.GetFileName(path);
+        if (!ShowHidden && name.StartsWith('.')) return;
+
+        var entry = await _fs.GetEntryAsync(path, CancellationToken.None).ConfigureAwait(false);
+        if (entry is not { } value) return;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            // Re-checked after the await: a listing may have started while we
+            // were off fetching the entry, and inserting into it would duplicate
+            // whatever the enumeration is about to produce.
+            if (IsLoading || generation != _generation) return;
+
+            RemoveByPathSilently(path);
+
+            var masterAt = FindSortedIndex(_all, value);
+            _all.Insert(masterAt, value);
+
+            if (MatchesFilter(value))
+            {
+                var visibleAt = FindSortedIndex(Entries, value);
+                Entries.Insert(visibleAt, value);
+            }
+
+            UpdateCountStatus();
+        });
+    }
+
+    private void RemoveByPathSilently(string path)
+    {
+        var masterIndex = _all.FindIndex(e => e.FullPath == path);
+        if (masterIndex >= 0) _all.RemoveAt(masterIndex);
+
+        for (var i = 0; i < Entries.Count; i++)
+        {
+            if (Entries[i].FullPath != path) continue;
+            Entries.RemoveAt(i);
+            break;
+        }
+    }
+
+    private bool MatchesFilter(FileEntry entry)
+        => string.IsNullOrWhiteSpace(FilterText)
+           || entry.Name.Contains(FilterText, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Binary search for the insertion point under the current sort,
+    /// so a new file lands where it belongs instead of forcing a re-sort.</summary>
+    private int FindSortedIndex(IList<FileEntry> list, FileEntry entry)
+    {
+        int low = 0, high = list.Count;
+
+        while (low < high)
+        {
+            var mid = (low + high) / 2;
+            if (Compare(list[mid], entry) < 0) low = mid + 1;
+            else high = mid;
+        }
+
+        return low;
+    }
+
+    private void UpdateCountStatus()
+        => Status = Entries.Count == _all.Count
+            ? $"{_all.Count:N0} items"
+            : $"{Entries.Count:N0} of {_all.Count:N0} items";
+
     private void ResortInPlace()
     {
         if (Entries.Count == 0) return;
 
-        var items = Entries.ToList();
+        var items = _all.Count > 0 ? _all.ToList() : Entries.ToList();
         items.Sort(Compare);
         Entries.ReplaceAll(items);
     }
@@ -402,5 +736,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = null;
+
+        _watcher?.Dispose();
+        _watcher = null;
     }
 }

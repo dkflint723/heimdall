@@ -1,13 +1,16 @@
+using System.ComponentModel;
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Rove.Core.FileSystem;
 using Rove.Core.Places;
 using Rove.Core.Session;
 using Rove.Linux;
-using Rove.Ui.ViewModels;
 using Rove.Ui.Session;
+using Rove.Ui.ViewModels;
 
 namespace Rove.Ui;
 
@@ -21,22 +24,28 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Provider is constructed directly for now. This is the seam that
+        // Providers are constructed directly for now. This is the seam that
         // becomes DI resolution once Rove.Windows exists — the window must
-        // never name a platform type beyond this line.
+        // never name a platform type beyond these lines.
         IFileSystemProvider fs = new LinuxFileSystemProvider();
         IFileOperations ops = new LinuxFileOperations();
         IPlacesProvider places = new LinuxPlacesProvider(JsonSessionStore.DefaultDirectory());
+        IApplicationLauncher launcher = new LinuxLauncher();
+        IClipboardService clipboard = ClipboardService.ForWindow(this);
 
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
-        // Loaded synchronously so geometry is applied before first paint.
-        // An async load would restore size and position after the window is
+        // Loaded synchronously so geometry is applied before first paint. An
+        // async load would restore size and position after the window is
         // already on screen — a visible jump on every launch.
         var state = _store.Load();
         ApplyGeometry(state);
 
-        _shell = new ShellViewModel(fs, ops, _store, places) { GeometryProvider = CaptureGeometry };
+        _shell = new ShellViewModel(fs, ops, _store, places, launcher, clipboard)
+        {
+            GeometryProvider = CaptureGeometry,
+        };
+        _shell.PaneCreated += (_, pane) => WirePane(pane);
         DataContext = _shell;
 
         PathBox.KeyDown += OnPathBoxKeyDown;
@@ -53,82 +62,32 @@ public partial class MainWindow : Window
 
         _shell.Start(state);
 
-        foreach (var pane in _shell.Tabs) pane.RenameRequested += OnRenameRequested;
-        _shell.Tabs.CollectionChanged += (_, e) =>
+        foreach (var pane in _shell.Tabs) WirePane(pane);
+
+        // Build stamp. When a symptom and the code disagree, this is the one
+        // line that says whether the running binary contains the fix.
+        Console.Error.WriteLine(
+            $"[rove] build {BuildStamp()}  clipboard=yes  panes={_shell.Tabs.Count}");
+    }
+
+    private static string BuildStamp()
+    {
+        try
         {
-            foreach (var pane in e.NewItems?.OfType<PaneViewModel>() ?? [])
-                pane.RenameRequested += OnRenameRequested;
-        };
-    }
-
-    // ---- inline prompt -------------------------------------------------
-
-    private enum PromptMode { None, Rename, ConfirmDelete }
-
-    private PromptMode _prompt = PromptMode.None;
-    private FileEntry _renameTarget;
-
-    private void OnRenameRequested(object? sender, FileEntry entry)
-    {
-        _prompt = PromptMode.Rename;
-        _renameTarget = entry;
-
-        PromptLabel.Text = "rename to";
-        PromptInput.Text = entry.Name;
-        PromptInput.IsVisible = true;
-        PromptHint.Text = "enter to confirm · esc to cancel";
-        PromptBar.IsVisible = true;
-
-        PromptInput.Focus();
-        PromptInput.SelectAll();
-    }
-
-    private void AskConfirmDelete()
-    {
-        if (_shell.ActiveTab is not { } pane) return;
-
-        var count = pane.SelectedEntries.Count > 0
-            ? pane.SelectedEntries.Count
-            : pane.SelectedEntry is null ? 0 : 1;
-
-        if (count == 0) return;
-
-        _prompt = PromptMode.ConfirmDelete;
-
-        PromptLabel.Text = $"permanently delete {count} item(s)? this cannot be undone";
-        PromptInput.IsVisible = false;
-        PromptHint.Text = "enter to delete · esc to cancel";
-        PromptBar.IsVisible = true;
-        PromptBar.Focus();
-    }
-
-    private void ClosePrompt()
-    {
-        _prompt = PromptMode.None;
-        PromptBar.IsVisible = false;
-        PromptInput.IsVisible = false;
-    }
-
-    private void OnPromptKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (_prompt != PromptMode.Rename) return;
-
-        switch (e.Key)
+            // AppContext.BaseDirectory rather than Assembly.Location, which is
+            // empty in a single-file or AOT publish.
+            var dll = Path.Combine(AppContext.BaseDirectory, "Rove.Ui.dll");
+            return File.Exists(dll)
+                ? File.GetLastWriteTime(dll).ToString("HH:mm:ss")
+                : "unknown";
+        }
+        catch
         {
-            case Key.Enter:
-                e.Handled = true;
-                var name = PromptInput.Text ?? "";
-                ClosePrompt();
-                if (!string.IsNullOrWhiteSpace(name) && name != _renameTarget.Name)
-                    _ = _shell.ActiveTab?.RenameAsync(_renameTarget, name);
-                break;
-
-            case Key.Escape:
-                e.Handled = true;
-                ClosePrompt();
-                break;
+            return "unknown";
         }
     }
+
+    // ---- geometry ------------------------------------------------------
 
     private void ApplyGeometry(SessionState? state)
     {
@@ -169,12 +128,112 @@ public partial class MainWindow : Window
         // exit with the write still in flight.
         e.Cancel = true;
 
-        await _store.FlushAsync(CancellationToken.None);
-        await _store.DisposeAsync();
+        try
+        {
+            await _store.FlushAsync(CancellationToken.None);
+            await _store.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[rove] session flush failed: {ex.Message}");
+        }
 
         _closeApproved = true;
         Close();
     }
+
+    // ---- per-pane wiring -----------------------------------------------
+
+    private void WirePane(PaneViewModel pane)
+    {
+        pane.RenameRequested -= OnRenameRequested;
+        pane.RenameRequested += OnRenameRequested;
+
+        pane.PropertyChanged -= OnPaneFilterToggled;
+        pane.PropertyChanged += OnPaneFilterToggled;
+    }
+
+    private void OnPaneFilterToggled(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(PaneViewModel.IsFilterVisible)) return;
+        if (sender is not PaneViewModel pane || !pane.IsFilterVisible) return;
+
+        Dispatcher.UIThread.Post(() => FilterBox?.Focus());
+    }
+
+    // ---- inline prompt -------------------------------------------------
+
+    private enum PromptMode { None, Rename, ConfirmDelete }
+
+    private PromptMode _prompt = PromptMode.None;
+    private FileEntry _renameTarget;
+
+    private void OnRenameRequested(object? sender, FileEntry entry)
+    {
+        if (PromptBar is null || PromptInput is null) return;
+
+        _prompt = PromptMode.Rename;
+        _renameTarget = entry;
+
+        PromptLabel.Text = "rename to";
+        PromptInput.Text = entry.Name;
+        PromptInput.IsVisible = true;
+        PromptHint.Text = "enter to confirm · esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptInput.Focus();
+        PromptInput.SelectAll();
+    }
+
+    private void AskConfirmDelete()
+    {
+        if (PromptBar is null) return;
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var count = pane.SelectedEntries.Count > 0
+            ? pane.SelectedEntries.Count
+            : pane.SelectedEntry is null ? 0 : 1;
+
+        if (count == 0) return;
+
+        _prompt = PromptMode.ConfirmDelete;
+
+        PromptLabel.Text = $"permanently delete {count} item(s)? this cannot be undone";
+        PromptInput.IsVisible = false;
+        PromptHint.Text = "enter to delete · esc to cancel";
+        PromptBar.IsVisible = true;
+        PromptBar.Focus();
+    }
+
+    private void ClosePrompt()
+    {
+        _prompt = PromptMode.None;
+        if (PromptBar is not null) PromptBar.IsVisible = false;
+        if (PromptInput is not null) PromptInput.IsVisible = false;
+    }
+
+    private void OnPromptKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_prompt != PromptMode.Rename) return;
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                e.Handled = true;
+                var name = PromptInput?.Text ?? "";
+                ClosePrompt();
+                if (!string.IsNullOrWhiteSpace(name) && name != _renameTarget.Name)
+                    _ = _shell.ActiveTab?.RenameAsync(_renameTarget, name);
+                break;
+
+            case Key.Escape:
+                e.Handled = true;
+                ClosePrompt();
+                break;
+        }
+    }
+
+    // ---- input ---------------------------------------------------------
 
     private void OnPathBoxKeyDown(object? sender, KeyEventArgs e)
     {
@@ -205,6 +264,8 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (_shell is null) return;
+
         // The prompt owns the keyboard while it is open.
         if (_prompt == PromptMode.ConfirmDelete)
         {
@@ -223,7 +284,21 @@ public partial class MainWindow : Window
         }
 
         if (_prompt == PromptMode.Rename) return;
-        if (PathBox.IsFocused) return;
+
+        // Pattern matching, never direct dereference. These are XAML-generated
+        // fields; if markup and code-behind ever drift, a plain `.IsFocused`
+        // throws on every single keypress and takes the process with it.
+        if (PathBox is { IsFocused: true }) return;
+
+        if (FilterBox is { IsFocused: true })
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                _shell.ActiveTab?.ToggleFilterCommand.Execute(null);
+            }
+            return;
+        }
 
         // Ctrl+1..9 jumps to a tab, browser-style.
         if (e.KeyModifiers == KeyModifiers.Control &&
@@ -258,6 +333,25 @@ public partial class MainWindow : Window
             case Key.Delete:
                 e.Handled = true;
                 pane.TrashSelectedCommand.Execute(null);
+                break;
+
+            // Deliberately duplicated from Window.KeyBindings. This handler is
+            // known to run — it is where the crash surfaced — so routing the
+            // clipboard through it too means copy cannot fail silently just
+            // because a KeyBinding didn't resolve.
+            case Key.C when e.KeyModifiers == KeyModifiers.Control:
+                e.Handled = true;
+                pane.CopySelectionToClipboardCommand.Execute(null);
+                break;
+
+            case Key.X when e.KeyModifiers == KeyModifiers.Control:
+                e.Handled = true;
+                pane.CutSelectionToClipboardCommand.Execute(null);
+                break;
+
+            case Key.V when e.KeyModifiers == KeyModifiers.Control:
+                e.Handled = true;
+                pane.PasteCommand.Execute(null);
                 break;
         }
     }

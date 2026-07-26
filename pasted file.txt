@@ -1,0 +1,44 @@
+cd ~/dev/rove && python3 - << 'PY'
+p='src/Rove.Ui/MainWindow.axaml.cs'
+s=open(p).read()
+
+s=s.replace("""        if (_prompt == PromptMode.Rename) return;
+        if (PathBox.IsFocused) return;
+
+        if (FilterBox.IsFocused)
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                _shell.ActiveTab?.ToggleFilterCommand.Execute(null);
+            }
+            return;
+        }""",
+"""        if (_prompt == PromptMode.Rename) return;
+
+        // Pattern matching rather than direct dereference: these are generated
+        // fields, and a keypress can arrive before the visual tree is fully
+        // populated. A null here used to take the whole process down.
+        if (PathBox is { IsFocused: true }) return;
+
+        if (FilterBox is { IsFocused: true })
+        {
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                _shell?.ActiveTab?.ToggleFilterCommand.Execute(null);
+            }
+            return;
+        }""")
+
+s=s.replace("""        if (_prompt == PromptMode.ConfirmDelete)
+        {""","""        if (_shell is null) return;
+
+        if (_prompt == PromptMode.ConfirmDelete)
+        {""")
+
+open(p,'w').write(s)
+print('patched')
+PY
+sed -n '275,295p' src/Rove.Ui/MainWindow.axaml.cs
+dotnet build && dotnet run --project src/Rove.Ui 2>&1 | tail -30
