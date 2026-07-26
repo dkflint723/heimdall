@@ -17,6 +17,7 @@ public sealed class LinuxPlatform : IPlatform
     public LinuxPlatform(string stateDirectory)
     {
         Places = new LinuxPlacesProvider(stateDirectory);
+        Tags = new LinuxTagStore(stateDirectory);
     }
 
     public string Name => "linux";
@@ -36,4 +37,6 @@ public sealed class LinuxPlatform : IPlatform
     public IAccessEditor? AccessEditor => _properties;
 
     public IScriptRunner Scripts { get; } = new LinuxScriptRunner();
+
+    public ITagStore Tags { get; }
 }

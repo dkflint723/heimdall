@@ -22,6 +22,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IApplicationLauncher? _launcher;
     private readonly IClipboardService? _clipboard;
     private readonly IScriptRunner? _scripts;
+    private readonly ITagStore? _tags;
     private readonly ISessionStore? _store;
     private bool _restoring;
     private bool _started;
@@ -40,9 +41,11 @@ public sealed partial class ShellViewModel : ObservableObject
         IApplicationLauncher? launcher = null,
         IClipboardService? clipboard = null,
         ISearchProvider? search = null,
-        IScriptRunner? scripts = null)
+        IScriptRunner? scripts = null,
+        ITagStore? tags = null)
     {
         _scripts = scripts;
+        _tags = tags;
         _fs = fs;
         _ops = ops;
         _store = store;
@@ -169,7 +172,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private PaneViewModel NewPane()
     {
-        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts);
+        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts, _tags);
         pane.OperationStarted += OnOperationStarted;
         pane.PropertyChanged += OnPaneChanged;
         PaneCreated?.Invoke(this, pane);

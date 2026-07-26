@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
         xmlns:core="clr-namespace:Rove.Core;assembly=Rove.Core"
         xmlns:th="clr-namespace:Rove.Ui.Thumbnails"
+        xmlns:local="clr-namespace:Rove.Ui"
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="rove"
@@ -78,6 +79,53 @@
          </DockPanel>
         </Border>
 
+        <!-- One path bar per side. Seeing both locations at once is the point
+             of a split; having to click between them to read a path is not. -->
+        <Border DockPanel.Dock="Top" Padding="6,5" Background="#181818">
+          <DockPanel>
+            <Button DockPanel.Dock="Left" Content="&#x2190;" Width="30" Margin="0,0,4,0"
+                    Command="{Binding ActiveTab.GoBackCommand}"
+                    IsEnabled="{Binding ActiveTab.CanGoBack}"/>
+            <Button DockPanel.Dock="Left" Content="&#x2192;" Width="30" Margin="0,0,4,0"
+                    Command="{Binding ActiveTab.GoForwardCommand}"
+                    IsEnabled="{Binding ActiveTab.CanGoForward}"/>
+            <Button DockPanel.Dock="Left" Content="&#x2191;" Width="30" Margin="0,0,6,0"
+                    Command="{Binding ActiveTab.GoUpCommand}"
+                    IsEnabled="{Binding ActiveTab.CanGoUp}"/>
+            <CheckBox DockPanel.Dock="Right" Content="hidden" Margin="8,0,0,0"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ActiveTab.ShowHidden}"/>
+            <TextBox Text="{Binding ActiveTab.PathText}"
+                     FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
+              <!-- Enter and Escape bound on the box itself: a control inside a
+                   template has no generated field to wire from code-behind. -->
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter"
+                            Command="{Binding ActiveTab.NavigateToPathTextCommand}"/>
+                <KeyBinding Gesture="Escape"
+                            Command="{Binding ActiveTab.RevertPathTextCommand}"/>
+              </TextBox.KeyBindings>
+            </TextBox>
+          </DockPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top" Padding="6,4" Background="#1d1d1d"
+                IsVisible="{Binding ActiveTab.IsFilterVisible}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="filter" FontSize="{DynamicResource FontSizeSmall}"
+                       Opacity="0.5" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding ActiveTab.FilterText}" Width="280"
+                     local:FocusBehavior.FocusOnVisible="True"
+                     FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Escape" Command="{Binding ActiveTab.ClearFilterCommand}"/>
+              </TextBox.KeyBindings>
+            </TextBox>
+            <TextBlock Text="esc to clear" FontSize="{DynamicResource FontSizeSmall}"
+                       Opacity="0.35" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Border>
+
         <!-- The only cue for which half takes the next keystroke, so it has to
              be visible but quiet. -->
         <Border DockPanel.Dock="Bottom" Height="3"
@@ -143,6 +191,19 @@
                     <Setter Property="CommandParameter" Value="{Binding}"/>
                   </Style>
                 </MenuItem.Styles>
+              </MenuItem>
+              <MenuItem Header="Tags" IsVisible="{Binding ActiveTab.HasTagStore}">
+                <MenuItem Header="New tag…" Command="{Binding ActiveTab.BeginNewTagCommand}"/>
+                <Separator/>
+                <MenuItem Header="Existing" ItemsSource="{Binding ActiveTab.KnownTags}">
+                  <MenuItem.Styles>
+                    <Style Selector="MenuItem > MenuItem">
+                      <Setter Property="Command"
+                              Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.ToggleTagCommand}"/>
+                      <Setter Property="CommandParameter" Value="{Binding}"/>
+                    </Style>
+                  </MenuItem.Styles>
+                </MenuItem>
               </MenuItem>
               <MenuItem Header="Scripts folder…"
                         Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
@@ -292,9 +353,28 @@
                                VerticalAlignment="Center"
                                th:ThumbnailImage.Path="{Binding FullPath}"
                                th:ThumbnailImage.Size="64"/>
-                        <TextBlock Grid.Column="1" Text="{Binding Name}"
-                                   FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                    VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}"
+                                     FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis"/>
+                          <!-- Tag chips: always a name, with colour as decoration. A bare
+                               swatch would put the whole meaning in hue. -->
+                          <ItemsControl th:RowTags.Entry="{Binding}" VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="th:TagChip">
+                                <Border CornerRadius="3" Padding="5,1" Background="#22FFFFFF"
+                                        BorderThickness="0,0,0,2" BorderBrush="{Binding Colour}">
+                                  <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeTiny}"
+                                             Opacity="0.8"/>
+                                </Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
                         <!-- Type-specific fact: pixel dimensions for images, child count
                              for folders. First to drop when space runs out. -->
                         <TextBlock Grid.Column="2" Width="120" Margin="8,0,0,0"
@@ -312,9 +392,14 @@
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowSize}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.55"
                                    VerticalAlignment="Center"/>
+                        <!-- Shaded by age: a single-hue lightness ramp, and the date itself
+                             is still right there, so the colour is a shortcut rather than
+                             the only signal. -->
                         <TextBlock Grid.Column="5" Width="170" Text="{Binding LastWriteTime}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowModified}"
-                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.55"
+                                   Foreground="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Brush}}"
+                                   ToolTip.Tip="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Description}}"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace"
                                    VerticalAlignment="Center"/>
                       </Grid>
                     </Panel>
@@ -402,33 +487,16 @@
 
   <DockPanel>
 
-    <Border DockPanel.Dock="Top" Padding="8,6" Background="#181818">
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button Content="&#x2190;" Command="{Binding ActiveTab.GoBackCommand}"
-                IsEnabled="{Binding ActiveTab.CanGoBack}" Width="32"/>
-        <Button Content="&#x2192;" Command="{Binding ActiveTab.GoForwardCommand}"
-                IsEnabled="{Binding ActiveTab.CanGoForward}" Width="32"/>
-        <Button Content="&#x2191;" Command="{Binding ActiveTab.GoUpCommand}"
-                IsEnabled="{Binding ActiveTab.CanGoUp}" Width="32"/>
-        <TextBox x:Name="PathBox" Text="{Binding ActiveTab.PathText}" MinWidth="320"
-                 FontFamily="monospace" FontSize="{DynamicResource FontSizeBase}"/>
-        <CheckBox Content="hidden" IsChecked="{Binding ActiveTab.ShowHidden}"/>
-        <ToggleButton Content="&#x25EB;" FontSize="{DynamicResource FontSizeBase}" Padding="8,3"
-                      IsChecked="{Binding IsSplit, Mode=OneWay}"
-                      Command="{Binding ToggleSplitCommand}"
-                      ToolTip.Tip="split view  (f3)"/>
-      </StackPanel>
+    <!-- Only window-level controls remain here; navigation, path and filter
+         are per-pane and now live inside each side. -->
+    <Border DockPanel.Dock="Top" Padding="8,4" Background="#181818">
+      <ToggleButton Content="&#x25EB;" HorizontalAlignment="Right"
+                    FontSize="{DynamicResource FontSizeBase}" Padding="8,3"
+                    IsChecked="{Binding IsSplit, Mode=OneWay}"
+                    Command="{Binding ToggleSplitCommand}"
+                    ToolTip.Tip="split view  (f3)"/>
     </Border>
 
-    <Border DockPanel.Dock="Top" Padding="8,5" Background="#1d1d1d"
-            IsVisible="{Binding ActiveTab.IsFilterVisible}">
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="filter" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center"/>
-        <TextBox x:Name="FilterBox" Text="{Binding ActiveTab.FilterText}"
-                 Width="300" FontFamily="monospace" FontSize="{DynamicResource FontSizeBase}"/>
-        <TextBlock Text="esc to clear" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.35" VerticalAlignment="Center"/>
-      </StackPanel>
-    </Border>
 
     <Border DockPanel.Dock="Bottom" Padding="8,4" Background="#181818">
       <TextBlock Text="{Binding ActiveTab.Status}" FontFamily="monospace"

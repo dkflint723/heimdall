@@ -46,6 +46,7 @@ public partial class MainWindow : Window
 
         Thumbnails.ThumbnailLoader.Provider = platform.Thumbnails;
         Thumbnails.RowMetadata.Provider = platform.Metadata;
+        Thumbnails.RowTags.Store = platform.Tags;
 
         // Not platform-specific: the clipboard comes from the toolkit.
         IClipboardService clipboard = ClipboardService.ForWindow(this);
@@ -61,7 +62,7 @@ public partial class MainWindow : Window
         _shell = new ShellViewModel(
             platform.FileSystem, platform.Operations, _store,
             platform.Places, platform.Launcher, clipboard, platform.Search,
-            platform.Scripts)
+            platform.Scripts, platform.Tags)
         {
             GeometryProvider = CaptureGeometry,
         };
@@ -70,7 +71,6 @@ public partial class MainWindow : Window
         _shell.ScaleApplier = ApplyUiScale;
         DataContext = _shell;
 
-        PathBox.KeyDown += OnPathBoxKeyDown;
         PromptInput.KeyDown += OnPromptKeyDown;
         PromptConfirm.Click += (_, _) => ConfirmPrompt();
         PromptCancel.Click += (_, _) => ClosePrompt();
@@ -479,21 +479,26 @@ public partial class MainWindow : Window
         pane.RenameRequested -= OnRenameRequested;
         pane.RenameRequested += OnRenameRequested;
 
+        pane.NewTagRequested -= OnNewTagRequested;
+        pane.NewTagRequested += OnNewTagRequested;
+
         pane.PropertyChanged -= OnPaneFilterToggled;
         pane.PropertyChanged += OnPaneFilterToggled;
     }
 
+    /// <summary>Focus now happens through FocusBehavior.FocusOnVisible in the
+    /// markup, since there is no field to focus from here.</summary>
     private void OnPaneFilterToggled(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(PaneViewModel.IsFilterVisible)) return;
         if (sender is not PaneViewModel pane || !pane.IsFilterVisible) return;
 
-        Dispatcher.UIThread.Post(() => FilterBox?.Focus());
+
     }
 
     // ---- inline prompt -------------------------------------------------
 
-    private enum PromptMode { None, Rename, ConfirmDelete }
+    private enum PromptMode { None, Rename, ConfirmDelete, NewTag }
 
     private PromptMode _prompt = PromptMode.None;
     private FileEntry _renameTarget;
@@ -543,7 +548,29 @@ public partial class MainWindow : Window
             case PromptMode.Rename when !string.IsNullOrWhiteSpace(name) && name != entry.Name:
                 _ = target?.RenameAsync(entry, name);
                 break;
+
+            case PromptMode.NewTag when !string.IsNullOrWhiteSpace(name):
+                _ = target?.ToggleTagAsync(name.Trim());
+                break;
         }
+    }
+
+    private void OnNewTagRequested(object? sender, EventArgs e)
+    {
+        if (PromptBar is null || PromptInput is null) return;
+
+        _prompt = PromptMode.NewTag;
+
+        PromptLabel.Text = "tag name";
+        PromptInput.Text = "";
+        PromptInput.IsVisible = true;
+        PromptConfirm.Content = "apply tag";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "applied to the selection · esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptInput.Focus();
     }
 
     private void AskConfirmDelete()
@@ -602,27 +629,6 @@ public partial class MainWindow : Window
 
     // ---- input ---------------------------------------------------------
 
-    private void OnPathBoxKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (_shell.ActiveTab is not { } pane) return;
-
-        switch (e.Key)
-        {
-            // PathText is the box's own buffer, deliberately separate from
-            // CurrentPath. Navigation is the only thing that may move
-            // CurrentPath — history, refresh and the session file all trust it.
-            case Key.Enter:
-                e.Handled = true;
-                _ = pane.NavigateAsync(pane.PathText);
-                break;
-
-            case Key.Escape:
-                e.Handled = true;
-                pane.PathText = pane.CurrentPath;
-                break;
-        }
-    }
-
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
         if ((e.Source as Control)?.DataContext is FileEntry entry)
@@ -649,25 +655,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_prompt == PromptMode.Rename) return;
+        if (_prompt is PromptMode.Rename or PromptMode.NewTag) return;
 
-        // Pattern matching, never direct dereference. These are XAML-generated
-        // fields; if markup and code-behind ever drift, a plain `.IsFocused`
-        // throws on every single keypress and takes the process with it.
-        if (PathBox is { IsFocused: true }) return;
-
-        // The search box owns typing while it has focus.
-        if (SearchBox is { IsFocused: true }) return;
-
-        if (FilterBox is { IsFocused: true })
-        {
-            if (e.Key == Key.Escape)
-            {
-                e.Handled = true;
-                _shell.ActiveTab?.ToggleFilterCommand.Execute(null);
-            }
-            return;
-        }
+        // Any focused text box owns the keyboard. Checking the type rather
+        // than named controls, because the path and filter boxes now live
+        // inside a per-pane template and have no generated fields — and it
+        // is the more honest rule anyway. Escape and Enter inside those
+        // boxes are handled by their own KeyBindings in the markup.
+        if (FocusManager?.GetFocusedElement() is TextBox) return;
 
         // Ctrl+1..9 jumps to a tab, browser-style.
         if (e.KeyModifiers == KeyModifiers.Control &&

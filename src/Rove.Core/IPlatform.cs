@@ -30,4 +30,6 @@ public interface IPlatform
     IAccessEditor? AccessEditor { get; }
 
     IScriptRunner Scripts { get; }
+
+    ITagStore Tags { get; }
 }

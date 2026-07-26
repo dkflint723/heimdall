@@ -26,6 +26,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     private readonly IApplicationLauncher? _launcher;
     private readonly IClipboardService? _clipboard;
     private readonly IScriptRunner? _scripts;
+    private readonly ITagStore? _tags;
     private readonly List<FileEntry> _all = new();
     private CancellationTokenSource? _filterDebounce;
     private IDisposable? _watcher;
@@ -48,8 +49,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         IFileOperations? ops = null,
         IApplicationLauncher? launcher = null,
         IClipboardService? clipboard = null,
-        IScriptRunner? scripts = null)
+        IScriptRunner? scripts = null,
+        ITagStore? tags = null)
     {
+        _tags = tags;
         _fs = fs;
         _ops = ops;
         _launcher = launcher;
@@ -57,7 +60,70 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _scripts = scripts;
 
         RefreshScripts();
+        RefreshTags();
     }
+
+    // ---- tags ----------------------------------------------------------
+
+    /// <summary>Tags offered in the menu — names seen before, plus whatever is
+    /// on the current selection.</summary>
+    public ObservableCollection<string> KnownTags { get; } = new();
+
+    public bool HasTagStore => _tags is not null;
+
+    /// <summary>Asks the view to prompt for a new tag name.</summary>
+    public event EventHandler? NewTagRequested;
+
+    [RelayCommand]
+    public void RefreshTags()
+    {
+        KnownTags.Clear();
+        if (_tags is null) return;
+
+        foreach (var tag in _tags.KnownTags) KnownTags.Add(tag);
+    }
+
+    [RelayCommand]
+    public void BeginNewTag() => NewTagRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Adds the tag when any selected file lacks it, removes it when they all
+    /// have it — so one menu entry both tags and untags, and a mixed selection
+    /// resolves toward tagging rather than silently clearing.
+    /// </summary>
+    public async Task ToggleTagAsync(string tag)
+    {
+        if (_tags is null || string.IsNullOrWhiteSpace(tag)) return;
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) { Status = "nothing selected"; return; }
+
+        try
+        {
+            var add = false;
+            foreach (var path in paths)
+            {
+                var existing = await _tags.GetAsync(path, CancellationToken.None).ConfigureAwait(false);
+                if (!existing.Contains(tag, StringComparer.OrdinalIgnoreCase)) { add = true; break; }
+            }
+
+            await _tags.ToggleAsync(paths, tag, add, CancellationToken.None).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                RefreshTags();
+                Status = $"{(add ? "tagged" : "untagged")} {paths.Count} item(s): {tag}";
+                _ = RefreshAsync();
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = $"tag failed: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    public Task ToggleTag(string? tag) => tag is null ? Task.CompletedTask : ToggleTagAsync(tag);
 
     // ---- user scripts --------------------------------------------------
 
@@ -689,6 +755,26 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             if (t.IsCanceled) return;
             Dispatcher.UIThread.Post(ApplyFilter);
         }, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Enter in the path box. A command rather than a code-behind KeyDown
+    /// handler because there is now one path box per split side, and named
+    /// controls inside a template cannot be reached from code-behind.
+    /// </summary>
+    [RelayCommand]
+    public Task NavigateToPathText()
+        => string.IsNullOrWhiteSpace(PathText) ? Task.CompletedTask : NavigateAsync(PathText.Trim());
+
+    /// <summary>Escape in the path box: put back what is actually being shown.</summary>
+    [RelayCommand]
+    public void RevertPathText() => PathText = CurrentPath;
+
+    [RelayCommand]
+    public void ClearFilter()
+    {
+        if (FilterText.Length > 0) FilterText = "";
+        else IsFilterVisible = false;
     }
 
     [RelayCommand]
