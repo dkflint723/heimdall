@@ -122,18 +122,15 @@
                They were previously spread across a toggle button and a pair of
                keyboard shortcuts, which made two of them undiscoverable. -->
           <!-- Layout is one click, per pane and per side. It was two clicks
-               behind a menu, which is too far for something switched this often. -->
-          <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,0,4"
-                       VerticalAlignment="Center" Padding="7,3"
-                       IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
-                       Command="{Binding ActiveTab.ShowAsGridCommand}"
-                       ToolTip.Tip="grid">
-            <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
-                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
-          </RadioButton>
-          <!-- Per side, sitting with the layout buttons because it is the same
-               kind of choice: how THIS half is displayed. -->
-          <ToggleButton DockPanel.Dock="Right" Margin="0,0,8,4"
+               behind a menu, which is too far for something switched this often.
+
+               These are docked RIGHT, so the first declared sits furthest right
+               and declaration order is the reverse of what you see. Reading
+               left to right on screen: list, small grid, large grid, then the
+               details panel behind a rule — the three layouts are one choice,
+               the panel is a different one, and the rule says so. -->
+
+          <ToggleButton DockPanel.Dock="Right" Margin="0,0,0,4"
                         VerticalAlignment="Center" Padding="7,3"
                         IsChecked="{Binding IsInfoVisible}"
                         ToolTip.Tip="details panel for this side  (f11)">
@@ -142,15 +139,32 @@
                   Fill="Transparent" Width="12" Height="12" Stretch="Uniform"/>
           </ToggleButton>
 
+          <!-- A rule, not a Separator: that control draws horizontally and
+               would render as a stray dash here. -->
+          <Border DockPanel.Dock="Right" Width="1" Margin="7,2,7,6"
+                  Background="{DynamicResource SeparatorColour}"/>
+
+          <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,2,4"
+                       VerticalAlignment="Center" Padding="7,3"
+                       IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
+                       IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
+                       Command="{Binding ActiveTab.ShowAsGridCommand}"
+                       ToolTip.Tip="large grid">
+            <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
+                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
+          </RadioButton>
+
           <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,2,4"
                        VerticalAlignment="Center" Padding="7,3"
                        IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
+                       IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
                        Command="{Binding ActiveTab.ShowAsCompactCommand}"
-                       ToolTip.Tip="compact">
+                       ToolTip.Tip="small grid">
             <!-- Two short columns: the shape of the layout itself. -->
             <Path Data="M0,0 H5 V2 H0 Z M0,4 H5 V6 H0 Z M0,8 H5 V10 H0 Z M7,0 H12 V2 H7 Z M7,4 H12 V6 H7 Z M7,8 H12 V10 H7 Z"
                   Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
           </RadioButton>
+
           <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,2,4"
                        VerticalAlignment="Center" Padding="7,3"
                        IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
@@ -159,6 +173,7 @@
             <Path Data="M0,0 H12 V2 H0 Z M0,5 H12 V7 H0 Z M0,10 H12 V12 H0 Z"
                   Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
           </RadioButton>
+
           <Button DockPanel.Dock="Right" Content="&#x2261;"
                   FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
                   Margin="6,0,0,4" VerticalAlignment="Center"
@@ -178,10 +193,12 @@
                     <RadioButton Content="Compact" GroupName="layout"
                                FontSize="{DynamicResource FontSizeSmall}"
                                IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
+                       IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
                                Command="{Binding ActiveTab.ShowAsCompactCommand}"/>
                   <RadioButton Content="Grid" GroupName="layout"
                                  FontSize="{DynamicResource FontSizeSmall}"
                                  IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
+                       IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
                                  Command="{Binding ActiveTab.ShowAsGridCommand}"/>
                   </UniformGrid>
 
@@ -803,7 +820,7 @@
               <!-- Both layouts share one slot: in a DockPanel only the last child
                    fills, so two bare siblings would dock the list to the left. -->
               <Panel>
-              <ListBox ItemsSource="{Binding Entries}"
+              <ListBox ItemsSource="{Binding DetailsEntries}"
                        SelectedItem="{Binding SelectedEntry}"
                        SelectedItems="{Binding DetailsSelection}"
                        DragDrop.AllowDrop="True"
@@ -957,7 +974,7 @@
                    panel and the item template change together, and three lists
                    binding one selection are simpler than one that rewrites
                    itself twice. -->
-              <ListBox ItemsSource="{Binding Entries}"
+              <ListBox ItemsSource="{Binding CompactEntries}"
                        SelectedItem="{Binding SelectedEntry}"
                        SelectedItems="{Binding CompactSelection}"
                        IsVisible="{Binding IsCompactView}"
@@ -1018,7 +1035,7 @@
               <!-- Grid layout. A separate ListBox rather than a swapped ItemsPanel: the
                    panel and the item template change together, and two lists binding one
                    selection are simpler than one list rewriting itself. -->
-              <ListBox ItemsSource="{Binding Entries}"
+              <ListBox ItemsSource="{Binding GridEntries}"
                        SelectedItem="{Binding SelectedEntry}"
                        SelectedItems="{Binding GridSelection}"
                        IsVisible="{Binding IsGridView}"

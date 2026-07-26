@@ -209,6 +209,53 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public BulkObservableCollection<FileEntry> Entries { get; } = new();
 
     /// <summary>
+    /// Each layout sees the entries only while it is the one on screen.
+    ///
+    /// Grid and compact use a WrapPanel, which Avalonia has no virtualizing
+    /// form of, so every item they are given is realized — and all three lists
+    /// stay alive when hidden. Binding all of them to Entries meant opening a
+    /// large folder realized a container per file in TWO invisible layouts,
+    /// which is exactly the cost the streaming enumerator exists to avoid.
+    ///
+    /// The inactive ones get an empty array: no items, no containers, no
+    /// change notifications.
+    /// </summary>
+    private static readonly FileEntry[] NoEntries = [];
+
+    public IEnumerable<FileEntry> DetailsEntries
+        => View == ViewMode.Details ? Entries : NoEntries;
+
+    public IEnumerable<FileEntry> GridEntries
+        => View == ViewMode.Grid ? Entries : NoEntries;
+
+    public IEnumerable<FileEntry> CompactEntries
+        => View == ViewMode.Compact ? Entries : NoEntries;
+
+    /// <summary>
+    /// Above this, the un-virtualized layouts are refused rather than allowed
+    /// to hang the app.
+    ///
+    /// WrapPanel realizes a container per item and Avalonia has no virtualizing
+    /// wrap panel, so switching to grid on a large folder freezes the process
+    /// outright. Refusing is ugly; truncating the listing would be worse — a
+    /// file manager that silently omits files is actively dangerous, and you
+    /// would have no way to know it had.
+    ///
+    /// Details view is virtualized and always available, so nothing becomes
+    /// unreachable.
+    /// </summary>
+    public const int UnvirtualizedLimit = 5000;
+
+    public bool CanUseTileLayouts => Entries.Count <= UnvirtualizedLimit;
+
+    private void NotifyLayoutEntries()
+    {
+        OnPropertyChanged(nameof(DetailsEntries));
+        OnPropertyChanged(nameof(GridEntries));
+        OnPropertyChanged(nameof(CompactEntries));
+    }
+
+    /// <summary>
     /// One selection collection PER LAYOUT, and the reason is not cosmetic.
     ///
     /// Details, grid and compact are three separate ListBoxes that all stay
@@ -591,6 +638,18 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     private void NotifyListingState()
     {
+        OnPropertyChanged(nameof(CanUseTileLayouts));
+
+        // Navigating into a huge folder while already in grid would hang just
+        // as hard as switching into it. Drop back to the virtualized layout and
+        // say why, rather than freezing.
+        if (!CanUseTileLayouts && View != ViewMode.Details)
+        {
+            View = ViewMode.Details;
+            Status = $"switched to list view — {Entries.Count:N0} items is beyond "
+                   + $"the {UnvirtualizedLimit:N0} limit for tile layouts";
+        }
+
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(ShareTargetLabel));
@@ -618,7 +677,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public void ShowAsDetails() => View = ViewMode.Details;
 
     [RelayCommand]
-    public void ShowAsGrid() => View = ViewMode.Grid;
+    public void ShowAsGrid() => TrySetTileLayout(ViewMode.Grid, "grid");
 
     /// <summary>
     /// Dolphin's third mode: names only, flowing down and wrapping into
@@ -627,7 +686,23 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// looking for a name rather than inspecting files.
     /// </summary>
     [RelayCommand]
-    public void ShowAsCompact() => View = ViewMode.Compact;
+    public void ShowAsCompact() => TrySetTileLayout(ViewMode.Compact, "compact");
+
+    /// <summary>
+    /// Refuses rather than hangs. The message names the real reason and the
+    /// number, so it reads as a known limit and not a malfunction.
+    /// </summary>
+    private void TrySetTileLayout(ViewMode mode, string label)
+    {
+        if (!CanUseTileLayouts)
+        {
+            Status = $"{label} view is limited to {UnvirtualizedLimit:N0} items "
+                   + $"— this folder has {Entries.Count:N0}. Use list view.";
+            return;
+        }
+
+        View = mode;
+    }
 
     private MillerViewModel? _miller;
 
@@ -667,8 +742,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnViewChanged(ViewMode oldValue, ViewMode newValue)
     {
-        // Move the selection across before anything reads it, so switching
-        // layout keeps what you had chosen.
+        // Populate the incoming layout FIRST. Its ListBox cannot hold a
+        // selection for items it does not yet have, so carrying the selection
+        // before the items exist would silently drop it.
+        NotifyLayoutEntries();
+
         CarrySelection(oldValue, newValue);
 
         OnPropertyChanged(nameof(IsDetailsView));
