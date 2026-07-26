@@ -646,6 +646,23 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool ShowFreeSpace => Settings.AppSettings.Current.General.ShowFreeSpace;
 
+    /// <summary>
+    /// The folders tree's selection. It had none — the TreeView listed and
+    /// expanded folders and clicking one did nothing at all, which is a panel
+    /// that looks like a control and behaves like a picture.
+    ///
+    /// Selection rather than a click handler, because that is what a TreeView
+    /// natively reports and it makes keyboard navigation work for free.
+    /// </summary>
+    [ObservableProperty] private FolderNode? _selectedTreeNode;
+
+    partial void OnSelectedTreeNodeChanged(FolderNode? value)
+    {
+        if (value is null) return;
+
+        _ = ActiveTab?.NavigateAsync(value.Path);
+    }
+
     // ---- context menu visibility ------------------------------------------
     //
     // Straight off the preferences, like the status bar above. Bound with

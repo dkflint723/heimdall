@@ -1591,6 +1591,7 @@
                   </StackPanel>
                 </Button>
                 <TreeView ItemsSource="{Binding Sidebar.Tree.Roots}"
+                          SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}"
                           IsVisible="{Binding Sidebar.IsTreeExpanded}"
                           Background="Transparent" Margin="4,2,4,0">
                   <TreeView.ItemTemplate>

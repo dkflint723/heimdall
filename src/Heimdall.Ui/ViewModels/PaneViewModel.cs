@@ -1561,7 +1561,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 if (FilterText.Length > 0) ApplyFilter(); else ResortInPlace();
                 StartWatching(path);
                 sw.Stop();
-                Status = $"{Entries.Count:N0} items";
+
+                // Cleared, NOT set to the count. Summary already shows
+                // "36 items" and Status sat beside it showing the same thing,
+                // so the status bar read "36 items   36 items". Status is for
+                // messages; the count has an owner and this is not it.
+                Status = "";
                 IsLoading = false;
                 IsLoaded = true;
             });
@@ -1711,9 +1716,15 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         return low;
     }
 
+    /// <summary>
+    /// Only says something when a filter is actually hiding rows, because that
+    /// is the part Summary cannot express — Summary counts what is on screen
+    /// and has no way to say "out of how many". With no filter there is nothing
+    /// to add, so it says nothing rather than repeating the count.
+    /// </summary>
     private void UpdateCountStatus()
         => Status = Entries.Count == _all.Count
-            ? $"{_all.Count:N0} items"
+            ? ""
             : $"{Entries.Count:N0} of {_all.Count:N0} items";
 
     private void ResortInPlace()
