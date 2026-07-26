@@ -44,16 +44,24 @@ public static class IconLoader
     {
         if (Provider is null) return null;
 
-        // Keyed by *type*, not by path. Every .png shares an icon, so a
-        // path-keyed cache grew one entry per file ever browsed and never
-        // evicted — and it re-resolved for each one.
-        var key = CacheKey(path, isDirectory, size);
+        // Keyed by the icon we are actually asking for, not by the file asking
+        // for it. Every .png wants the same icon; so does every ordinary folder
+        // — but Documents and Downloads want different ones, and a single
+        // "dir" key gave all of them whatever the first folder resolved to.
+        IReadOnlyList<string> names;
+
+        try { names = Provider.NamesFor(path, isDirectory); }
+        catch { return null; }
+
+        if (names.Count == 0) return null;
+
+        var key = $"{names[0]}|{size}";
 
         if (Resolved.TryGetValue(key, out var cached)) return cached;
 
         string? file = null;
 
-        try { file = Provider.Resolve(Provider.NamesFor(path, isDirectory), size); }
+        try { file = Provider.Resolve(names, size); }
         catch { /* an unreadable theme means no icon, not a failure */ }
 
         // Extensionless files fall back to a per-path key because their type
@@ -65,16 +73,6 @@ public static class IconLoader
         return file;
     }
 
-    private static string CacheKey(string path, bool isDirectory, int size)
-    {
-        if (isDirectory) return $"dir|{size}";
-
-        var extension = Path.GetExtension(path);
-
-        return extension.Length > 1
-            ? $"ext{extension.ToLowerInvariant()}|{size}"
-            : $"path{path}|{size}";
-    }
 
     /// <summary>
     /// Drops every cached icon. Called when the desktop theme changes: the
@@ -131,9 +129,10 @@ public static class IconLoader
 
         var bounds = ReadViewBox(root);
         var gradients = ReadGradients(root, bounds);
+        var styles = ReadStyles(root);
         var group = new DrawingGroup();
 
-        Walk(root, group, inheritedFill: null, gradients);
+        Walk(root, group, inheritedFill: null, gradients, styles);
 
         if (group.Children.Count == 0) return null;
 
@@ -175,6 +174,116 @@ public static class IconLoader
         IGradientBrush gradient => $"gradient({gradient.GradientStops.Count} stops)",
         _ => brush.GetType().Name,
     };
+
+    // ---- stylesheet ------------------------------------------------------
+
+    /// <summary>
+    /// Declarations from &lt;style&gt; blocks, keyed by selector (".cls", "#id",
+    /// "tag").
+    ///
+    /// Icon sets routinely put their colour here rather than on the element —
+    /// Tela's folders are a class fill — and without reading it the fill was
+    /// unresolvable, so every folder fell back to the text colour and came out
+    /// white on a dark scheme.
+    ///
+    /// A deliberate subset: simple selectors and the two properties that decide
+    /// colour. No cascade, no specificity, no media queries.
+    /// </summary>
+    private static Dictionary<string, (string? Fill, string? Colour, string? Stroke)> ReadStyles(
+        XElement root)
+    {
+        var rules = new Dictionary<string, (string?, string?, string?)>(StringComparer.Ordinal);
+
+        foreach (var block in root.Descendants().Where(e => e.Name.LocalName == "style"))
+        {
+            var css = block.Value;
+            if (css.Length == 0) continue;
+
+            // Comments would otherwise be parsed as declarations.
+            css = Regex.Replace(css, @"/\*.*?\*/", "", RegexOptions.Singleline);
+
+            foreach (Match rule in Regex.Matches(css, @"([^{}]+)\{([^{}]*)\}"))
+            {
+                string? fill = null, colour = null, stroke = null;
+
+                foreach (var declaration in rule.Groups[2].Value
+                             .Split(';', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var pair = declaration.Split(':', 2);
+                    if (pair.Length != 2) continue;
+
+                    var value = pair[1].Trim();
+
+                    switch (pair[0].Trim())
+                    {
+                        case "fill": fill = value; break;
+                        case "color": colour = value; break;
+                        case "stroke": stroke = value; break;
+                    }
+                }
+
+                if (fill is null && colour is null && stroke is null) continue;
+
+                foreach (var selector in rule.Groups[1].Value
+                             .Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    rules[selector.Trim()] = (fill, colour, stroke);
+            }
+        }
+
+        return rules;
+    }
+
+    /// <summary>
+    /// A property's value for an element, in CSS precedence order: the
+    /// presentation attribute is weakest, then stylesheet rules, then the
+    /// inline style attribute.
+    /// </summary>
+    private static string? Declared(
+        XElement element, string property,
+        Dictionary<string, (string? Fill, string? Colour, string? Stroke)>? styles)
+    {
+        var value = (string?)element.Attribute(property);
+
+        if (styles is { Count: > 0 })
+        {
+            static string? Pick(
+                (string? Fill, string? Colour, string? Stroke) rule, string property) => property switch
+            {
+                "fill" => rule.Fill,
+                "stroke" => rule.Stroke,
+                "color" => rule.Colour,
+                _ => null,
+            };
+
+            if (styles.TryGetValue(element.Name.LocalName, out var byTag)
+                && Pick(byTag, property) is { } tagValue)
+                value = tagValue;
+
+            foreach (var name in ((string?)element.Attribute("class") ?? "")
+                         .Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (styles.TryGetValue("." + name, out var byClass)
+                    && Pick(byClass, property) is { } classValue)
+                    value = classValue;
+            }
+
+            if ((string?)element.Attribute("id") is { Length: > 0 } id
+                && styles.TryGetValue("#" + id, out var byId)
+                && Pick(byId, property) is { } idValue)
+                value = idValue;
+        }
+
+        if ((string?)element.Attribute("style") is { Length: > 0 } inline)
+        {
+            foreach (var declaration in inline.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var pair = declaration.Split(':', 2);
+                if (pair.Length == 2 && pair[0].Trim() == property) value = pair[1].Trim();
+            }
+        }
+
+        return value;
+    }
 
     // ---- gradients ------------------------------------------------------
 
@@ -390,7 +499,8 @@ public static class IconLoader
 
     private static void Walk(
         XElement element, DrawingGroup group, IBrush? inheritedFill,
-        Dictionary<string, IBrush> gradients)
+        Dictionary<string, IBrush> gradients,
+        Dictionary<string, (string? Fill, string? Colour, string? Stroke)> styles)
     {
         var root = element.AncestorsAndSelf().Last();
 
@@ -399,7 +509,7 @@ public static class IconLoader
             // defs holds paint definitions, not drawable content.
             if (child.Name.LocalName is "defs" or "linearGradient" or "radialGradient") continue;
 
-            var fill = ReadFill(child, gradients) ?? inheritedFill;
+            var fill = ReadFill(child, gradients, styles) ?? inheritedFill;
 
             // A transform puts its subtree into its own group.
             var target = group;
@@ -412,7 +522,7 @@ public static class IconLoader
             switch (child.Name.LocalName)
             {
                 case "g":
-                    Walk(child, target, fill, gradients);
+                    Walk(child, target, fill, gradients, styles);
                     break;
 
                 // <use> draws another element by id. Tela builds its file icons
@@ -437,39 +547,39 @@ public static class IconLoader
                     };
 
                     target.Children.Add(placed);
-                    DrawOne(referenced, placed, fill, gradients);
+                    DrawOne(referenced, placed, fill, gradients, styles);
                     break;
 
                 case "path" when (string?)child.Attribute("d") is { Length: > 0 } data:
-                    Add(target, Geometry.Parse(data), fill, child);
+                    Add(target, Geometry.Parse(data), fill, child, styles);
                     break;
 
                 case "rect":
                     Add(target, new RectangleGeometry(new Rect(
                         Number(child, "x"), Number(child, "y"),
-                        Number(child, "width"), Number(child, "height"))), fill, child);
+                        Number(child, "width"), Number(child, "height"))), fill, child, styles);
                     break;
 
                 case "circle":
                     Add(target, new EllipseGeometry(new Rect(
                         Number(child, "cx") - Number(child, "r"),
                         Number(child, "cy") - Number(child, "r"),
-                        Number(child, "r") * 2, Number(child, "r") * 2)), fill, child);
+                        Number(child, "r") * 2, Number(child, "r") * 2)), fill, child, styles);
                     break;
 
                 case "ellipse":
                     Add(target, new EllipseGeometry(new Rect(
                         Number(child, "cx") - Number(child, "rx"),
                         Number(child, "cy") - Number(child, "ry"),
-                        Number(child, "rx") * 2, Number(child, "ry") * 2)), fill, child);
+                        Number(child, "rx") * 2, Number(child, "ry") * 2)), fill, child, styles);
                     break;
 
                 case "polygon" when PolyGeometry(child, close: true) is { } polygon:
-                    Add(target, polygon, fill, child);
+                    Add(target, polygon, fill, child, styles);
                     break;
 
                 case "polyline" when PolyGeometry(child, close: false) is { } polyline:
-                    Add(target, polyline, fill, child);
+                    Add(target, polyline, fill, child, styles);
                     break;
             }
         }
@@ -478,43 +588,46 @@ public static class IconLoader
     /// <summary>Draws one element, used by &lt;use&gt; to render its referent.</summary>
     private static void DrawOne(
         XElement element, DrawingGroup group, IBrush? fill,
-        Dictionary<string, IBrush> gradients)
+        Dictionary<string, IBrush> gradients,
+        Dictionary<string, (string? Fill, string? Colour, string? Stroke)> styles)
     {
-        var own = ReadFill(element, gradients) ?? fill;
+        var own = ReadFill(element, gradients, styles) ?? fill;
 
         switch (element.Name.LocalName)
         {
             case "g":
-                Walk(element, group, own, gradients);
+                Walk(element, group, own, gradients, styles);
                 break;
 
             case "path" when (string?)element.Attribute("d") is { Length: > 0 } data:
-                Add(group, Geometry.Parse(data), own, element);
+                Add(group, Geometry.Parse(data), own, element, styles);
                 break;
 
             case "rect":
                 Add(group, new RectangleGeometry(new Rect(
                     Number(element, "x"), Number(element, "y"),
-                    Number(element, "width"), Number(element, "height"))), own, element);
+                    Number(element, "width"), Number(element, "height"))), own, element, styles);
                 break;
 
             case "circle":
                 Add(group, new EllipseGeometry(new Rect(
                     Number(element, "cx") - Number(element, "r"),
                     Number(element, "cy") - Number(element, "r"),
-                    Number(element, "r") * 2, Number(element, "r") * 2)), own, element);
+                    Number(element, "r") * 2, Number(element, "r") * 2)), own, element, styles);
                 break;
         }
     }
 
-    private static void Add(DrawingGroup group, Geometry geometry, IBrush? fill, XElement source)
+    private static void Add(
+        DrawingGroup group, Geometry geometry, IBrush? fill, XElement source,
+        Dictionary<string, (string? Fill, string? Colour, string? Stroke)>? styles = null)
     {
         var opacity = Number(source, "opacity", 1.0);
         if (opacity <= 0.01) return;
 
         // fill="none" is explicit and must not fall back to the text colour —
         // an outline-only shape has no fill by design.
-        var declared = Declared(source, "fill");
+        var declared = Declared(source, "fill", styles);
         var filled = declared != "none";
 
         IBrush? brush = null;
@@ -527,7 +640,7 @@ public static class IconLoader
         // Strokes were ignored entirely, so any icon drawn as outlines rendered
         // almost nothing — which is indistinguishable from a tiny icon.
         Pen? pen = null;
-        var stroke = Declared(source, "stroke");
+        var stroke = Declared(source, "stroke", styles);
 
         if (stroke is { Length: > 0 } && stroke != "none")
         {
@@ -554,22 +667,6 @@ public static class IconLoader
             solid.Color.R, solid.Color.G, solid.Color.B));
     }
 
-    /// <summary>An attribute, or the same property from an inline style.</summary>
-    private static string? Declared(XElement element, string property)
-    {
-        var value = (string?)element.Attribute(property);
-
-        if ((string?)element.Attribute("style") is { Length: > 0 } style)
-        {
-            foreach (var declaration in style.Split(';', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var pair = declaration.Split(':', 2);
-                if (pair.Length == 2 && pair[0].Trim() == property) value = pair[1].Trim();
-            }
-        }
-
-        return value;
-    }
 
     private static IBrush? SafeBrush(string value)
     {
@@ -607,9 +704,11 @@ public static class IconLoader
         catch { return null; }
     }
 
-    private static IBrush? ReadFill(XElement element, Dictionary<string, IBrush> gradients)
+    private static IBrush? ReadFill(
+        XElement element, Dictionary<string, IBrush> gradients,
+        Dictionary<string, (string? Fill, string? Colour, string? Stroke)>? styles = null)
     {
-        var value = Declared(element, "fill");
+        var value = Declared(element, "fill", styles);
 
         if (string.IsNullOrWhiteSpace(value) || value == "none") return null;
 
@@ -623,7 +722,16 @@ public static class IconLoader
         // currentColor means "whatever the surrounding text is", resolved from
         // the live theme so symbolic icons follow the colour scheme.
         if (value.Equals("currentColor", StringComparison.OrdinalIgnoreCase))
+        {
+            // A stylesheet may define the colour that "currentColor" refers to;
+            // symbolic icon sets are built exactly that way.
+            if (Declared(element, "color", styles) is { Length: > 0 } declared
+                && !declared.Equals("currentColor", StringComparison.OrdinalIgnoreCase)
+                && SafeBrush(declared) is { } themed)
+                return themed;
+
             return CurrentColour();
+        }
 
         try { return new SolidColorBrush(Color.Parse(value)); }
         catch { return null; }

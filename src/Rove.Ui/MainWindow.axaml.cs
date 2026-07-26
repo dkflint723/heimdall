@@ -97,7 +97,7 @@ public partial class MainWindow : Window
         _shell = new ShellViewModel(
             platform.FileSystem, platform.Operations, _store,
             platform.Places, platform.Launcher, clipboard, platform.Search,
-            platform.Scripts, platform.Tags)
+            platform.Scripts, platform.Tags, platform.Templates)
         {
             GeometryProvider = CaptureGeometry,
         };
@@ -121,6 +121,10 @@ public partial class MainWindow : Window
         // the first click on an inactive side only moves focus.
         AddHandler(PointerPressedEvent, OnPointerPressedAnywhere, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, OnPointerMovedAnywhere, RoutingStrategies.Tunnel);
+
+        // Tunnel, so the gesture is claimed before the listing's ScrollViewer
+        // sees it — otherwise the view zooms and scrolls at the same time.
+        AddHandler(PointerWheelChangedEvent, OnWheelAnywhere, RoutingStrategies.Tunnel);
 
         AddHandler(DragDrop.DragEnterEvent, OnDragOver);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
@@ -174,6 +178,29 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnPointerPressedAnywhere(object? sender, Avalonia.Input.PointerPressedEventArgs e)
     {
+        // Ctrl + wheel click resets the pane under the pointer, completing the
+        // gesture: wheel to scale, click to undo. Claimed before anything else
+        // sees the press, or the listing treats it as a selection.
+        //
+        // PointerUpdateKind, not IsMiddleButtonPressed: the latter reports the
+        // *current state* of that button, which is not the same question as
+        // "which button raised this press".
+        var properties = e.GetCurrentPoint(this).Properties;
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            && properties.PointerUpdateKind
+               is Avalonia.Input.PointerUpdateKind.MiddleButtonPressed)
+        {
+            _shell.ResetPaneScale(PaneAt(e.Source) ?? _shell.ActiveTab);
+
+            // The accumulator would otherwise carry leftover travel from before
+            // the reset into the next scroll.
+            _zoomTravel = 0;
+
+            e.Handled = true;
+            return;
+        }
+
         // Recorded here so a drag can start on the first move past the
         // threshold rather than on the press itself.
         _dragOrigin = e.GetPosition(this);
@@ -211,20 +238,7 @@ public partial class MainWindow : Window
     /// pointing at these, so re-writing them here restyles the whole window
     /// without touching a single control.
     /// </summary>
-    private static readonly (string Key, double Value)[] FontMetrics =
-    [
-        ("FontSizeTiny", 11),
-        ("FontSizeSmall", 12.5),
-        ("FontSizeBase", 14),
-        ("FontSizeLarge", 15.5),
-    ];
 
-    private static readonly (string Key, double Value)[] IconMetrics =
-    [
-        ("ThumbSize", 26),
-        ("IconSize", 17),
-        ("TileSize", 84),
-    ];
 
     /// <summary>
     /// Text and icons scale on separate axes; everything structural is derived
@@ -232,34 +246,17 @@ public partial class MainWindow : Window
     /// label and its thumbnail, so its height cannot be a third free setting —
     /// it would only ever be set wrong.
     /// </summary>
+    /// <summary>
+    /// Application-level defaults, used by everything outside a pane — the
+    /// sidebar, the status bar, the properties window. Each pane overrides
+    /// these with its own dictionary via PaneScale.
+    /// </summary>
     private void ApplyScales(double fontScale, double iconScale)
     {
-        // Application-wide, not window-scoped: the properties window binds the
-        // same metrics, and resources set on MainWindow are invisible to it.
         var target = Application.Current?.Resources ?? Resources;
 
-        foreach (var (key, value) in FontMetrics)
-            target[key] = Math.Round(value * fontScale, 1);
-
-        foreach (var (key, value) in IconMetrics)
-            target[key] = Math.Round(value * iconScale, 1);
-
-        var body = 14 * fontScale;
-        var thumb = 26 * iconScale;
-        var tile = 84 * iconScale;
-
-        var rowHeight = Math.Round(Math.Max(body * 2.1, thumb + 8), 1);
-
-        target["RowHeight"] = rowHeight;
-        target["TileWidth"] = Math.Round(tile + 24, 1);
-        // Two label lines plus the tile, and no more. The old allowance
-        // left slack under the text as well as over it.
-        target["TileHeight"] = Math.Round(tile + body * 2.9, 1);
-        target["RailWidth"] = Math.Round(44 * fontScale, 1);
-
-        // Three rows of chain, which is what was asked for — derived so the
-        // ratio survives any combination of the two scales.
-        target["ColumnStripHeight"] = Math.Round(rowHeight * 3 + 6, 1);
+        foreach (var (key, value) in PaneScale.Compute(fontScale, iconScale))
+            target[key] = value;
     }
 
     /// <summary>
@@ -363,6 +360,46 @@ public partial class MainWindow : Window
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Accumulated wheel travel. A mouse notch is a whole 1.0, but a trackpad
+    /// sends a stream of fractions — stepping on each one would race from
+    /// smallest to largest in a single swipe.
+    /// </summary>
+    private double _zoomTravel;
+
+    private void OnWheelAnywhere(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.Delta.Y == 0) return;
+
+        // Claimed even when the accumulator has not tripped yet: releasing it
+        // would scroll the list mid-zoom.
+        e.Handled = true;
+
+        // Direction reversal starts over, so a small overshoot does not need to
+        // be unwound before the other direction responds.
+        if (Math.Sign(e.Delta.Y) != Math.Sign(_zoomTravel)) _zoomTravel = 0;
+
+        _zoomTravel += e.Delta.Y;
+
+        while (Math.Abs(_zoomTravel) >= 1.0)
+        {
+            var up = _zoomTravel > 0;
+            _zoomTravel -= up ? 1.0 : -1.0;
+
+            // The pane under the pointer, not the active one: reaching over to
+            // scale the other side without clicking into it first is the whole
+            // reason the wheel gesture is nicer than the buttons.
+            var pane = PaneAt(e.Source) ?? _shell.ActiveTab;
+
+            // Shift narrows it to the icons, which is the axis people mean when
+            // they say "zoom" — the labels usually want to stay put.
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                _shell.ScalePane(pane, 0, up ? 0.15 : -0.15);
+            else
+                _shell.ScalePane(pane, up ? 0.1 : -0.1, up ? 0.15 : -0.15);
+        }
     }
 
     private void OnPointerMovedAnywhere(object? sender, PointerEventArgs e)
@@ -782,6 +819,12 @@ public partial class MainWindow : Window
             _shell.SelectTabByIndex(e.Key - Key.D1);
             return;
         }
+
+        // No Ctrl+arrow zoom. It was tried and removed: this handler is on the
+        // bubble phase, so a focused ListBox — which is the normal state —
+        // takes arrow keys first and moves the selection instead. Winning the
+        // keystroke would mean tunnelling and stealing a key the listing has a
+        // legitimate claim to. Ctrl+wheel and Ctrl +/- cover it.
 
         // Left/Right walk the Miller chain when it is showing and the listing
         // does not own the keystroke. Without this the strip is mouse-only,

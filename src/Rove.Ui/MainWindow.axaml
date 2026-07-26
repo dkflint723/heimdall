@@ -15,18 +15,18 @@
 
   <Window.Resources>
 
-    <!-- Type scale and row metrics in one place, as DynamicResource so Ctrl +/-
-         re-writes them at runtime. Every hardcoded 11/12/13 in this file used
-         to be its own decision; now there is one. -->
-    <x:Double x:Key="FontSizeTiny">11</x:Double>
-    <x:Double x:Key="FontSizeSmall">12.5</x:Double>
-    <x:Double x:Key="FontSizeBase">14</x:Double>
-    <x:Double x:Key="FontSizeLarge">15.5</x:Double>
-    <x:Double x:Key="RowHeight">34</x:Double>
-    <x:Double x:Key="ThumbSize">26</x:Double>
-    <x:Double x:Key="IconSize">17</x:Double>
-    <x:Double x:Key="RailWidth">44</x:Double>
-    <x:Double x:Key="ColumnStripHeight">108</x:Double>
+    <!-- The type scale and every derived metric are deliberately NOT declared
+         here. ApplyScales writes them into Application.Resources before the
+         first paint, and a DynamicResource resolves from the nearest dictionary
+         outward — so a copy in Window.Resources shadows the scaled value and
+         the size never changes. That is exactly what happened: the font keys
+         were declared here and text ignored the control entirely, while the
+         keys that were absent (TileSize, TileWidth, TileHeight) responded,
+         which made icon scaling look like it worked.
+
+         Keys owned by ApplyScales: FontSizeTiny/Small/Base/Large, ThumbSize,
+         IconSize, TileSize, RowHeight, TileWidth, TileHeight, RailWidth,
+         ColumnStripHeight. Do not declare any of them in markup. -->
 
     <!-- Colours come from the desktop scheme at runtime (see ThemeApplier);
          nothing is hardcoded here. The rule they must satisfy is unchanged:
@@ -105,28 +105,80 @@
 
                   <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
-                  <DockPanel>
-                    <TextBlock Text="Text size" VerticalAlignment="Center"
-                               FontSize="{DynamicResource FontSizeSmall}"/>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
-                      <Button Content="&#x2212;" Width="28" Padding="0,2"
-                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontSmallerCommand}"/>
-                      <Button Content="+" Width="28" Padding="0,2"
-                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontLargerCommand}"/>
-                    </StackPanel>
-                  </DockPanel>
+                  <!-- One grid for both rows, so the labels and the steppers
+                       line up instead of each row sizing itself. The value is
+                       the real size, not the multiplier behind it — a number
+                       you can type is only useful if it means something. -->
+                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
 
-                  <DockPanel>
-                    <TextBlock Text="Icon size" VerticalAlignment="Center"
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Text size"
+                               VerticalAlignment="Center" Margin="0,0,12,0"
                                FontSize="{DynamicResource FontSizeSmall}"/>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
-                      <Button Content="&#x2212;" Width="28" Padding="0,2"
-                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsSmallerCommand}"/>
-                      <Button Content="+" Width="28" Padding="0,2"
-                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsLargerCommand}"/>
-                    </StackPanel>
-                  </DockPanel>
 
+                    <Border Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right"
+                            CornerRadius="5" BorderThickness="1" Margin="0,0,0,6"
+                            BorderBrush="{DynamicResource SeparatorColour}"
+                            Background="{DynamicResource ViewBackground}">
+                      <StackPanel Orientation="Horizontal">
+                        <Button Content="&#x2212;" Width="30" Height="26" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                FontSize="{DynamicResource FontSizeBase}"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontSmallerCommand}"/>
+                        <!-- LostFocus, not per keystroke: committing mid-type
+                             would apply "1" on the way to "14". -->
+                        <TextBox local:FocusBehavior.CommitOnEnter="True"
+                                 Text="{Binding ActiveTab.FontPoints, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 Width="48" Height="26" Padding="0" MinHeight="0"
+                                 Background="Transparent" BorderThickness="0"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 TextAlignment="Center" VerticalContentAlignment="Center"/>
+                        <Button Content="+" Width="30" Height="26" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                FontSize="{DynamicResource FontSizeBase}"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontLargerCommand}"/>
+                      </StackPanel>
+                    </Border>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Icon size"
+                               VerticalAlignment="Center" Margin="0,0,12,0"
+                               FontSize="{DynamicResource FontSizeSmall}"/>
+
+                    <Border Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right"
+                            CornerRadius="5" BorderThickness="1"
+                            BorderBrush="{DynamicResource SeparatorColour}"
+                            Background="{DynamicResource ViewBackground}">
+                      <StackPanel Orientation="Horizontal">
+                        <Button Content="&#x2212;" Width="30" Height="26" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                FontSize="{DynamicResource FontSizeBase}"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsSmallerCommand}"/>
+                        <TextBox local:FocusBehavior.CommitOnEnter="True"
+                                 Text="{Binding ActiveTab.IconPixels, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 Width="48" Height="26" Padding="0" MinHeight="0"
+                                 Background="Transparent" BorderThickness="0"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 TextAlignment="Center" VerticalContentAlignment="Center"/>
+                        <Button Content="+" Width="30" Height="26" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                FontSize="{DynamicResource FontSizeBase}"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsLargerCommand}"/>
+                      </StackPanel>
+                    </Border>
+
+                  </Grid>
+
+                  <TextBlock Text="ctrl + wheel to scale, ctrl + wheel click to reset · add shift for icons only"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             Foreground="{DynamicResource ViewDimText}"
+                             TextWrapping="Wrap" Margin="0,2,0,4"/>
                   <Button Content="Reset sizes" HorizontalAlignment="Stretch"
                           FontSize="{DynamicResource FontSizeSmall}"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ZoomResetCommand}"/>
@@ -329,12 +381,50 @@
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveToOtherPaneCommand}"
                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
               <Separator/>
+              <MenuItem Header="Duplicate"     Command="{Binding ActiveTab.DuplicateSelectedCommand}"/>
               <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"/>
               <MenuItem Header="Rename in bulk…"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"/>
               <MenuItem Header="Move to trash" Command="{Binding ActiveTab.TrashSelectedCommand}"/>
               <Separator/>
+              <!-- Sorting by type has existed since the first build with no way
+                   to reach it: there is no type column to click. -->
+              <MenuItem Header="Sort by">
+                <MenuItem Header="Name" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsSortedByName, Mode=OneWay}"
+                          Command="{Binding ActiveTab.SortByNameCommand}"/>
+                <MenuItem Header="Size" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsSortedBySize, Mode=OneWay}"
+                          Command="{Binding ActiveTab.SortBySizeCommand}"/>
+                <MenuItem Header="Modified" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsSortedByModified, Mode=OneWay}"
+                          Command="{Binding ActiveTab.SortByModifiedCommand}"/>
+                <MenuItem Header="Type" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsSortedByKind, Mode=OneWay}"
+                          Command="{Binding ActiveTab.SortByKindCommand}"/>
+                <Separator/>
+                <MenuItem Header="Descending" ToggleType="CheckBox"
+                          IsChecked="{Binding ActiveTab.SortDescending, Mode=OneWay}"
+                          Command="{Binding ActiveTab.ToggleSortDirectionCommand}"/>
+              </MenuItem>
+              <Separator/>
               <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
+              <MenuItem Header="New from template"
+                        ItemsSource="{Binding ActiveTab.Templates}"
+                        IsVisible="{Binding ActiveTab.HasTemplates}">
+                <MenuItem.ItemTemplate>
+                  <DataTemplate x:DataType="fs:FileTemplate">
+                    <TextBlock Text="{Binding Name}"/>
+                  </DataTemplate>
+                </MenuItem.ItemTemplate>
+                <MenuItem.Styles>
+                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:FileTemplate">
+                    <Setter Property="Command"
+                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFromTemplateCommand}"/>
+                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                  </Style>
+                </MenuItem.Styles>
+              </MenuItem>
               <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
               <Separator/>
               <MenuItem Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"
@@ -391,7 +481,13 @@
               <!-- Every pane's view stays alive, toggled by IsVisible rather
                    than swapped through a ContentControl, so switching tabs
                    never resets scroll position. -->
-              <Panel IsVisible="{Binding IsActive}" DragDrop.AllowDrop="True">
+              <!-- PaneScale writes THIS pane's metrics into this control's own
+                   resources. A DynamicResource resolves nearest-outward, so
+                   everything below here uses the pane's sizes, while the
+                   sidebar and status bar keep the application defaults — and
+                   the other side of a split keeps its own. -->
+              <Panel local:PaneScale.Pane="{Binding}"
+                     IsVisible="{Binding IsActive}" DragDrop.AllowDrop="True">
 
               <DockPanel>
 
@@ -813,6 +909,9 @@
             BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EdgeHighlight}">
       <DockPanel>
         <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveTab.FreeSpace}"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Foreground="{DynamicResource ViewDimText}"/>
+        <TextBlock Text="{Binding ActiveSummary}" Margin="0,0,14,0"
                    FontSize="{DynamicResource FontSizeSmall}"
                    Foreground="{DynamicResource ViewDimText}"/>
         <TextBlock Text="{Binding ActiveStatus}"

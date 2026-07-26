@@ -23,6 +23,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IClipboardService? _clipboard;
     private readonly IScriptRunner? _scripts;
     private readonly ITagStore? _tags;
+    private readonly ITemplateProvider? _templates;
     private readonly ISessionStore? _store;
     private bool _restoring;
     private bool _started;
@@ -42,10 +43,12 @@ public sealed partial class ShellViewModel : ObservableObject
         IClipboardService? clipboard = null,
         ISearchProvider? search = null,
         IScriptRunner? scripts = null,
-        ITagStore? tags = null)
+        ITagStore? tags = null,
+        ITemplateProvider? templates = null)
     {
         _scripts = scripts;
         _tags = tags;
+        _templates = templates;
         _fs = fs;
         _ops = ops;
         _store = store;
@@ -116,38 +119,62 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void ApplyScales()
     {
+        // Application-level defaults only: the sidebar, status bar and
+        // properties window. Panes carry their own scale and set their own
+        // TextScale, so nothing here reaches into them.
         ScaleApplier?.Invoke(FontScale, IconScale);
-
-        // Column thresholds live on the pane and are measured in text width, so
-        // the font axis has to reach them or they stop matching what is drawn.
-        foreach (var group in new[] { Left, Right })
-        {
-            if (group is null) continue;
-            foreach (var tab in group.Tabs) tab.TextScale = FontScale;
-        }
-
         MarkDirty();
     }
 
     private static double Step(double value, double delta)
         => Math.Round(Math.Clamp(value + delta, 0.7, 2.5), 2);
 
-    [RelayCommand] private void FontLarger() => FontScale = Step(FontScale, 0.1);
-    [RelayCommand] private void FontSmaller() => FontScale = Step(FontScale, -0.1);
-    [RelayCommand] private void IconsLarger() => IconScale = Step(IconScale, 0.15);
-    [RelayCommand] private void IconsSmaller() => IconScale = Step(IconScale, -0.15);
+    /// <summary>
+    /// Scaling applies to ONE pane — whichever is active, or whichever the
+    /// pointer is over for the wheel. A reference listing beside a working one
+    /// wants different sizes, which is the point of having two.
+    /// </summary>
+    public void ScalePane(PaneViewModel? pane, double fontDelta, double iconDelta)
+    {
+        if (pane is null) return;
+
+        if (fontDelta != 0) pane.FontScale = Step(pane.FontScale, fontDelta);
+        if (iconDelta != 0) pane.IconScale = Step(pane.IconScale, iconDelta);
+
+        MarkDirty();
+    }
+
+    [RelayCommand] private void FontLarger()  => ScalePane(ActiveTab, 0.1, 0);
+    [RelayCommand] private void FontSmaller() => ScalePane(ActiveTab, -0.1, 0);
+    [RelayCommand] private void IconsLarger()  => ScalePane(ActiveTab, 0, 0.15);
+    [RelayCommand] private void IconsSmaller() => ScalePane(ActiveTab, 0, -0.15);
 
     /// <summary>Ctrl+0 puts both back, since one control resetting only half of
     /// the sizing would be a puzzle rather than a reset.</summary>
     [RelayCommand]
-    private void ZoomReset()
+    private void ZoomReset() => ResetPaneScale(ActiveTab);
+
+    /// <summary>
+    /// Back to default for one pane. Separate from the command so the wheel
+    /// click can reset whichever pane the pointer is over, matching how
+    /// Ctrl+wheel already targets by position rather than by focus.
+    /// </summary>
+    public void ResetPaneScale(PaneViewModel? pane)
     {
-        FontScale = 1.0;
-        IconScale = 1.0;
+        if (pane is null) return;
+
+        pane.FontScale = 1.0;
+        pane.IconScale = 1.0;
+        MarkDirty();
     }
 
-    [RelayCommand] private void ZoomIn() => FontScale = Step(FontScale, 0.1);
-    [RelayCommand] private void ZoomOut() => FontScale = Step(FontScale, -0.1);
+    /// <summary>
+    /// Combined zoom moves BOTH axes — it was stepping only the font, which
+    /// made it identical to FontLarger and meant icons never grew with it.
+    /// Icons step further per notch because their range is wider.
+    /// </summary>
+    [RelayCommand] private void ZoomIn()  => ScalePane(ActiveTab, 0.1, 0.15);
+    [RelayCommand] private void ZoomOut() => ScalePane(ActiveTab, -0.1, -0.15);
 
     public bool IsSplit => Right is not null;
 
@@ -178,6 +205,10 @@ public sealed partial class ShellViewModel : ObservableObject
     /// The status line, named with the folder it describes. In a split, a bare
     /// "21 items" does not say which of two identical listings it counted.
     /// </summary>
+    /// <summary>Item and selection counts, separate from the transient status
+    /// so a passing message never hides them.</summary>
+    public string ActiveSummary => ActiveTab?.Summary ?? "";
+
     public string ActiveStatus => ActiveTab is { } pane && IsSplit
         ? $"{pane.Title} — {pane.Status}"
         : ActiveTab?.Status ?? "";
@@ -215,10 +246,15 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private PaneViewModel NewPane()
     {
-        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts, _tags)
+        // A new tab inherits the sizes of the one it was opened from, rather
+        // than snapping back to default mid-session.
+        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts, _tags, _templates)
         {
-            TextScale = FontScale,
+            FontScale = ActiveTab?.FontScale ?? FontScale,
+            IconScale = ActiveTab?.IconScale ?? IconScale,
         };
+
+        pane.ScaleChanged += (_, _) => MarkDirty();
         pane.OperationStarted += OnOperationStarted;
         pane.PropertyChanged += OnPaneChanged;
         PaneCreated?.Invoke(this, pane);
@@ -233,6 +269,7 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(ActiveTab));
             OnPropertyChanged(nameof(ActiveStatus));
+            OnPropertyChanged(nameof(ActiveSummary));
         }
 
         MarkDirty();
@@ -545,6 +582,10 @@ public sealed partial class ShellViewModel : ObservableObject
             case nameof(PaneViewModel.Status):
             case nameof(PaneViewModel.Title):
                 OnPropertyChanged(nameof(ActiveStatus));
+                break;
+
+            case nameof(PaneViewModel.Summary):
+                OnPropertyChanged(nameof(ActiveSummary));
                 break;
         }
     }

@@ -40,6 +40,11 @@ public static class DesktopEntries
             var info = new ProcessStartInfo("xdg-mime")
             {
                 RedirectStandardOutput = true,
+                // Redirected and discarded: xdg-mime writes its own complaints
+                // to stderr, and without this they land in ours. A broken
+                // symlink in a listing produced a line of console noise per
+                // file, from a child process, looking like our diagnostics.
+                RedirectStandardError = true,
                 UseShellExecute = false,
             };
             info.ArgumentList.Add("query");
@@ -50,6 +55,11 @@ public static class DesktopEntries
             if (process is null) return "";
 
             var output = process.StandardOutput.ReadToEnd().Trim();
+
+            // Drained rather than ignored: a full stderr pipe would block the
+            // child rather than simply being discarded.
+            _ = process.StandardError.ReadToEnd();
+
             process.WaitForExit(2000);
             return output;
         }

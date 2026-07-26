@@ -19,6 +19,8 @@ public sealed class XdgIconTheme : IIconThemeProvider
     private readonly ConcurrentDictionary<string, Dictionary<string, List<string>>> _indexes =
         new(StringComparer.Ordinal);
 
+    private readonly Dictionary<string, string[]> _specialFolders;
+
     public XdgIconTheme(string? themeName)
     {
 
@@ -33,6 +35,8 @@ public sealed class XdgIconTheme : IIconThemeProvider
             "/usr/local/share/icons",
             "/usr/share/icons",
         ];
+
+        _specialFolders = BuildSpecialFolders();
 
         Reload(themeName);
     }
@@ -209,15 +213,71 @@ public sealed class XdgIconTheme : IIconThemeProvider
         return int.MaxValue - 1;
     }
 
+    /// <summary>
+    /// Special folders get their own icon names, which is why Dolphin shows a
+    /// distinct Documents, Downloads and Music folder while asking for
+    /// "inode-directory" everywhere gives one generic folder for all of them.
+    /// Names follow the freedesktop icon naming spec.
+    /// </summary>
+    private IReadOnlyList<string> FolderNames(string path)
+    {
+        var trimmed = path.TrimEnd('/');
+        if (trimmed.Length == 0) return ["drive-harddisk", "folder-root", "inode-directory", "folder"];
+
+        if (_specialFolders.TryGetValue(trimmed, out var special))
+            return [.. special, "inode-directory", "folder"];
+
+        return ["inode-directory", "folder"];
+    }
+
+    private Dictionary<string, string[]> BuildSpecialFolders()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('/');
+        var map = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            [home] = ["user-home"],
+        };
+
+        // The user's own names for these come from user-dirs.dirs — a localised
+        // setup has "Documentos", so matching on the folder name would fail.
+        foreach (var (key, names) in new (string, string[])[]
+        {
+            ("XDG_DESKTOP_DIR",   ["user-desktop", "folder-desktop"]),
+            ("XDG_DOCUMENTS_DIR", ["folder-documents"]),
+            ("XDG_DOWNLOAD_DIR",  ["folder-download", "folder-downloads"]),
+            ("XDG_MUSIC_DIR",     ["folder-music"]),
+            ("XDG_PICTURES_DIR",  ["folder-pictures"]),
+            ("XDG_VIDEOS_DIR",    ["folder-videos"]),
+            ("XDG_PUBLICSHARE_DIR", ["folder-publicshare", "folder-public"]),
+            ("XDG_TEMPLATES_DIR", ["folder-templates"]),
+        })
+        {
+            if (XdgUserDirs.Read(key) is { Length: > 0 } dir) map[dir.TrimEnd('/')] = names;
+        }
+
+        return map;
+    }
+
     public IReadOnlyList<string> NamesFor(string path, bool isDirectory)
     {
-        if (isDirectory) return ["inode-directory", "folder"];
+        if (isDirectory) return FolderNames(path);
 
         // The glob database first: one parsed file rather than a process tree
         // per listing. Only a name it cannot classify — no extension, or an
         // unusual pattern — pays for a content sniff.
         var mime = SharedMimeInfo.ForPath(path);
-        if (string.IsNullOrEmpty(mime)) mime = DesktopEntries.QueryMimeType(path);
+
+        if (string.IsNullOrEmpty(mime))
+        {
+            // A dangling symlink lists but does not resolve, so there is nothing
+            // to sniff. Spawning a process to be told that, once per entry, is
+            // pure waste — and it is worth showing as a broken link rather than
+            // as a generic file.
+            if (!File.Exists(path) && !Directory.Exists(path))
+                return ["inode-symlink", "emblem-symbolic-link", "text-x-generic"];
+
+            mime = DesktopEntries.QueryMimeType(path);
+        }
 
         if (string.IsNullOrEmpty(mime)) return ["text-x-generic", "application-x-generic"];
 

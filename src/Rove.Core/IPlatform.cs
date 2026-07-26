@@ -33,6 +33,8 @@ public interface IPlatform
 
     ITagStore Tags { get; }
 
+    ITemplateProvider Templates { get; }
+
     /// <summary>Null where the desktop exposes no readable theme.</summary>
     IThemeProvider? Theme { get; }
 

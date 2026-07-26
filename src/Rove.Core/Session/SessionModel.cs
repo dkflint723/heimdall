@@ -32,6 +32,14 @@ public sealed record TabState
     public bool ShowColumnStrip { get; init; }
 
     /// <summary>
+    /// Type and icon scale, per tab. A reference listing beside a working one
+    /// wants different sizes, so these belong to the tab rather than the
+    /// window. Zero or absent means "never set" and restores as 1.0.
+    /// </summary>
+    public double FontScale { get; init; } = 1.0;
+    public double IconScale { get; init; } = 1.0;
+
+    /// <summary>
     /// Back/forward stacks, oldest first. Nobody restores navigation history —
     /// which is exactly why having it is noticeable.
     /// </summary>
@@ -101,7 +109,7 @@ public sealed record SessionState
     /// An unrecognised version is ignored rather than migrated or thrown on —
     /// a session file must never prevent startup.
     /// </summary>
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 9;
 
     public int Version { get; init; } = CurrentVersion;
     public IReadOnlyList<WindowSession> Windows { get; init; } = [];

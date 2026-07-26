@@ -34,6 +34,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     private readonly IClipboardService? _clipboard;
     private readonly IScriptRunner? _scripts;
     private readonly ITagStore? _tags;
+    private readonly ITemplateProvider? _templates;
     private readonly List<FileEntry> _all = new();
     private CancellationTokenSource? _filterDebounce;
     private IDisposable? _watcher;
@@ -57,9 +58,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         IApplicationLauncher? launcher = null,
         IClipboardService? clipboard = null,
         IScriptRunner? scripts = null,
-        ITagStore? tags = null)
+        ITagStore? tags = null,
+        ITemplateProvider? templates = null)
     {
         _tags = tags;
+        _templates = templates;
         _fs = fs;
         _ops = ops;
         _launcher = launcher;
@@ -68,6 +71,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         RefreshScripts();
         RefreshTags();
+        RefreshTemplates();
     }
 
     // ---- tags ----------------------------------------------------------
@@ -299,6 +303,55 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty] private double _textScale = 1.0;
 
+    /// <summary>
+    /// Type and icon scale for THIS pane. Per tab and per split side, because a
+    /// reference listing beside a working one wants different sizes — which is
+    /// the whole reason for having two panes.
+    /// </summary>
+    [ObservableProperty] private double _fontScale = 1.0;
+    [ObservableProperty] private double _iconScale = 1.0;
+
+    /// <summary>
+    /// The bases the scales multiply. Exposed as real sizes rather than as a
+    /// multiplier, because "14" is something a person can reason about and
+    /// "1.15" is not.
+    /// </summary>
+    private const double BaseFontSize = 14;
+    private const double BaseIconSize = 26;
+
+    private const double MinScale = 0.7;
+    private const double MaxScale = 2.5;
+
+    public double FontPoints
+    {
+        get => Math.Round(FontScale * BaseFontSize);
+        set => FontScale = Math.Clamp(value / BaseFontSize, MinScale, MaxScale);
+    }
+
+    public double IconPixels
+    {
+        get => Math.Round(IconScale * BaseIconSize);
+        set => IconScale = Math.Clamp(value / BaseIconSize, MinScale, MaxScale);
+    }
+
+    partial void OnFontScaleChanged(double value)
+    {
+        OnPropertyChanged(nameof(FontPoints));
+        // Column thresholds are measured in text width, so they follow the font
+        // axis of the pane they belong to.
+        TextScale = value;
+        ScaleChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    partial void OnIconScaleChanged(double value)
+    {
+        OnPropertyChanged(nameof(IconPixels));
+        ScaleChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Raised so the shell can persist the change.</summary>
+    public event EventHandler? ScaleChanged;
+
     public bool ShowSize => ViewportWidth >= 340 * TextScale;
     public bool ShowModified => ViewportWidth >= 520 * TextScale;
     public bool ShowPermissions => ViewportWidth >= 680 * TextScale;
@@ -420,8 +473,28 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public bool IsEmpty => IsLoaded && !IsLoading && Entries.Count == 0;
 
     /// <summary>Stable left-hand status: what is here and what is picked.</summary>
+    /// <summary>
+    /// Total size of the selection, so the status bar can report it the way
+    /// Dolphin does. Directories contribute nothing — measuring them would mean
+    /// walking the tree on every selection change.
+    /// </summary>
+    private string SelectionSize()
+    {
+        long total = 0;
+        var files = 0;
+
+        foreach (var entry in SelectedEntries)
+        {
+            if (entry.IsDirectory) continue;
+            total += entry.Length;
+            files++;
+        }
+
+        return files == 0 ? "" : $" ({Bytes(total)})";
+    }
+
     public string Summary => SelectedEntries.Count > 1
-        ? $"{Entries.Count:N0} items · {SelectedEntries.Count:N0} selected"
+        ? $"{Entries.Count:N0} items · {SelectedEntries.Count:N0} selected{SelectionSize()}"
         : $"{Entries.Count:N0} items";
 
     private void NotifyListingState()
@@ -812,6 +885,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             View = tab.View;
             ShowColumnStrip = tab.ShowColumnStrip;
 
+            // Guarded: a session written before these existed deserialises as
+            // 0, which would restore an invisible pane.
+            FontScale = tab.FontScale > 0 ? tab.FontScale : 1.0;
+            IconScale = tab.IconScale > 0 ? tab.IconScale : 1.0;
+
             _back.Clear();
             foreach (var p in tab.BackStack) _back.Push(p);
 
@@ -847,6 +925,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         ShowHidden = ShowHidden,
         View = View,
         ShowColumnStrip = ShowColumnStrip,
+        FontScale = FontScale,
+        IconScale = IconScale,
         // Stacks serialise oldest-first so RestoreFrom can push in order.
         BackStack = _back.Reverse().ToList(),
         ForwardStack = _forward.Reverse().ToList(),
@@ -917,6 +997,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     private void NotifySortGlyphs()
     {
+        OnPropertyChanged(nameof(IsSortedByName));
+        OnPropertyChanged(nameof(IsSortedBySize));
+        OnPropertyChanged(nameof(IsSortedByModified));
+        OnPropertyChanged(nameof(IsSortedByKind));
+
         OnPropertyChanged(nameof(NameSortGlyph));
         OnPropertyChanged(nameof(SizeSortGlyph));
         OnPropertyChanged(nameof(ModifiedSortGlyph));
@@ -1030,6 +1115,95 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             FilterText = "";
         });
     }
+
+    /// <summary>
+    /// Copy alongside. The operations layer already resolves a name collision
+    /// by keeping both, which is exactly what duplicating means — so this is a
+    /// copy whose destination is where the files already are.
+    /// </summary>
+    // ---- templates -------------------------------------------------------
+
+    public ObservableCollection<FileTemplate> Templates { get; } = new();
+
+    public bool HasTemplates => Templates.Count > 0;
+
+    /// <summary>Re-read on every menu open: a template is a file the user drops
+    /// into a folder, and needing a restart to see it would be baffling.</summary>
+    [RelayCommand]
+    public void RefreshTemplates()
+    {
+        Templates.Clear();
+        if (_templates is null) return;
+
+        foreach (var template in _templates.Discover()) Templates.Add(template);
+        OnPropertyChanged(nameof(HasTemplates));
+    }
+
+    [RelayCommand]
+    public async Task NewFromTemplateAsync(FileTemplate? template)
+    {
+        if (template is null || _ops is null) return;
+
+        try
+        {
+            // A copy, then straight into rename — the name is the only thing
+            // the user actually wants to decide.
+            var target = Path.Combine(CurrentPath, Path.GetFileName(template.Path));
+            var unique = target;
+            var counter = 2;
+
+            while (File.Exists(unique) || Directory.Exists(unique))
+            {
+                unique = Path.Combine(CurrentPath,
+                    $"{Path.GetFileNameWithoutExtension(target)} {counter++}{Path.GetExtension(target)}");
+            }
+
+            await Task.Run(() => File.Copy(template.Path, unique)).ConfigureAwait(true);
+            await RefreshAsync().ConfigureAwait(true);
+
+            var created = _all.FirstOrDefault(e => e.FullPath == unique);
+            if (created.FullPath is not null) RenameRequested?.Invoke(this, created);
+        }
+        catch (Exception ex)
+        {
+            Status = $"could not create from template: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    public void DuplicateSelected()
+    {
+        if (_ops is null) return;
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) { Status = "select something to duplicate"; return; }
+
+        Track(_ops.Copy(paths, CurrentPath,
+            _ => ValueTask.FromResult(ConflictResolution.KeepBoth)));
+    }
+
+    // ---- sorting, reachable from the menu as well as the headers ----------
+
+    public bool IsSortedByName => Sort == SortField.Name;
+    public bool IsSortedBySize => Sort == SortField.Size;
+    public bool IsSortedByModified => Sort == SortField.Modified;
+    public bool IsSortedByKind => Sort == SortField.Kind;
+
+    [RelayCommand] private void SortByName() => SortBy("name");
+    [RelayCommand] private void SortBySize() => SortBy("size");
+    [RelayCommand] private void SortByModified() => SortBy("modified");
+
+    /// <summary>Sorting by type was implemented from the start and had no way
+    /// to be reached — there is no type column to click.</summary>
+    [RelayCommand]
+    private void SortByKind()
+    {
+        if (Sort == SortField.Kind) SortDescending = !SortDescending;
+        else { Sort = SortField.Kind; SortDescending = false; }
+    }
+
+    [RelayCommand]
+    private void ToggleSortDirection() => SortDescending = !SortDescending;
 
     [RelayCommand]
     public void ClearFilter()
@@ -1325,8 +1499,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             _                  => 0,
         };
 
+        // Natural order, so file2 comes before file10. Ordinal comparison is
+        // right for bytes and wrong for names people chose.
         if (result == 0)
-            result = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+            result = NaturalOrder.Compare(a.Name, b.Name);
 
         return SortDescending ? -result : result;
     }

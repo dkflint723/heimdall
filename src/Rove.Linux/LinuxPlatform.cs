@@ -41,6 +41,8 @@ public sealed class LinuxPlatform : IPlatform
 
     public ITagStore Tags { get; }
 
+    public ITemplateProvider Templates { get; } = new XdgTemplates();
+
     public IThemeProvider? Theme { get; } = new KdeThemeProvider();
 
     /// <summary>

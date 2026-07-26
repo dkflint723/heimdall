@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Threading;
 
 namespace Rove.Ui;
@@ -27,6 +28,8 @@ public static class FocusBehavior
 
     static FocusBehavior()
     {
+        HookCommitOnEnter();
+
         FocusOnVisibleProperty.Changed.AddClassHandler<Control>((control, args) =>
         {
             if (args.NewValue is not true) return;
@@ -54,6 +57,40 @@ public static class FocusBehavior
                     // instead of replacing it.
                     if (control is TextBox box) box.SelectAll();
                 });
+            };
+        });
+    }
+
+    /// <summary>
+    /// Commits a LostFocus-triggered binding when Enter is pressed.
+    ///
+    /// A size box binds on LostFocus so it does not apply "1" on the way to
+    /// "14" — but that means Enter would otherwise do nothing, which is the
+    /// first thing anyone tries. Moving focus off the box is what commits it.
+    /// </summary>
+    public static readonly AttachedProperty<bool> CommitOnEnterProperty =
+        AvaloniaProperty.RegisterAttached<TextBox, bool>("CommitOnEnter", typeof(FocusBehavior));
+
+    public static void SetCommitOnEnter(TextBox box, bool value)
+        => box.SetValue(CommitOnEnterProperty, value);
+
+    public static bool GetCommitOnEnter(TextBox box) => box.GetValue(CommitOnEnterProperty);
+
+    /// <summary>Called from the single static constructor above.</summary>
+    private static void HookCommitOnEnter()
+    {
+        CommitOnEnterProperty.Changed.AddClassHandler<TextBox>((box, args) =>
+        {
+            if (args.NewValue is not true) return;
+
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key is not Key.Enter) return;
+
+                // Focus moves to whatever contains the box, which raises
+                // LostFocus and lets the binding write through.
+                (box.Parent as Control)?.Focus();
+                e.Handled = true;
             };
         });
     }
