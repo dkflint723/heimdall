@@ -168,6 +168,12 @@ public partial class MainWindow : Window
         // Handled at the window because the list lives inside a DataTemplate,
         // so there is no named control to attach to.
         AddHandler(DoubleTappedEvent, OnDoubleTapped, RoutingStrategies.Bubble);
+
+        // Its single-click twin. Both are always registered and the preference
+        // is read at gesture time, because the rows live inside a DataTemplate
+        // and there is no list of realized controls to re-attach when the
+        // setting changes.
+        AddHandler(TappedEvent, OnTapped, RoutingStrategies.Bubble);
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble);
 
         // Tab has to be caught on the way DOWN. Keyboard navigation claims it
@@ -1118,8 +1124,40 @@ public partial class MainWindow : Window
 
     // ---- input ---------------------------------------------------------
 
+    /// <summary>
+    /// What the desktop is set to, when it says so. Null means it did not, and
+    /// this application's own default (double) applies. Set from the theme
+    /// palette, which is re-read on startup, on a Plasma change, and on save.
+    /// </summary>
+    public static bool? SystemSingleClick { get; set; }
+
+    /// <summary>
+    /// Single click when the preference says so, or when it defers to a desktop
+    /// that says so.
+    /// </summary>
+    private static bool OpensOnSingleClick
+        => AppSettings.Current.Navigation.OpenItemsWith switch
+        {
+            ActivationClick.Single => true,
+            ActivationClick.Double => false,
+            _ => SystemSingleClick ?? false,
+        };
+
+    private void OnTapped(object? sender, TappedEventArgs e)
+    {
+        if (!OpensOnSingleClick) return;
+
+        if ((e.Source as Control)?.DataContext is FileEntry entry)
+            _ = _shell.ActiveTab?.OpenAsync(entry);
+    }
+
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
+        // Otherwise the second click of a double re-opens what the first
+        // already did — harmless when navigating into a folder, but it would
+        // launch an application twice.
+        if (OpensOnSingleClick) return;
+
         if ((e.Source as Control)?.DataContext is FileEntry entry)
             _ = _shell.ActiveTab?.OpenAsync(entry);
     }

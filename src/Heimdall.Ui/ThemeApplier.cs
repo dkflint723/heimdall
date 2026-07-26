@@ -188,7 +188,7 @@ public static class ThemeApplier
         // Published here rather than at each call site: Apply is the one place
         // every palette read funnels through — startup, a Plasma change, and a
         // settings save all reach it — so this cannot fall out of step.
-        DoubleClick.SystemSingleClick = palette?.SingleClick;
+        MainWindow.SystemSingleClick = palette?.SingleClick;
 
         var chosen = Settings.AppSettings.Current.Views.CustomFontFamily;
 
