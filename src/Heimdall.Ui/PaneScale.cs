@@ -55,6 +55,15 @@ public static class PaneScale
 
         var rowHeight = Math.Round(Math.Max(body * 2.1, thumb + 8), 1);
 
+        // Icons.MaximumLines and the two text-width settings are NOT wired, and
+        // the reason is structural rather than laziness. Every metric here is a
+        // double, written into control Resources and read back by
+        // DynamicResource — which assigns directly, without converting. MaxLines
+        // is an int, so it cannot come down this path, and a second typed
+        // pipeline is more machinery than the setting is worth today.
+        //
+        // Tile height would also have to follow: label lines are not free, and a
+        // tile that does not grow to fit them just clips the label.
         yield return ("RowHeight", rowHeight);
         yield return ("TileWidth", Math.Round(tile + 24, 1));
         yield return ("TileHeight", Math.Round(tile + body * 2.9, 1));

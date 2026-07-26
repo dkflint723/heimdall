@@ -159,6 +159,49 @@
         </StackPanel>
       </TabItem>
 
+      <TabItem Header="View modes">
+        <StackPanel Spacing="14" Margin="0,12,0,0">
+
+          <TextBlock Text="Text"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="6">
+            <TextBox Text="{Binding CustomFontFamily}"
+                     PlaceholderText="follow the desktop font"
+                     FontSize="{DynamicResource FontSizeSmall}"/>
+            <TextBlock Text="Leave blank to use whatever Plasma is set to. Sizes still come from the per-pane scale, so this changes the face only."
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <TextBlock Text="Details view"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding AbsoluteDates}">
+              <StackPanel>
+                <TextBlock Text="Absolute dates"/>
+                <TextBlock Text="2026-07-26 14:30 for everything, instead of dropping the parts you can infer from today."
+                           FontSize="{DynamicResource FontSizeTiny}"
+                           Foreground="{DynamicResource ViewDimText}"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </CheckBox>
+
+            <CheckBox Content="Show item counts for folders"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ShowFolderItemCounts}"/>
+          </StackPanel>
+
+        </StackPanel>
+      </TabItem>
+
       <TabItem Header="Context menu">
         <StackPanel Spacing="14" Margin="0,12,0,0">
 

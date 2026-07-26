@@ -43,8 +43,16 @@ public static class FileConverters
             var local = value.ToLocalTime();
             var now = DateTimeOffset.Now;
 
-            // Today gets a time, this year drops the year, older keeps it —
-            // the same progression Dolphin uses, and it earns column width back.
+            // Absolute is one fixed shape regardless of when the file is from,
+            // which is what you want when comparing dates rather than reading
+            // them.
+            if (Settings.AppSettings.Current.Views.Details.DateStyle
+                == Core.Settings.DateStyle.Absolute)
+                return local.ToString("yyyy-MM-dd HH:mm");
+
+            // Relative: today gets a time, this year drops the year, older keeps
+            // it. Relative in the sense that matters — it omits what you can
+            // infer from today's date — and it earns column width back.
             if (local.Date == now.Date) return local.ToString("HH:mm");
             if (local.Year == now.Year) return local.ToString("dd MMM HH:mm");
 

@@ -39,6 +39,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         _confirmPermanentDelete = general.ConfirmPermanentDelete;
         _confirmClosingMultipleTabs = general.ConfirmClosingMultipleTabs;
 
+        var views = current.Views;
+
+        _customFontFamily = views.CustomFontFamily ?? "";
+        _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
+        _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
+
         var menu = current.ContextMenu;
 
         _menuCopyTo = menu.ShowCopyTo;
@@ -134,6 +140,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _menuAddToPlaces;
     [ObservableProperty] private bool _menuCopyLocation;
 
+    // ---- View modes -------------------------------------------------------
+    //
+    // Three of the six. Icons.TextWidth, Icons.MaximumLines and
+    // Compact.MaximumTextWidth stay out: they are structural metrics that would
+    // have to feed PaneScale.Compute, and that pipeline is double-typed while
+    // MaxLines is an int. Details.FolderSize's "size of contents" option needs
+    // recursive summing in the metadata provider, which does not exist.
+
+    [ObservableProperty] private string _customFontFamily;
+    [ObservableProperty] private bool _absoluteDates;
+    [ObservableProperty] private bool _showFolderItemCounts;
+
     /// <summary>Set when the dialog was dismissed with Save.</summary>
     public bool Saved { get; private set; }
 
@@ -176,6 +194,29 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ConfirmMoveToTrash = ConfirmMoveToTrash,
                 ConfirmPermanentDelete = ConfirmPermanentDelete,
                 ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
+            },
+
+            Views = _original.Views with
+            {
+                CustomFontFamily = string.IsNullOrWhiteSpace(CustomFontFamily)
+                    ? null
+                    : CustomFontFamily.Trim(),
+
+                Details = _original.Views.Details with
+                {
+                    DateStyle = AbsoluteDates
+                        ? Core.Settings.DateStyle.Absolute
+                        : Core.Settings.DateStyle.Relative,
+
+                    // Only two of the three modes are reachable from here, so
+                    // the third is preserved rather than overwritten by a
+                    // control that never showed it.
+                    FolderSize = ShowFolderItemCounts
+                        ? (_original.Views.Details.FolderSize == Core.Settings.FolderSizeMode.None
+                            ? Core.Settings.FolderSizeMode.ItemCount
+                            : _original.Views.Details.FolderSize)
+                        : Core.Settings.FolderSizeMode.None,
+                },
             },
 
             ContextMenu = _original.ContextMenu with

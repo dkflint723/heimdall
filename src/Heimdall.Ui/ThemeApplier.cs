@@ -182,9 +182,14 @@ public static class ThemeApplier
                     chipText.Color.R, chipText.Color.G, chipText.Color.B));
         }
 
-        // Always set, so the markup can bind unconditionally.
-        target["AppFontFamily"] = palette?.FontFamily is { Length: > 0 } family
-            ? new FontFamily(family)
+        // Always set, so the markup can bind unconditionally. A configured font
+        // wins over the desktop's, which is the whole point of configuring one;
+        // blank means follow Plasma, which stays the default.
+        var chosen = Settings.AppSettings.Current.Views.CustomFontFamily;
+
+        target["AppFontFamily"] =
+            chosen is { Length: > 0 }        ? new FontFamily(chosen)
+            : palette?.FontFamily is { Length: > 0 } family ? new FontFamily(family)
             : FontFamily.Default;
     }
 

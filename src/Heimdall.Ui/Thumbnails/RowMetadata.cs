@@ -56,6 +56,14 @@ public static class RowMetadata
             target.Text = "";
 
             if (Provider is null || entry is not { } value) return;
+
+            // "Show no size" for folders. Files keep their inline fact — this
+            // setting is about folders, which are the ones whose size costs
+            // something to work out.
+            if (!access && value.IsDirectory
+                && Settings.AppSettings.Current.Views.Details.FolderSize
+                    == Core.Settings.FolderSizeMode.None) return;
+
             if (!access && !Provider.CanDescribe(value.FullPath, value.IsDirectory)) return;
 
             // Prefixed so the two facts about one path do not share a slot.
