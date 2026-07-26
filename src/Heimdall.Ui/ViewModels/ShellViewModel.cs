@@ -1046,7 +1046,13 @@ public sealed partial class ShellViewModel : ObservableObject
             }), TaskScheduler.Default);
     }
 
-    private static string Format(long bytes) => bytes switch
+    /// <summary>
+    /// Public because MainWindow needs it for the trash sweep message. Note
+    /// there are four near-identical copies of this in the view models
+    /// (InfoPanel.Bytes, Properties.Human, Sidebar.Human, this one) — worth
+    /// collapsing into one place, but not while doing something else.
+    /// </summary>
+    public static string Format(long bytes) => bytes switch
     {
         < 1024 => $"{bytes} B",
         < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",

@@ -203,6 +203,74 @@
         </StackPanel>
       </TabItem>
 
+      <TabItem Header="Trash">
+        <StackPanel Spacing="14" Margin="0,12,0,0">
+
+          <TextBlock Text="This deletes files permanently, on its own, while Heimdall is running. Both options are off unless you turn them on."
+                     FontSize="{DynamicResource FontSizeSmall}"
+                     TextWrapping="Wrap"/>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox Content="Delete items after a number of days"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding DeleteOldTrash}"/>
+
+            <Grid ColumnDefinitions="*,90" Margin="24,0,0,0"
+                  IsEnabled="{Binding CanSetTrashAge}">
+              <TextBlock Grid.Column="0" Text="Days to keep"
+                         VerticalAlignment="Center"
+                         FontSize="{DynamicResource FontSizeSmall}"/>
+              <TextBox Grid.Column="1" Text="{Binding DeleteAfterDays}"
+                       FontSize="{DynamicResource FontSizeSmall}"/>
+            </Grid>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox Content="Limit the trash to a share of the disk"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding LimitTrashSize}"/>
+
+            <Grid ColumnDefinitions="*,90" Margin="24,0,0,0"
+                  IsEnabled="{Binding CanSetTrashSize}">
+              <TextBlock Grid.Column="0" Text="Percent of the disk"
+                         VerticalAlignment="Center"
+                         FontSize="{DynamicResource FontSizeSmall}"/>
+              <TextBox Grid.Column="1" Text="{Binding MaxPercentOfDisk}"
+                       FontSize="{DynamicResource FontSizeSmall}"/>
+            </Grid>
+
+            <StackPanel Spacing="6" Margin="24,0,0,0"
+                        IsEnabled="{Binding CanSetTrashSize}">
+              <TextBlock Text="When it is exceeded"
+                         FontSize="{DynamicResource FontSizeTiny}"
+                         Foreground="{DynamicResource ViewDimText}"/>
+
+              <RadioButton Content="Just say so" GroupName="trashlimit"
+                           FontSize="{DynamicResource FontSizeSmall}"
+                           IsChecked="{Binding LimitActionWarn}"/>
+              <RadioButton Content="Delete the oldest until it fits" GroupName="trashlimit"
+                           FontSize="{DynamicResource FontSizeSmall}"
+                           IsChecked="{Binding LimitActionOldest}"/>
+              <RadioButton Content="Delete the largest until it fits" GroupName="trashlimit"
+                           FontSize="{DynamicResource FontSizeSmall}"
+                           IsChecked="{Binding LimitActionLargest}"/>
+            </StackPanel>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <TextBlock Text="The trash is shared with the rest of the desktop, so this also removes what Dolphin and other applications put there — the same as Dolphin's own setting. Items whose deletion date cannot be read are always left alone. Files deleted from another drive live in a trash on that drive and are not covered."
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"
+                     TextWrapping="Wrap"/>
+
+        </StackPanel>
+      </TabItem>
+
       <TabItem Header="Navigation">
         <StackPanel Spacing="14" Margin="0,12,0,0">
 

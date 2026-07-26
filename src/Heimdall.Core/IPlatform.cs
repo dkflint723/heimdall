@@ -50,4 +50,11 @@ public interface IPlatform
 
     /// <summary>Null where the desktop ships no icon theme we can read.</summary>
     IIconThemeProvider? Icons { get; }
+
+    /// <summary>
+    /// Null where the platform has no trash this application may prune. Kept
+    /// separate from <see cref="Operations"/> deliberately: trashing one file
+    /// and unattended bulk expiry are different risks.
+    /// </summary>
+    ITrashMaintenance? TrashMaintenance { get; }
 }

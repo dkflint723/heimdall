@@ -29,6 +29,9 @@ public partial class MainWindow : Window
     // startup setting decides whether the session is consulted at all.
     private readonly JsonSettingsStore _settingsStore;
     private readonly SettingsState _settings;
+
+    private ITrashMaintenance? _trashMaintenance;
+    private DispatcherTimer? _trashTimer;
     private readonly IPropertiesProvider _properties;
     private readonly IThemeProvider? _theme;
     private readonly IAccessEditor? _accessEditor;
@@ -243,6 +246,8 @@ public partial class MainWindow : Window
         _shell.Start(restore ? state : null, openFolder);
 
         ApplyStartupPreferences(startup);
+
+        StartTrashMaintenance(platform.TrashMaintenance);
 
         // Build stamp. When a symptom and the code disagree, this is the one
         // line that says whether the running binary contains the fix.
@@ -895,6 +900,61 @@ public partial class MainWindow : Window
         // OnClosing with _closeApproved still false and confirm forever; the
         // caller falls through to the existing flush-then-close path instead.
         return result;
+    }
+
+    /// <summary>
+    /// Trash expiry, at startup and then hourly.
+    ///
+    /// Hourly rather than on a shorter tick because nothing here is urgent —
+    /// a trash that is one hour over its age limit is not a problem — and
+    /// because each sweep walks the trash to size it, which is real work to be
+    /// doing behind someone's back.
+    /// </summary>
+    private void StartTrashMaintenance(ITrashMaintenance? maintenance)
+    {
+        if (maintenance is null) return;
+
+        _trashMaintenance = maintenance;
+
+        _ = SweepTrashAsync();
+
+        _trashTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(1) };
+        _trashTimer.Tick += (_, _) => _ = SweepTrashAsync();
+        _trashTimer.Start();
+    }
+
+    private async Task SweepTrashAsync()
+    {
+        if (_trashMaintenance is not { } maintenance) return;
+
+        try
+        {
+            var policy = AppSettings.Current.Trash;
+
+            var result = await maintenance.SweepAsync(policy, CancellationToken.None);
+
+            // Said out loud when it acted. The application deleting files with
+            // nobody watching is exactly the thing that should not be silent.
+            if (result.Removed > 0)
+            {
+                var freed = ShellViewModel.Format(result.BytesFreed);
+
+                Console.Error.WriteLine(
+                    $"[heimdall] trash: removed {result.Removed} item(s), freed {freed}"
+                    + (result.Skipped > 0 ? $", skipped {result.Skipped} undated" : ""));
+
+                _shell.OperationStatus = $"trash: removed {result.Removed} item(s), freed {freed}";
+            }
+            else if (result.OverLimit)
+            {
+                _shell.OperationStatus = "trash is over its size limit";
+            }
+        }
+        catch (Exception ex)
+        {
+            // A failed sweep must never take the window with it.
+            Console.Error.WriteLine($"[heimdall] trash sweep failed: {ex.Message}");
+        }
     }
 
     // ---- per-pane wiring -----------------------------------------------

@@ -57,4 +57,6 @@ public sealed class LinuxPlatform : IPlatform
     /// user picked in System Settings rather than assuming Breeze.
     /// </summary>
     public IIconThemeProvider? Icons { get; }
+
+    public ITrashMaintenance? TrashMaintenance { get; } = new XdgTrashMaintenance();
 }

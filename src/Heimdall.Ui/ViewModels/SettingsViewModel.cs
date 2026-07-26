@@ -50,6 +50,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
         _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
 
+        var trash = current.Trash;
+
+        _deleteOldTrash = trash.DeleteOldFiles;
+        _deleteAfterDays = trash.DeleteAfterDays.ToString();
+        _limitTrashSize = trash.LimitSize;
+        _maxPercentOfDisk = trash.MaximumPercentOfDisk.ToString();
+        _limitActionWarn = trash.WhenLimitReached == TrashLimitAction.Warn;
+        _limitActionOldest = trash.WhenLimitReached == TrashLimitAction.DeleteOldest;
+        _limitActionLargest = trash.WhenLimitReached == TrashLimitAction.DeleteLargest;
+
         _openWithSystem = current.Navigation.OpenItemsWith == ActivationClick.System;
         _openWithSingle = current.Navigation.OpenItemsWith == ActivationClick.Single;
         _openWithDouble = current.Navigation.OpenItemsWith == ActivationClick.Double;
@@ -224,6 +234,36 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _openWithSingle;
     [ObservableProperty] private bool _openWithDouble;
 
+    // ---- Trash ------------------------------------------------------------
+
+    [ObservableProperty] private bool _deleteOldTrash;
+    [ObservableProperty] private string _deleteAfterDays;
+    [ObservableProperty] private bool _limitTrashSize;
+    [ObservableProperty] private string _maxPercentOfDisk;
+    [ObservableProperty] private bool _limitActionWarn;
+    [ObservableProperty] private bool _limitActionOldest;
+    [ObservableProperty] private bool _limitActionLargest;
+
+    public bool CanSetTrashAge => DeleteOldTrash;
+    public bool CanSetTrashSize => LimitTrashSize;
+
+    partial void OnDeleteOldTrashChanged(bool value)
+        => OnPropertyChanged(nameof(CanSetTrashAge));
+
+    partial void OnLimitTrashSizeChanged(bool value)
+        => OnPropertyChanged(nameof(CanSetTrashSize));
+
+    /// <summary>
+    /// Clamped, and a bad value disables rather than defaults. Zero days would
+    /// mean "delete everything immediately", which is not a plausible thing to
+    /// have meant by typing badly.
+    /// </summary>
+    private static int Days(string text)
+        => int.TryParse(text, out var value) && value > 0 ? value : 0;
+
+    private static int Percent(string text)
+        => int.TryParse(text, out var value) && value is > 0 and <= 100 ? value : 0;
+
     /// <summary>Set when the dialog was dismissed with Save.</summary>
     public bool Saved { get; private set; }
 
@@ -287,6 +327,26 @@ public sealed partial class SettingsViewModel : ObservableObject
                             : _original.Views.Details.FolderSize)
                         : Core.Settings.FolderSizeMode.None,
                 },
+            },
+
+            Trash = _original.Trash with
+            {
+                // A field that will not parse turns the feature OFF rather than
+                // falling back to a default. Guessing a number here means
+                // deleting files against something the user did not type.
+                DeleteOldFiles = DeleteOldTrash && Days(DeleteAfterDays) > 0,
+                DeleteAfterDays = Days(DeleteAfterDays) is > 0 and var d
+                    ? d
+                    : _original.Trash.DeleteAfterDays,
+
+                LimitSize = LimitTrashSize && Percent(MaxPercentOfDisk) > 0,
+                MaximumPercentOfDisk = Percent(MaxPercentOfDisk) is > 0 and var p
+                    ? p
+                    : _original.Trash.MaximumPercentOfDisk,
+
+                WhenLimitReached = LimitActionOldest ? TrashLimitAction.DeleteOldest
+                    : LimitActionLargest ? TrashLimitAction.DeleteLargest
+                    : TrashLimitAction.Warn,
             },
 
             Navigation = _original.Navigation with
