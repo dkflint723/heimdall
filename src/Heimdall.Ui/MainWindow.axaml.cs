@@ -104,6 +104,10 @@ public partial class MainWindow : Window
         _settings = _settingsStore.Load();
         _settingsStore.EnsureFileExists(_settings);
 
+        // Published before anything else runs, so every later reader — including
+        // the settings dialog itself — sees the file rather than the defaults.
+        AppSettings.Apply(_settings);
+
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
         // Loaded synchronously so geometry is applied before first paint. An
@@ -121,6 +125,7 @@ public partial class MainWindow : Window
         };
         _shell.PaneCreated += (_, pane) => WirePane(pane);
         _shell.PropertiesRequested += (_, _) => ShowProperties();
+        _shell.SettingsRequested += (_, _) => ShowSettings();
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
         _shell.UseRemotes(platform.Remotes);
         _shell.UseDiscovery(platform.Discovery);
@@ -203,7 +208,29 @@ public partial class MainWindow : Window
             geometry?.FontScale is > 0 and var f ? f : 1.0,
             geometry?.IconScale is > 0 and var i ? i : 1.0);
 
-        _shell.Start(state);
+        // The startup setting decides whether the session is consulted at all,
+        // which is the whole reason settings are loaded before it. Restoring
+        // stays the default: forgetting open folders is the complaint this
+        // project exists to answer.
+        var startup = _settings.Startup;
+
+        var restore = startup.ShowOnStartup == StartupLocation.RestoreSession;
+
+        var openFolder = startup.ShowOnStartup switch
+        {
+            StartupLocation.SpecificFolder when
+                !string.IsNullOrWhiteSpace(startup.StartupFolder)
+                && Directory.Exists(startup.StartupFolder) => startup.StartupFolder,
+
+            // A configured folder that no longer exists falls back to home
+            // rather than opening nothing — an unremovable empty window would
+            // be a worse failure than quietly ignoring a stale path.
+            _ => null,
+        };
+
+        _shell.Start(restore ? state : null, openFolder);
+
+        ApplyStartupPreferences(startup);
 
         // Build stamp. When a symptom and the code disagree, this is the one
         // line that says whether the running binary contains the fix.
@@ -346,6 +373,33 @@ public partial class MainWindow : Window
     /// Non-modal on purpose: you frequently want to compare two files, and a
     /// modal dialog makes that impossible without closing it first.
     /// </summary>
+    /// <summary>
+    /// Saving swaps AppSettings.Current and writes the file. Most of what the
+    /// Startup page controls only means anything at launch, so it is applied
+    /// then rather than re-run here — except the title bar, which is visible
+    /// right now and would otherwise look broken until a restart.
+    /// </summary>
+    private void ShowSettings()
+    {
+        var model = new SettingsViewModel(AppSettings.Current);
+        var window = new SettingsWindow(model);
+
+        window.Closed += (_, _) =>
+        {
+            if (!model.Saved) return;
+
+            AppSettings.Apply(model.Result);
+            _settingsStore.Save(model.Result);
+
+            Title = model.Result.Startup.ShowFullPathInTitleBar
+                    && _shell.ActiveTab is { } pane
+                ? $"{pane.CurrentPath} — Heimdall"
+                : "Heimdall";
+        };
+
+        window.ShowDialog(this);
+    }
+
     private void ShowProperties()
     {
         if (_shell.ActiveTab is not { } pane) return;
@@ -715,6 +769,29 @@ public partial class MainWindow : Window
 
         _closeApproved = true;
         Close();
+    }
+
+    /// <summary>
+    /// Startup preferences that act on the window once it exists. Separate from
+    /// the restore decision above because these apply whether or not a session
+    /// was restored.
+    /// </summary>
+    private void ApplyStartupPreferences(StartupSettings startup)
+    {
+        Title = startup.ShowFullPathInTitleBar && _shell.ActiveTab is { } titled
+            ? $"{titled.CurrentPath} — Heimdall"
+            : "Heimdall";
+
+        if (startup.BeginInSplitView && !_shell.IsSplit)
+            _shell.ToggleSplitCommand.Execute(null);
+
+        if (_shell.ActiveTab is not { } pane) return;
+
+        if (startup.ShowFilterBar) pane.IsFilterVisible = true;
+
+        // Last, because BeginEditPath takes focus and anything set afterwards
+        // would be fighting it for the caret.
+        if (startup.LocationBarEditable) pane.BeginEditPath();
     }
 
     // ---- per-pane wiring -----------------------------------------------

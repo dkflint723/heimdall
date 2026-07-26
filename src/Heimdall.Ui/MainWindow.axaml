@@ -309,6 +309,17 @@
                   <Button Content="Reset sizes" HorizontalAlignment="Stretch"
                           FontSize="{DynamicResource FontSizeSmall}"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ZoomResetCommand}"/>
+
+                  <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+                  <!-- This flyout is per-pane view options; settings are
+                       application-wide. Separated by a rule rather than mixed
+                       in, because the two undo differently — one is a view you
+                       can change back, the other is a preference that persists. -->
+                  <Button Content="Settings…" HorizontalAlignment="Stretch"
+                          FontSize="{DynamicResource FontSizeSmall}"
+                          ToolTip.Tip="application settings  (ctrl+shift+,)"
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenSettingsCommand}"/>
                 </StackPanel>
               </Flyout>
             </Button.Flyout>
@@ -1201,6 +1212,8 @@
          browser-style, and that convention is the stronger one. -->
     <KeyBinding Gesture="Ctrl+F"         Command="{Binding Sidebar.FocusSearchCommand}"/>
     <KeyBinding Gesture="Ctrl+L"         Command="{Binding ActiveTab.BeginEditPathCommand}"/>
+    <!-- KDE's standard "Configure" gesture, so it is where a Plasma user reaches. -->
+    <KeyBinding Gesture="Ctrl+Shift+OemComma" Command="{Binding OpenSettingsCommand}"/>
   </Window.KeyBindings>
 
   <DockPanel>

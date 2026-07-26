@@ -637,6 +637,11 @@ public sealed partial class ShellViewModel : ObservableObject
     [RelayCommand]
     private void ShowProperties() => PropertiesRequested?.Invoke(this, EventArgs.Empty);
 
+    public event EventHandler? SettingsRequested;
+
+    [RelayCommand]
+    private void OpenSettings() => SettingsRequested?.Invoke(this, EventArgs.Empty);
+
     public Func<WindowSession>? GeometryProvider { get; set; }
 
     [ObservableProperty] private string _operationStatus = "";
@@ -962,12 +967,25 @@ public sealed partial class ShellViewModel : ObservableObject
 
     // ---- session -------------------------------------------------------
 
-    public void Start(SessionState? state)
+    /// <summary>
+    /// <paramref name="state"/> null means "do not restore" — the caller has
+    /// already applied the startup setting and decided the session should be
+    /// ignored. <paramref name="openFolder"/> is where to start instead; null
+    /// means home, which is what this always did.
+    ///
+    /// The decision lives in the caller rather than here because the caller is
+    /// the only place that holds both stores, and because a view model that
+    /// reaches for preferences to decide whether to use its own argument is
+    /// harder to reason about than one that is simply told.
+    /// </summary>
+    public void Start(SessionState? state, string? openFolder = null)
     {
         if (_started) return;
         _started = true;
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = string.IsNullOrWhiteSpace(openFolder)
+            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            : openFolder;
         var window = state?.Windows.FirstOrDefault();
 
         if (window is not null)

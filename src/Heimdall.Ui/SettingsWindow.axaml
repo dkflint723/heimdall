@@ -1,0 +1,96 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Heimdall.Ui.ViewModels"
+        x:Class="Heimdall.Ui.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Heimdall settings"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="16">
+
+    <Border DockPanel.Dock="Bottom" Margin="0,16,0,0">
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Content="Cancel" Padding="14,4" Command="{Binding CancelCommand}"/>
+        <Button Content="Save" Padding="14,4" Command="{Binding SaveCommand}"/>
+      </StackPanel>
+    </Border>
+
+    <!-- A TabControl with one tab looks odd today and is deliberate: the
+         remaining five pages slot in beside this one without the window being
+         restructured, and each arrives with the plumbing that makes its
+         controls do something. -->
+    <TabControl>
+      <TabItem Header="Startup">
+        <StackPanel Spacing="14" Margin="0,12,0,0">
+
+          <TextBlock Text="When Heimdall opens"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="6">
+            <RadioButton GroupName="startup"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         IsChecked="{Binding RestoreLastSession}">
+              <StackPanel>
+                <TextBlock Text="Restore folders, tabs and window from last time"/>
+                <TextBlock Text="The default. Forgetting these is the thing this replaces."
+                           FontSize="{DynamicResource FontSizeTiny}"
+                           Foreground="{DynamicResource ViewDimText}"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </RadioButton>
+
+            <RadioButton Content="Open the home folder" GroupName="startup"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         IsChecked="{Binding StartInHome}"/>
+
+            <RadioButton Content="Open a specific folder" GroupName="startup"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         IsChecked="{Binding StartInSpecificFolder}"/>
+          </StackPanel>
+
+          <TextBox Text="{Binding StartupFolder}"
+                   Watermark="/home/…"
+                   IsEnabled="{Binding CanEditStartupFolder}"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Margin="24,0,0,0"/>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <TextBlock Text="How it opens"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox Content="Begin in split view"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding BeginInSplitView}"/>
+
+            <CheckBox Content="Show the filter bar"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ShowFilterBar}"/>
+
+            <CheckBox Content="Start with the location bar editable"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding LocationBarEditable}"/>
+
+            <CheckBox Content="Show the full path in the title bar"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ShowFullPathInTitleBar}"/>
+          </StackPanel>
+
+          <TextBlock Text="Changes to how it opens apply on the next launch."
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"
+                     TextWrapping="Wrap"/>
+
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+
+  </DockPanel>
+</Window>
