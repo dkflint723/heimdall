@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Heimdall.Core.Settings;
@@ -41,7 +42,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         var views = current.Views;
 
-        _customFontFamily = views.CustomFontFamily ?? "";
+        AvailableFonts = BuildFontList(views.CustomFontFamily);
+
+        _selectedFont = string.IsNullOrWhiteSpace(views.CustomFontFamily)
+            ? FollowDesktop
+            : views.CustomFontFamily;
         _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
         _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
 
@@ -148,7 +153,42 @@ public sealed partial class SettingsViewModel : ObservableObject
     // MaxLines is an int. Details.FolderSize's "size of contents" option needs
     // recursive summing in the metadata provider, which does not exist.
 
-    [ObservableProperty] private string _customFontFamily;
+    /// <summary>
+    /// The first entry, and the default. A sentinel string rather than a null
+    /// item because a ComboBox showing an empty row reads as a bug.
+    /// </summary>
+    private const string FollowDesktop = "Follow the desktop font";
+
+    public IReadOnlyList<string> AvailableFonts { get; }
+
+    [ObservableProperty] private string _selectedFont;
+
+    /// <summary>
+    /// Installed families, sorted, with the follow-the-desktop sentinel first.
+    ///
+    /// <paramref name="configured"/> is added even when it is not installed:
+    /// silently dropping a font someone chose — because they are on a different
+    /// machine, or uninstalled it — would rewrite their settings the moment they
+    /// opened this dialog and pressed Save.
+    /// </summary>
+    private static IReadOnlyList<string> BuildFontList(string? configured)
+    {
+        var names = new List<string> { FollowDesktop };
+
+        var installed = FontManager.Current.SystemFonts
+            .Select(f => f.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+
+        names.AddRange(installed);
+
+        if (configured is { Length: > 0 }
+            && !names.Contains(configured, StringComparer.OrdinalIgnoreCase))
+            names.Insert(1, configured);
+
+        return names;
+    }
     [ObservableProperty] private bool _absoluteDates;
     [ObservableProperty] private bool _showFolderItemCounts;
 
@@ -198,9 +238,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             Views = _original.Views with
             {
-                CustomFontFamily = string.IsNullOrWhiteSpace(CustomFontFamily)
-                    ? null
-                    : CustomFontFamily.Trim(),
+                CustomFontFamily = SelectedFont == FollowDesktop ? null : SelectedFont,
 
                 Details = _original.Views.Details with
                 {

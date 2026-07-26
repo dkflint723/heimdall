@@ -167,10 +167,11 @@
                      Foreground="{DynamicResource ViewDimText}"/>
 
           <StackPanel Spacing="6">
-            <TextBox Text="{Binding CustomFontFamily}"
-                     PlaceholderText="follow the desktop font"
-                     FontSize="{DynamicResource FontSizeSmall}"/>
-            <TextBlock Text="Leave blank to use whatever Plasma is set to. Sizes still come from the per-pane scale, so this changes the face only."
+            <ComboBox ItemsSource="{Binding AvailableFonts}"
+                      SelectedItem="{Binding SelectedFont}"
+                      HorizontalAlignment="Stretch"
+                      FontSize="{DynamicResource FontSizeSmall}"/>
+            <TextBlock Text="The first entry uses whatever Plasma is set to. Sizes still come from the per-pane scale, so this changes the face only."
                        FontSize="{DynamicResource FontSizeTiny}"
                        Foreground="{DynamicResource ViewDimText}"
                        TextWrapping="Wrap"/>
