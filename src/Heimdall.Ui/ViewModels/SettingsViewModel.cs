@@ -32,6 +32,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         _closingSplitDiscardsOtherPane = general.ClosingSplitDiscardsOtherPane;
         _showStatusBar = general.ShowStatusBar;
         _showFreeSpace = general.ShowFreeSpace;
+        _showPreviews = general.ShowPreviews;
+        _maxLocalPreviewMegabytes = general.MaxLocalPreviewMegabytes.ToString();
+        _maxRemotePreviewMegabytes = general.MaxRemotePreviewMegabytes.ToString();
+        _confirmMoveToTrash = general.ConfirmMoveToTrash;
+        _confirmPermanentDelete = general.ConfirmPermanentDelete;
+        _confirmClosingMultipleTabs = general.ConfirmClosingMultipleTabs;
 
         _restoreLastSession = startup.ShowOnStartup == StartupLocation.RestoreSession;
         _startInHome = startup.ShowOnStartup == StartupLocation.HomeFolder;
@@ -83,6 +89,26 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnShowStatusBarChanged(bool value)
         => OnPropertyChanged(nameof(CanSetFreeSpace));
 
+    [ObservableProperty] private bool _showPreviews;
+    [ObservableProperty] private bool _confirmMoveToTrash;
+    [ObservableProperty] private bool _confirmPermanentDelete;
+    [ObservableProperty] private bool _confirmClosingMultipleTabs;
+
+    // Text rather than int: a spinner for "0 means unlimited" reads as a
+    // quantity when it is really a switch with a quantity attached, and an
+    // empty box is a clearer "no limit" than a zero.
+    [ObservableProperty] private string _maxLocalPreviewMegabytes;
+    [ObservableProperty] private string _maxRemotePreviewMegabytes;
+
+    public bool CanSetPreviewLimits => ShowPreviews;
+
+    partial void OnShowPreviewsChanged(bool value)
+        => OnPropertyChanged(nameof(CanSetPreviewLimits));
+
+    /// <summary>Anything unparseable, negative or blank means no limit.</summary>
+    private static int Megabytes(string text)
+        => int.TryParse(text, out var value) && value > 0 ? value : 0;
+
     /// <summary>Set when the dialog was dismissed with Save.</summary>
     public bool Saved { get; private set; }
 
@@ -119,6 +145,12 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ClosingSplitDiscardsOtherPane = ClosingSplitDiscardsOtherPane,
                 ShowStatusBar = ShowStatusBar,
                 ShowFreeSpace = ShowFreeSpace,
+                ShowPreviews = ShowPreviews,
+                MaxLocalPreviewMegabytes = Megabytes(MaxLocalPreviewMegabytes),
+                MaxRemotePreviewMegabytes = Megabytes(MaxRemotePreviewMegabytes),
+                ConfirmMoveToTrash = ConfirmMoveToTrash,
+                ConfirmPermanentDelete = ConfirmPermanentDelete,
+                ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
             },
 
             Startup = _original.Startup with

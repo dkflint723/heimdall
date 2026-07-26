@@ -20,8 +20,55 @@ public static class ThumbnailLoader
 
     public static IThumbnailProvider? Provider { get; set; }
 
+    /// <summary>
+    /// Local paths of everything currently mounted from elsewhere, refreshed by
+    /// the sidebar whenever it rediscovers them. Held here rather than asking
+    /// IRemoteMounts per row: Discover() reads directories, and this is called
+    /// once per visible row.
+    /// </summary>
+    public static IReadOnlyList<string> RemoteRoots { get; set; } = [];
+
     public static bool CanThumbnail(string path)
-        => Provider?.CanThumbnail(path) ?? false;
+    {
+        if (Provider is null) return false;
+
+        var general = Settings.AppSettings.Current.General;
+        if (!general.ShowPreviews) return false;
+
+        if (!Provider.CanThumbnail(path)) return false;
+
+        var limit = IsRemote(path)
+            ? general.MaxRemotePreviewMegabytes
+            : general.MaxLocalPreviewMegabytes;
+
+        // 0 means no limit, which is the default — and it matters that the
+        // stat below is skipped entirely in that case, because this runs once
+        // per visible row and the listing is deliberately stat-free.
+        if (limit <= 0) return true;
+
+        try
+        {
+            return new FileInfo(path).Length <= (long)limit * 1024 * 1024;
+        }
+        catch
+        {
+            // Gone or unreadable between listing and here — no thumbnail.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// A remote file costs network to read, which is the entire reason the two
+    /// limits are separate: a 50 MB photo on an SMB share is a very different
+    /// proposition from the same file on the local disk.
+    /// </summary>
+    private static bool IsRemote(string path)
+    {
+        foreach (var root in RemoteRoots)
+            if (path.StartsWith(root, StringComparison.Ordinal)) return true;
+
+        return false;
+    }
 
     public static async Task<Bitmap?> LoadAsync(string path, int size, CancellationToken ct)
     {

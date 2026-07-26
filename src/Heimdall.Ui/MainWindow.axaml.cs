@@ -739,6 +739,18 @@ public partial class MainWindow : Window
     {
         if (_closeApproved) return;
 
+        // Asked before anything is torn down, and only when there is something
+        // to lose. Off by default: the session is restored on next launch, so
+        // closing a window full of tabs is not actually destructive here — which
+        // is exactly why this is a preference rather than the behaviour.
+        if (AppSettings.Current.General.ConfirmClosingMultipleTabs && CountOpenTabs() > 1)
+        {
+            e.Cancel = true;
+
+            var confirmed = await ConfirmCloseAsync();
+            if (!confirmed) return;
+        }
+
         // Cancel, flush, then close for real. Awaiting inside an async void
         // handler does not hold the window open — the process can otherwise
         // exit with the write still in flight.
@@ -799,6 +811,73 @@ public partial class MainWindow : Window
         if (startup.LocationBarEditable) pane.BeginEditPath();
     }
 
+    private int CountOpenTabs()
+    {
+        var total = _shell.Left.Tabs.Count;
+        if (_shell.Right is { } right) total += right.Tabs.Count;
+
+        return total;
+    }
+
+    /// <summary>
+    /// A real dialog rather than the prompt bar: the prompt bar lives inside
+    /// the window being closed, and driving a close decision from a control
+    /// that is about to be destroyed is the shape of bug this project has
+    /// already paid for once with Shift+Delete.
+    /// </summary>
+    private async Task<bool> ConfirmCloseAsync()
+    {
+        var dialog = new Window
+        {
+            Title = "Close Heimdall",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+        };
+
+        AppIcon.Apply(dialog);
+
+        var result = false;
+
+        var close = new Button { Content = "close anyway", Padding = new Thickness(14, 4) };
+        var cancel = new Button { Content = "cancel", Padding = new Thickness(14, 4) };
+
+        close.Click += (_, _) => { result = true; dialog.Close(); };
+        cancel.Click += (_, _) => dialog.Close();
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(18),
+            Spacing = 14,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"{CountOpenTabs()} tabs are open. Close anyway?",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { cancel, close },
+                },
+            },
+        };
+
+        // Focused so Enter and Space reach a real button rather than a
+        // hand-rolled key path.
+        cancel.Focus();
+
+        await dialog.ShowDialog(this);
+
+        // Deliberately does NOT close. Calling Close() here would re-enter
+        // OnClosing with _closeApproved still false and confirm forever; the
+        // caller falls through to the existing flush-then-close path instead.
+        return result;
+    }
+
     // ---- per-pane wiring -----------------------------------------------
 
     private void WirePane(PaneViewModel pane)
@@ -825,7 +904,7 @@ public partial class MainWindow : Window
 
     // ---- inline prompt -------------------------------------------------
 
-    private enum PromptMode { None, Rename, ConfirmDelete, NewTag, Connect }
+    private enum PromptMode { None, Rename, ConfirmDelete, ConfirmTrash, NewTag, Connect }
 
     private PromptMode _prompt = PromptMode.None;
     private FileEntry _renameTarget;
@@ -870,6 +949,10 @@ public partial class MainWindow : Window
         {
             case PromptMode.ConfirmDelete:
                 target?.DeleteSelectedCommand.Execute(null);
+                break;
+
+            case PromptMode.ConfirmTrash:
+                target?.TrashSelectedCommand.Execute(null);
                 break;
 
             case PromptMode.Rename when !string.IsNullOrWhiteSpace(name) && name != entry.Name:
@@ -958,6 +1041,37 @@ public partial class MainWindow : Window
 
         // Focus the button, not the bar: a focused Button takes Enter and Space
         // itself, which is a route nothing else can swallow.
+        PromptConfirm.Focus();
+    }
+
+    /// <summary>
+    /// Off by default, because trash is reversible and a prompt on a reversible
+    /// action trains people to dismiss prompts. Dolphin offers it, so it is
+    /// here for anyone who wants it.
+    /// </summary>
+    private void AskConfirmTrash()
+    {
+        if (PromptBar is null) return;
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var count = pane.Selection.Count > 0
+            ? pane.Selection.Count
+            : pane.SelectedEntry is null ? 0 : 1;
+
+        if (count == 0) return;
+
+        _prompt = PromptMode.ConfirmTrash;
+
+        PromptLabel.Text = $"move {count} item(s) to trash?";
+        PromptInput.IsVisible = false;
+        PromptConfirm.Content = "move to trash";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "esc to cancel";
+        PromptBar.IsVisible = true;
+
+        // Focus the button, for the same reason the delete prompt does: a
+        // focused Button takes Enter and Space itself.
         PromptConfirm.Focus();
     }
 
@@ -1109,16 +1223,28 @@ public partial class MainWindow : Window
                 break;
 
 
-            // Delete trashes, which is recoverable and needs no prompt.
-            // Shift+Delete is irreversible and always confirms first.
+            // Delete trashes, which is recoverable. Shift+Delete is
+            // irreversible. Both prompts are now preferences, but they default
+            // the way they always behaved: trash silently, confirm the
+            // permanent one.
             case Key.Delete when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
                 e.Handled = true;
-                AskConfirmDelete();
+
+                if (AppSettings.Current.General.ConfirmPermanentDelete)
+                    AskConfirmDelete();
+                else
+                    pane.DeleteSelectedCommand.Execute(null);
+
                 break;
 
             case Key.Delete:
                 e.Handled = true;
-                pane.TrashSelectedCommand.Execute(null);
+
+                if (AppSettings.Current.General.ConfirmMoveToTrash)
+                    AskConfirmTrash();
+                else
+                    pane.TrashSelectedCommand.Execute(null);
+
                 break;
 
             // Deliberately duplicated from Window.KeyBindings. This handler is

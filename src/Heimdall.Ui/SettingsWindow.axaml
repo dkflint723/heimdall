@@ -99,6 +99,63 @@
                       IsChecked="{Binding ShowFreeSpace}"/>
           </StackPanel>
 
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <TextBlock Text="Previews"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox Content="Show thumbnails"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ShowPreviews}"/>
+
+            <Grid ColumnDefinitions="*,90" Margin="24,0,0,0"
+                  IsEnabled="{Binding CanSetPreviewLimits}">
+              <TextBlock Grid.Column="0" Text="Skip local files larger than (MB)"
+                         VerticalAlignment="Center"
+                         FontSize="{DynamicResource FontSizeSmall}"/>
+              <TextBox Grid.Column="1" Text="{Binding MaxLocalPreviewMegabytes}"
+                       PlaceholderText="no limit"
+                       FontSize="{DynamicResource FontSizeSmall}"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="*,90" Margin="24,0,0,0"
+                  IsEnabled="{Binding CanSetPreviewLimits}">
+              <TextBlock Grid.Column="0" Text="Skip network files larger than (MB)"
+                         VerticalAlignment="Center"
+                         FontSize="{DynamicResource FontSizeSmall}"/>
+              <TextBox Grid.Column="1" Text="{Binding MaxRemotePreviewMegabytes}"
+                       PlaceholderText="no limit"
+                       FontSize="{DynamicResource FontSizeSmall}"/>
+            </Grid>
+
+            <TextBlock Text="A thumbnail on a mounted share pulls the whole file over the network, which is why the two limits are separate. Blank or 0 means no limit."
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap" Margin="24,0,0,0"/>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <TextBlock Text="Ask for confirmation before"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox Content="Moving files to trash"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ConfirmMoveToTrash}"/>
+
+            <CheckBox Content="Deleting files permanently"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ConfirmPermanentDelete}"/>
+
+            <CheckBox Content="Closing a window with several tabs open"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ConfirmClosingMultipleTabs}"/>
+          </StackPanel>
+
         </StackPanel>
       </TabItem>
 

@@ -110,6 +110,11 @@ public sealed partial class SidebarViewModel : ObservableObject
 
         foreach (var mount in _mounts?.Discover() ?? []) Remotes.Add(mount);
 
+        // Published here because this is the one place that knows what is
+        // mounted; thumbnails need it to tell a network file from a local one
+        // without re-reading the mount table per row.
+        Thumbnails.ThumbnailLoader.RemoteRoots = Remotes.Select(m => m.Path).ToList();
+
         OnPropertyChanged(nameof(HasRemotes));
     }
 
