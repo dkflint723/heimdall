@@ -768,6 +768,18 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(path)) return;
 
+        // Already here, already loaded: do nothing at all.
+        //
+        // Reloading tore the listing down and rebuilt it — and because entries
+        // paint in readdir order and only sort once enumeration finishes, the
+        // rebuild flashed the same files in filesystem order before they
+        // settled. Clicking a place you are already viewing looked like the
+        // folder briefly changed. Refreshing on purpose is F5's job; a
+        // navigation to where you already are is not a request to refresh.
+        if (IsLoaded && !IsLoading
+            && string.Equals(CurrentPath, path, StringComparison.Ordinal))
+            return;
+
         if (!string.IsNullOrEmpty(CurrentPath) && CurrentPath != path)
         {
             _back.Push(CurrentPath);
