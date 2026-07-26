@@ -191,6 +191,14 @@ public static class ThemeApplier
             chosen is { Length: > 0 }        ? new FontFamily(chosen)
             : palette?.FontFamily is { Length: > 0 } family ? new FontFamily(family)
             : FontFamily.Default;
+
+        // Traced because the absence of this was invisible rather than wrong:
+        // the font setting did nothing for two ordering reasons at once, and a
+        // single line here would have shown both immediately.
+        Console.Error.WriteLine(
+            $"[heimdall] font: configured='{chosen ?? "(none)"}' "
+            + $"desktop='{palette?.FontFamily ?? "(none)"}' "
+            + $"applied='{target["AppFontFamily"]}'");
     }
 
     private static Color Lighten(Color c, double amount) => Blend(c, Colors.White, amount);

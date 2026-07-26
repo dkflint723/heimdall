@@ -64,6 +64,18 @@ public partial class MainWindow : Window
             Console.Error.WriteLine($"[heimdall] folder icon resolved to: {probe ?? "NOTHING"}");
         }
 
+        // Settings BEFORE the theme, and this ordering is load-bearing rather
+        // than tidy. ThemeApplier reads AppSettings.Current to decide whether a
+        // configured font beats Plasma's — so loading settings afterwards meant
+        // it read empty defaults and the font setting did nothing at all, even
+        // across a restart. Settings are the first thing this constructor does
+        // for the same reason they precede the session load below.
+        _settingsStore = new JsonSettingsStore(JsonSessionStore.DefaultDirectory());
+        _settings = _settingsStore.Load();
+        _settingsStore.EnsureFileExists(_settings);
+
+        AppSettings.Apply(_settings);
+
         // Applied before anything else paints, and re-applied whenever Plasma's
         // scheme changes, so the window follows the desktop live.
         _theme = platform.Theme;
@@ -93,20 +105,6 @@ public partial class MainWindow : Window
 
         // Not platform-specific: the clipboard comes from the toolkit.
         IClipboardService clipboard = ClipboardService.ForWindow(this);
-
-        // Settings first. Nothing reads them yet — they are threaded into the
-        // call sites that currently hardcode these behaviours as a separate
-        // step, so that this one cannot change how anything works. Writing the
-        // defaults out on a first run makes the file readable and hand-editable
-        // before any dialog exists, and proves the source-generated serializer
-        // survives trimming, which is where reflection-based JSON fails.
-        _settingsStore = new JsonSettingsStore(JsonSessionStore.DefaultDirectory());
-        _settings = _settingsStore.Load();
-        _settingsStore.EnsureFileExists(_settings);
-
-        // Published before anything else runs, so every later reader — including
-        // the settings dialog itself — sees the file rather than the defaults.
-        AppSettings.Apply(_settings);
 
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
@@ -390,6 +388,13 @@ public partial class MainWindow : Window
 
             AppSettings.Apply(model.Result);
             _settingsStore.Save(model.Result);
+
+            // The font lives in the theme resources, and ThemeApplier is the
+            // only thing that writes them — so a saved font does nothing until
+            // this runs. It was called at startup and on a Plasma scheme change
+            // and nowhere else, which is why changing the font appeared to do
+            // nothing at all.
+            ThemeApplier.Apply(this, _theme?.Read());
 
             // Most settings are read at the moment they matter. Sorting and the
             // status bar are not — a listing already on screen was ordered under
