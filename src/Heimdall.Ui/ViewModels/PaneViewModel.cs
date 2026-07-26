@@ -1535,6 +1535,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    // Cancelling the token does NOT unqueue a dispatcher
+                    // callback that is already on its way. Without this check a
+                    // superseded enumeration appends its batch into the list the
+                    // newer navigation just cleared — which is the flash of
+                    // wrong files you get from clicking a place twice.
+                    if (generation != _generation) return;
+
                     _all.AddRange(flush);
                     Entries.AddRange(flush);
                     count += flush.Count;
@@ -1547,6 +1554,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 var tail = pending;
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    if (generation != _generation) return;
+
                     _all.AddRange(tail);
                     Entries.AddRange(tail);
                     count += tail.Count;
@@ -1558,6 +1567,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             // listing completes — which keeps first paint at a few milliseconds.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                // The worst one to miss: a superseded run reaching here would
+                // point the watcher at the folder it was loading, clear
+                // IsLoading for a navigation still in flight, and sort a list
+                // that now belongs to somewhere else.
+                if (generation != _generation) return;
+
                 if (FilterText.Length > 0) ApplyFilter(); else ResortInPlace();
                 StartWatching(path);
                 sw.Stop();
@@ -1582,6 +1597,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             // is what "it forgot" feels like.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                // A failure in a navigation nobody is waiting for any more is
+                // not worth reporting over the one they are.
+                if (generation != _generation) return;
+
                 Status = $"{ex.GetType().Name}: {ex.Message}";
                 IsLoading = false;
             });
