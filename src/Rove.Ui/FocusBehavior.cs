@@ -1,6 +1,8 @@
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 
 namespace Rove.Ui;
@@ -29,6 +31,7 @@ public static class FocusBehavior
     static FocusBehavior()
     {
         HookCommitOnEnter();
+        HookLostFocus();
 
         FocusOnVisibleProperty.Changed.AddClassHandler<Control>((control, args) =>
         {
@@ -93,5 +96,40 @@ public static class FocusBehavior
                 e.Handled = true;
             };
         });
+    }
+
+    /// <summary>
+    /// Runs a command when the control loses focus.
+    ///
+    /// Used by the path box so clicking anywhere else puts the crumbs back.
+    /// A text box that stays open after you have moved on is clutter that the
+    /// user has to remember to dismiss.
+    /// </summary>
+    public static readonly AttachedProperty<ICommand?> LostFocusCommandProperty =
+        AvaloniaProperty.RegisterAttached<Control, ICommand?>("LostFocusCommand", typeof(FocusBehavior));
+
+    public static void SetLostFocusCommand(Control control, ICommand? value)
+        => control.SetValue(LostFocusCommandProperty, value);
+
+    public static ICommand? GetLostFocusCommand(Control control)
+        => control.GetValue(LostFocusCommandProperty);
+
+    private static void HookLostFocus()
+    {
+        LostFocusCommandProperty.Changed.AddClassHandler<Control>((control, args) =>
+        {
+            // Detach before attaching: templates reuse their controls, so
+            // subscribing on every rebind would fire the command repeatedly.
+            control.LostFocus -= OnLostFocus;
+
+            if (args.NewValue is ICommand) control.LostFocus += OnLostFocus;
+        });
+    }
+
+    private static void OnLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control) return;
+        if (GetLostFocusCommand(control) is not { } command) return;
+        if (command.CanExecute(null)) command.Execute(null);
     }
 }

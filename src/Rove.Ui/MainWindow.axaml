@@ -6,6 +6,7 @@
         xmlns:th="clr-namespace:Rove.Ui.Thumbnails"
         xmlns:local="clr-namespace:Rove.Ui"
         xmlns:sh="clr-namespace:Rove.Core.Sharing;assembly=Rove.Core"
+        xmlns:pl="clr-namespace:Rove.Core.Places;assembly=Rove.Core"
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="rove"
@@ -268,13 +269,22 @@
                     IsEnabled="{Binding ActiveTab.CanGoUp}"/>
 
             <Panel>
-              <!-- Crumbs. Clicking the empty space beside them starts editing,
-                   which is the affordance Dolphin uses. -->
-              <!-- Crumbs are buttons, so they must NOT sit inside another
-                   button — nested hit targets mean a click lands on whichever
-                   wins, and navigating a crumb would start an edit instead.
-                   The click-to-edit target is a separate strip that fills the
-                   space to their right. -->
+              <!-- The double-click target sits BEHIND the crumbs and fills the
+                   bar, rather than being a strip beside them.
+                   
+                   It carries no single-click handler on purpose. It used to,
+                   and that is what made double-click unreliable: the first
+                   click opened the editor, which replaced the crumbs with the
+                   text box, so the second click landed somewhere else and the
+                   gesture never completed. Two handlers on one target, where
+                   the first destroys what the second needs.
+                   
+                   Crumbs sit on top and keep their single click to navigate. -->
+              <Border Background="Transparent"
+                      IsVisible="{Binding !ActiveTab.IsPathEditing}"
+                      local:DoubleClick.Command="{Binding ActiveTab.BeginEditPathCommand}"
+                      ToolTip.Tip="double-click to edit the path  (ctrl+l)"/>
+
               <DockPanel IsVisible="{Binding !ActiveTab.IsPathEditing}">
                 <ItemsControl DockPanel.Dock="Left" ItemsSource="{Binding ActiveTab.Breadcrumbs}">
                   <ItemsControl.ItemsPanel>
@@ -301,14 +311,15 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Button Command="{Binding ActiveTab.BeginEditPathCommand}"
-                        Background="Transparent" BorderThickness="0"
-                        HorizontalAlignment="Stretch" Padding="0"
-                        ToolTip.Tip="click to edit the path  (ctrl+l)"/>
+                <!-- Fills the rest so the crumbs stay left-aligned, and passes
+                     clicks through to the target behind it. -->
+                <Panel IsHitTestVisible="False"/>
               </DockPanel>
 
               <TextBox Text="{Binding ActiveTab.PathText}"
                        IsVisible="{Binding ActiveTab.IsPathEditing}"
+                       ToolTip.Tip="tab completes · enter goes · esc or click away cancels"
+                       local:FocusBehavior.LostFocusCommand="{Binding ActiveTab.RevertPathTextCommand}"
                        local:FocusBehavior.FocusOnVisible="True"
                        FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
                 <TextBox.KeyBindings>
@@ -393,8 +404,14 @@
               <!-- Read-only and read-write are separate commands, not a toggle:
                    the difference is "people can look" versus "people can
                    overwrite", which is not a checkbox decision. -->
-              <MenuItem Header="Share over network"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}">
+              <MenuItem IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}">
+                <MenuItem.Header>
+                  <!-- Names the folder, so which one gets served is visible
+                       before clicking rather than discovered afterwards. -->
+                  <TextBlock>
+                    <Run Text="Share"/><Run Text=" "/><Run Text="{Binding ActiveTab.ShareTargetLabel}"/><Run Text=" over network"/>
+                  </TextBlock>
+                </MenuItem.Header>
                 <MenuItem Header="Read-only"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderCommand}"/>
                 <MenuItem Header="Allow uploads"
@@ -1092,6 +1109,133 @@
               <!-- The tree is the one section worth collapsing: it is tall, and
                    it is the least reached for of the four. -->
               <StackPanel Margin="0,10,0,0">
+                <!-- Servers announcing themselves on the LAN. copyparty does
+                     this when started with -z, which is how Rove starts its own
+                     shares — so two machines running Rove find each other with
+                     no configuration, and so does any NAS on the network. -->
+                <StackPanel Margin="0,4,0,8">
+                  <DockPanel Margin="12,0,8,2">
+                    <!-- Both directions of "network" in one header: what is
+                         out there, and what this machine offers. -->
+                    <Button DockPanel.Dock="Right" Content="scan" Padding="4,0"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="{DynamicResource FontSizeTiny}"
+                            ToolTip.Tip="look for servers on the network"
+                            IsEnabled="{Binding CanBrowseNetwork}"
+                            Command="{Binding BrowseNetworkCommand}"/>
+                    <Button DockPanel.Dock="Right" Content="share" Padding="4,0" Margin="0,0,6,0"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="{DynamicResource FontSizeTiny}"
+                            ToolTip.Tip="share a folder from this machine"
+                            IsVisible="{Binding CanShare}"
+                            Command="{Binding RequestShareCommand}"/>
+                    <TextBlock Text="network" FontSize="{DynamicResource FontSizeTiny}"
+                               Foreground="{DynamicResource ViewDimText}"/>
+                  </DockPanel>
+
+                  <ItemsControl ItemsSource="{Binding Discovered}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="pl:DiscoveredService">
+                        <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Background="Transparent" BorderThickness="0" Padding="12,3"
+                                ToolTip.Tip="{Binding MountUri}"
+                                Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenDiscoveredCommand}"
+                                CommandParameter="{Binding}">
+                          <!-- Every Style inside a ContextMenu needs its own
+                               x:DataType, or setters resolve against the window
+                               type and bind to nothing. -->
+                          <Button.ContextMenu>
+                            <ContextMenu x:DataType="pl:DiscoveredService">
+                              <MenuItem Header="Connect"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenDiscoveredCommand}"
+                                        CommandParameter="{Binding}"/>
+                              <Separator/>
+                              <MenuItem Header="Properties"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowServiceInfoCommand}"
+                                        CommandParameter="{Binding}"/>
+                            </ContextMenu>
+                          </Button.ContextMenu>
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Name}"
+                                       FontSize="{DynamicResource FontSizeSmall}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Friendly}"
+                                       FontSize="{DynamicResource FontSizeTiny}"
+                                       Foreground="{DynamicResource ViewDimText}"
+                                       VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- Remote mounts. Whatever the desktop has connected shows up
+                     here as an ordinary path, so every protocol KIO or gvfs
+                     supports works without Rove knowing any of them. -->
+                <StackPanel IsVisible="{Binding Sidebar.HasRemotes}" Margin="0,4,0,8">
+                  <DockPanel Margin="12,0,8,2">
+                    <Button DockPanel.Dock="Right" Content="+" Padding="4,0"
+                            Background="Transparent" BorderThickness="0"
+                            FontSize="{DynamicResource FontSizeTiny}"
+                            ToolTip.Tip="connect to a server"
+                            Command="{Binding ConnectCommand}"/>
+                    <TextBlock Text="remote" FontSize="{DynamicResource FontSizeTiny}"
+                               Foreground="{DynamicResource ViewDimText}"/>
+                  </DockPanel>
+                  <ItemsControl ItemsSource="{Binding Sidebar.Remotes}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="pl:RemoteMount">
+                        <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                Background="Transparent" BorderThickness="0" Padding="12,3"
+                                Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
+                                CommandParameter="{Binding Path}">
+                          <Button.ContextMenu>
+                            <ContextMenu x:DataType="pl:RemoteMount">
+                              <MenuItem Header="Open"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
+                                        CommandParameter="{Binding Path}"/>
+                              <MenuItem Header="Copy local path"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyRemotePathCommand}"
+                                        CommandParameter="{Binding}"/>
+                              <Separator/>
+                              <MenuItem Header="Disconnect"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).DisconnectRemoteCommand}"
+                                        CommandParameter="{Binding}"/>
+                              <Separator/>
+                              <MenuItem Header="Properties"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowRemoteInfoCommand}"
+                                        CommandParameter="{Binding}"/>
+                            </ContextMenu>
+                          </Button.ContextMenu>
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Label}"
+                                       FontSize="{DynamicResource FontSizeSmall}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <!-- A dead mount lists as an empty folder, which is
+                                 indistinguishable from an empty share unless
+                                 something says so. -->
+                            <TextBlock Text="offline" IsVisible="{Binding !Reachable}"
+                                       FontSize="{DynamicResource FontSizeTiny}"
+                                       Foreground="{DynamicResource AccentColour}"
+                                       VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- Connect stays reachable even with nothing mounted yet. -->
+                <Button IsVisible="{Binding !Sidebar.HasRemotes}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Background="Transparent" BorderThickness="0" Padding="12,3"
+                        Margin="0,4,0,8"
+                        FontSize="{DynamicResource FontSizeSmall}"
+                        Content="connect to server…"
+                        IsEnabled="{Binding CanConnect}"
+                        Command="{Binding ConnectCommand}"/>
+
                 <!-- Active shares. Deliberately always visible while running:
                      a folder open to the network must never be something you
                      have to remember. -->

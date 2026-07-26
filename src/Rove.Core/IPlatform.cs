@@ -39,6 +39,12 @@ public interface IPlatform
     /// <summary>Null where no sharing backend is known for this platform.</summary>
     IFileSharing? Sharing { get; }
 
+    /// <summary>Null where the platform exposes no mounted remotes.</summary>
+    IRemoteMounts? Remotes { get; }
+
+    /// <summary>Null where the platform has no service-discovery mechanism.</summary>
+    INetworkDiscovery? Discovery { get; }
+
     /// <summary>Null where the desktop exposes no readable theme.</summary>
     IThemeProvider? Theme { get; }
 

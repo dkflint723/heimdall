@@ -322,6 +322,23 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     private const double MinScale = 0.7;
     private const double MaxScale = 2.5;
 
+    /// <summary>
+    /// What "share" would act on: the selected folder, or this one. Shown in
+    /// the menu so the target is visible before clicking rather than inferred
+    /// from the result afterwards.
+    /// </summary>
+    public string ShareTargetLabel
+    {
+        get
+        {
+            var name = SelectedEntry is { IsDirectory: true } selected
+                ? selected.Name
+                : Path.GetFileName(CurrentPath.TrimEnd('/'));
+
+            return string.IsNullOrEmpty(name) ? "this folder" : name;
+        }
+    }
+
     public double FontPoints
     {
         get => Math.Round(FontScale * BaseFontSize);
@@ -501,6 +518,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(ShareTargetLabel));
     }
 
     public bool IsDetailsView => View == ViewMode.Details;
@@ -1020,9 +1038,43 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// empty space beside them, exactly as Dolphin does it.</summary>
     [ObservableProperty] private bool _isPathEditing;
 
+    private readonly PathCompleter _completer = new();
+
+    /// <summary>
+    /// Extends the typed path to the next matching folder. Bound to Tab while
+    /// the path box is open.
+    /// </summary>
+    [RelayCommand]
+    public void CompletePath()
+    {
+        if (!IsPathEditing) return;
+
+        if (_completer.Complete(PathText ?? "") is not { } completed)
+        {
+            Status = "no matching folder";
+            return;
+        }
+
+        // Set through the field so OnPathTextChanged does not treat our own
+        // write as the user typing and reset the cycle.
+        _completingPath = true;
+        try { PathText = completed; }
+        finally { _completingPath = false; }
+    }
+
+    private bool _completingPath;
+
+    partial void OnPathTextChanged(string value)
+    {
+        // Typing invalidates the candidate list; completing does not.
+        if (!_completingPath) _completer.Reset();
+    }
+
     [RelayCommand]
     public void BeginEditPath()
     {
+        _completer.Reset();
+
         PathText = CurrentPath;
         IsPathEditing = true;
     }
@@ -1064,10 +1116,19 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         return string.IsNullOrWhiteSpace(PathText) ? Task.CompletedTask : NavigateAsync(PathText.Trim());
     }
 
-    /// <summary>Escape in the path box: put back what is actually being shown.</summary>
+    /// <summary>
+    /// Escape, or clicking away: put back what is actually being shown.
+    ///
+    /// Guarded, because it is now reachable from lost-focus as well as Escape.
+    /// NavigateToPathText clears IsPathEditing before it reads PathText, so an
+    /// unguarded revert would fire in that gap and overwrite the path the user
+    /// just typed — Enter would appear to navigate nowhere.
+    /// </summary>
     [RelayCommand]
     public void RevertPathText()
     {
+        if (!IsPathEditing) return;
+
         PathText = CurrentPath;
         IsPathEditing = false;
     }

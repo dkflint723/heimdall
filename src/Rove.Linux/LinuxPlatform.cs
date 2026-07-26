@@ -46,6 +46,10 @@ public sealed class LinuxPlatform : IPlatform
 
     public IFileSharing? Sharing { get; } = new CopypartyShare();
 
+    public IRemoteMounts? Remotes { get; } = new LinuxRemoteMounts();
+
+    public INetworkDiscovery? Discovery { get; } = new AvahiDiscovery();
+
     public IThemeProvider? Theme { get; } = new KdeThemeProvider();
 
     /// <summary>

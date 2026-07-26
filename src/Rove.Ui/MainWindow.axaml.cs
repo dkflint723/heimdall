@@ -104,9 +104,19 @@ public partial class MainWindow : Window
         _shell.PaneCreated += (_, pane) => WirePane(pane);
         _shell.PropertiesRequested += (_, _) => ShowProperties();
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
+        _shell.UseRemotes(platform.Remotes);
+        _shell.UseDiscovery(platform.Discovery);
+
+        _shell.ConnectionInfoRequested += (_, info) =>
+            new ConnectionWindow(info).ShowDialog(this);
+
+        _shell.ShareDialogRequested += (_, request) =>
+            new ShareWindow(request).ShowDialog(this);
+
+        _shell.ConnectRequested += OnConnectRequested;
 
         // The clipboard belongs to the view, so the shell asks rather than reaches.
-        _shell.ShareUrlCopyRequested += async (_, url) =>
+        _shell.CopyTextRequested += async (_, url) =>
         {
             try
             {
@@ -117,6 +127,7 @@ public partial class MainWindow : Window
                 Console.Error.WriteLine($"[rove] clipboard: {ex.Message}");
             }
         };
+
         _shell.ScaleApplier = ApplyScales;
         DataContext = _shell;
 
@@ -128,6 +139,11 @@ public partial class MainWindow : Window
         // so there is no named control to attach to.
         AddHandler(DoubleTappedEvent, OnDoubleTapped, RoutingStrategies.Bubble);
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble);
+
+        // Tab has to be caught on the way DOWN. Keyboard navigation claims it
+        // before any bubble handler runs, so by the time the window sees it
+        // focus has already left the box. Tunnel reaches the window first.
+        AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
 
         // Clicking anywhere in a side makes it the active one. Tunnelling so it
         // runs before the ListBox handles the press for selection — otherwise
@@ -658,7 +674,7 @@ public partial class MainWindow : Window
 
     // ---- inline prompt -------------------------------------------------
 
-    private enum PromptMode { None, Rename, ConfirmDelete, NewTag }
+    private enum PromptMode { None, Rename, ConfirmDelete, NewTag, Connect }
 
     private PromptMode _prompt = PromptMode.None;
     private FileEntry _renameTarget;
@@ -712,7 +728,38 @@ public partial class MainWindow : Window
             case PromptMode.NewTag when !string.IsNullOrWhiteSpace(name):
                 _ = target?.ToggleTagAsync(name.Trim());
                 break;
+
+            case PromptMode.Connect when !string.IsNullOrWhiteSpace(name):
+                _ = _shell.ConnectToAsync(name.Trim());
+                break;
         }
+    }
+
+    /// <summary>
+    /// Reuses the prompt bar rather than adding a dialog: it already handles
+    /// focus, Enter and Escape, and a server address is just another line of
+    /// text to type.
+    /// </summary>
+    private void OnConnectRequested(object? sender, EventArgs e)
+    {
+        if (PromptBar is null || PromptInput is null) return;
+
+        _prompt = PromptMode.Connect;
+
+        PromptLabel.Text = "connect to";
+        PromptInput.Text = "smb://";
+        PromptInput.IsVisible = true;
+        PromptConfirm.Content = "connect";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "smb:// · sftp:// · ftp:// · dav:// — esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptInput.Focus();
+
+        // Caret at the end, not a selection: the scheme is a starting point to
+        // type after, not something to overwrite.
+        PromptInput.CaretIndex = PromptInput.Text.Length;
     }
 
     private void OnNewTagRequested(object? sender, EventArgs e)
@@ -799,6 +846,24 @@ public partial class MainWindow : Window
             _ = _shell.ActiveTab?.OpenAsync(entry);
     }
 
+    /// <summary>
+    /// The narrow set of keys that must be claimed before anything else sees
+    /// them. Deliberately tiny: a tunnel handler runs ahead of every control in
+    /// the window, so anything added here is taken away from all of them.
+    /// </summary>
+    private void OnTunnelKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.None) return;
+
+        // Only while the path box is open and focused. Tab keeps its ordinary
+        // meaning everywhere else, including the other text boxes.
+        if (_shell.ActiveTab is not { IsPathEditing: true } pane) return;
+        if (FocusManager?.GetFocusedElement() is not TextBox) return;
+
+        pane.CompletePathCommand.Execute(null);
+        e.Handled = true;
+    }
+
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         if (_shell is null) return;
@@ -862,8 +927,10 @@ public partial class MainWindow : Window
         }
 
         // Tab moves between sides rather than traversing focus, matching
-        // Dolphin. Only when split, so it keeps its normal meaning otherwise.
-        if (e.Key == Key.Tab && _shell.IsSplit && e.KeyModifiers == KeyModifiers.None)
+        // Dolphin. Only when split, so it keeps its normal meaning otherwise —
+        // and never while typing, or it would jump panes mid-edit.
+        if (e.Key == Key.Tab && _shell.IsSplit && e.KeyModifiers == KeyModifiers.None
+            && FocusManager?.GetFocusedElement() is not TextBox)
         {
             e.Handled = true;
             _shell.FocusOtherPaneCommand.Execute(null);

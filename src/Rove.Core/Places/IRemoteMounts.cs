@@ -1,0 +1,53 @@
+namespace Rove.Core.Places;
+
+/// <summary>A remote location that the desktop has made reachable as a path.</summary>
+public sealed record RemoteMount
+{
+    /// <summary>Where it appears on the local filesystem.</summary>
+    public required string Path { get; init; }
+
+    /// <summary>What to show the user: "media on nas", "example.com".</summary>
+    public required string Label { get; init; }
+
+    /// <summary>smb, sftp, ftp, dav, mtp, …</summary>
+    public required string Protocol { get; init; }
+
+    /// <summary>
+    /// False when the mount point exists but the far end is gone. A dead mount
+    /// lists as an empty folder, which is indistinguishable from an empty share
+    /// unless something says otherwise.
+    /// </summary>
+    public required bool Reachable { get; init; }
+}
+
+/// <summary>
+/// Finds remote locations the desktop has already mounted, and asks it to mount
+/// new ones.
+///
+/// Rove does not speak SMB, SFTP or MTP itself. KIO and gvfs already do, and
+/// both expose their mounts as ordinary paths — kio-fuse under
+/// /run/user/$UID/kio-fuse-*, gvfs under /run/user/$UID/gvfs. Consuming those
+/// means every protocol the desktop supports works here for the cost of reading
+/// a directory, instead of reimplementing a protocol stack per scheme.
+/// </summary>
+public interface IRemoteMounts
+{
+    /// <summary>False when no mount helper is present on this system.</summary>
+    bool IsAvailable { get; }
+
+    /// <summary>Everything currently mounted. Cheap enough to poll.</summary>
+    IReadOnlyList<RemoteMount> Discover();
+
+    /// <summary>
+    /// Asks the desktop to mount a URI such as <c>smb://nas/media</c>, and
+    /// returns where it landed.
+    /// </summary>
+    Task<RemoteMount> MountAsync(string uri, CancellationToken ct);
+
+    /// <summary>
+    /// Disconnects a mount. Returns false when the desktop refuses — usually
+    /// because something still has a file open on it, which is worth saying
+    /// rather than retrying behind the user's back.
+    /// </summary>
+    Task<bool> UnmountAsync(RemoteMount mount, CancellationToken ct);
+}

@@ -86,6 +86,33 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public ObservableCollection<TagOption> Tags { get; } = new();
 
+    /// <summary>
+    /// Remote locations the desktop has mounted. Shown beside Devices because
+    /// that is what they are from here — a path you can open, whatever protocol
+    /// is behind it.
+    /// </summary>
+    public ObservableCollection<RemoteMount> Remotes { get; } = new();
+
+    public bool HasRemotes => Remotes.Count > 0;
+
+    private IRemoteMounts? _mounts;
+
+    public void UseRemotes(IRemoteMounts? mounts)
+    {
+        _mounts = mounts;
+        RefreshRemotes();
+    }
+
+    [RelayCommand]
+    public void RefreshRemotes()
+    {
+        Remotes.Clear();
+
+        foreach (var mount in _mounts?.Discover() ?? []) Remotes.Add(mount);
+
+        OnPropertyChanged(nameof(HasRemotes));
+    }
+
     public bool HasTags => Tags.Count > 0;
 
     /// <summary>Ctrl+F reveals the sidebar and puts the caret in its search box.</summary>
