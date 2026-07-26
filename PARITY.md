@@ -1,22 +1,26 @@
 # Dolphin parity — gap analysis
 
-Target: everything Dolphin does, plus the OneCommander features we deliberately
+Target: everything Dolphin does, plus the OneCommander features deliberately
 adopted (Miller column strip, inline per-type metadata, priority columns).
 
-Grounded in the Dolphin Handbook (docs.kde.org/stable_kf6/en/dolphin) and the
-KDE UserBase pages for Dolphin/File_Management, not from memory.
+Grounded in the Dolphin Handbook (docs.kde.org/stable_kf6/en/dolphin) and the KDE
+UserBase pages for Dolphin/File_Management, not from memory.
 
-Status as of the Linux v1 build.
+**This file is the only authoritative record of what is and is not built.**
+`HANDOFF.md` describes the project and deliberately carries no status, because
+keeping the same list in two documents is exactly how both went stale.
+
+Status verified against the tree, July 2026. Session schema v12.
 
 ---
 
-## Already at parity
+## At parity
 
 | Dolphin | Heimdall |
 |---|---|
 | Tabs | ✅ per side, persisted |
 | Split view | ✅ F3, each side independent |
-| Breadcrumb + editable location (Ctrl+L) | ✅ |
+| Breadcrumb + editable location (Ctrl+L) | ✅ double-click to edit, Tab completes, Enter goes, Escape or click-away cancels |
 | Places panel | ✅ XDG dirs, mounts, Dolphin/GTK bookmark import |
 | Folders (tree) panel | ✅ collapsible section |
 | Filter bar | ✅ Ctrl+I |
@@ -30,135 +34,155 @@ Status as of the Linux v1 build.
 | Open terminal here | ✅ F4 |
 | Properties + permissions editing | ✅ incl. recursive with chmod's X rule |
 | Free space in status bar | ✅ |
-| Zoom | ✅ text and icons on independent axes |
+| Zoom | ✅ text and icons on independent axes, per pane |
 | Show hidden | ✅ |
-| Tags | ✅ `user.xdg.tags`, same xattr Dolphin uses |
-| Colour scheme follows the desktop | ✅ live via kdeglobals |
+| Tags | ✅ `user.xdg.tags`, the same xattr Dolphin and Baloo use |
+| Colour scheme follows the desktop | ✅ live via `kdeglobals` |
 | Service-menu equivalent | ✅ scripts menu (our design, same purpose) |
+| **Compact view** | ✅ third layout, `WrapPanel Orientation="Vertical"` |
+| **Sort by type** | ✅ `SortField.Kind`, reachable from the menu — there is no type column to click |
+| **Natural sort** | ✅ `file2` before `file10` |
+| **Grouping** | ✅ by name initial, size band, date band or type |
+| **Duplicate** | ✅ copy alongside with a suffix |
+| **New file from template** | ✅ reads `~/Templates` via `XdgTemplates` |
+| **Copy To / Move To** | ✅ targets the sidebar Places |
+| **Selection statistics** | ✅ `Summary` reports selected count and total size |
+| **Miller keyboard navigation** | ✅ Left/Right between columns, auto-scroll on descent |
+| **Information panel (F11)** | ✅ `InfoPanelViewModel`, **per split side** |
+| **Batch rename** | ✅ live preview, in Core, all-or-nothing |
+| **Network transparency** | ✅ both directions — see below |
 
-Beyond Dolphin: Miller column strip, per-type inline metadata, permissions as a
-list column, priority-based column dropping, file-age shading.
+**Beyond Dolphin:** Miller column strip, per-type inline metadata, permissions as
+a list column, priority-based column dropping, file-age shading, per-pane
+independent font and icon scaling, folder sharing over the network.
 
----
+### Grouping — how it works
+Bands, not values. The group is applied as a **primary sort key**, otherwise
+bands interleave. Headers live *inside the row template*, so `Entries` stays a
+flat list of `FileEntry` and virtualization is unaffected.
 
-## Small gaps — hours each
+### Information panel — how it works
+Reuses `IPropertiesProvider`, so it can never disagree with the properties
+window. Fills from the listing first, then refines asynchronously behind a
+`_generation` guard. It lives on `PaneGroupViewModel`, **per split side, not per
+window** — a single shared panel swapped content as focus moved between halves,
+which defeats comparing two folders. Each side's tab bar has its own toggle; F11
+acts on the focused side.
 
-1. **Compact view** — Dolphin's third view mode: name-only, wrapping into
-   columns. We have Details and Grid; this is a third `ItemsPanel`.
-2. **Sort by type**, and **natural sort** (`file2` before `file10`). We sort by
-   name/size/modified only, ordinal.
-3. **Grouping** — Dolphin groups the listing by name initial, size band, date
-   band or type, with headers.
-4. **Duplicate** (Ctrl+D in some setups) — copy alongside with a suffix.
-5. **New file from template** — Dolphin reads `~/Templates`; we only create
-   folders.
-6. **Copy To / Move To** menus targeting Places, not just the other pane.
-7. **Selection statistics** — Dolphin's status bar reports the selected count
-   and total size; ours reports the folder only.
-8. **Miller keyboard navigation** — left/right between columns, auto-scroll on
-   descent. Flagged when built, never done.
+### Network — decided: consume, do not reimplement
+Reimplementing KIO was never on the table. Both directions now work by consuming
+machinery that already exists.
 
-## Medium gaps — days each
+*Inbound.* `IRemoteMounts` / `LinuxRemoteMounts` reads gvfs and kio-fuse mount
+points straight off the filesystem (`/run/user/$UID/gvfs`, `kio-fuse-*`), so
+**every protocol the desktop supports works for the cost of a directory
+listing**. `gio mount` connects; `gio mount -u` disconnects, and kio-fuse mounts
+decline to unmount because KIO owns their lifetime. A dead mount is labelled
+*offline* rather than listing as empty. `INetworkDiscovery` / `AvahiDiscovery`
+browses `avahi-browse -prt` for webdav, smb, sftp, ftp and http, mapping each to
+the right mount scheme. **mDNS finds Samba and macOS but not Windows**, which
+uses WS-Discovery; `wsdd` would bridge that if it ever matters.
 
-9. **Information panel** (F11) — metadata and a large preview of the selection,
-   docked right. We have the Space overlay; this is the persistent version.
-10. **Per-folder view properties** — Dolphin remembers view mode, sort and zoom
-    per directory (`.directory` files or a central store). Also the OneCommander
-    behaviour we deferred. Needs a decision on where it's stored.
-11. **Batch rename** — the last of the four extras. Dolphin does numbered
-    sequences and find/replace; we planned regex.
-12. **Settings dialog** — we have a per-pane view flyout and nothing else.
-    Dolphin has startup, view modes, navigation, services, trash and general
-    pages.
-13. **Configurable shortcuts and toolbar** — implies a settings surface and a
-    command registry, which we don't have.
-14. **Checksum tab** in properties (MD5/SHA1/SHA256) — easy computation, but
-    wants progress and cancellation on large files.
-15. **Version control decorations** — git status per row. Dolphin does this via
-    plugins; for us it means running `git status --porcelain` per repo and
-    caching. Rows already support per-entry async decoration.
-16. **Selection mode** — Dolphin's touch-friendly checkbox selection.
+*Outbound.* `IFileSharing` / `CopypartyShare` drives
+[copyparty](https://github.com/9001/copyparty) (MIT) as a **subprocess** to serve
+a folder over HTTP/WebDAV. It is located, not bundled — PATH, then
+`python3 -m copyparty`, then a downloaded sfx — and the feature hides itself when
+none is found. Embedding a Python runtime would have cost the trimmed-AOT
+single-binary story for a feature most sessions never use.
 
-## Large gaps — weeks, need a decision first
+Read-only and read-write are **separate commands, not a toggle**, because the
+difference is "people can look" versus "people can overwrite". Active shares stay
+visible in the sidebar while running and are torn down on window close — a folder
+open to the network must not be something you have to remember.
 
-17. **Network transparency (KIO).** ✅ **DECIDED: consume, do not reimplement.** Dolphin browses
-    `sftp://`, `smb://`, `ftp://`, `webdav://`, `mtp://`, `gphoto://` and
-    `archive:` URLs natively through KIO workers, with credential handling and
-    Places integration.
-
-    Reimplementing KIO is out of the question. The realistic path is to consume
-    mounts rather than protocols:
-
-    - **kio-fuse** exposes KIO URLs on the real filesystem under
-      `/run/user/$UID/kio-fuse-*`, so anything Dolphin can open becomes an
-      ordinary path we can already enumerate.
-    - **gvfs** does the same under `/run/user/$UID/gvfs` for GTK-side mounts.
-    - A "Connect to server" action can ask the existing desktop machinery to
-      mount, then navigate to the resulting local path.
-
-    That gets SMB and SFTP — the two actually named — for a fraction of the
-    cost, at the price of depending on a mount helper being installed.
-
-    **The same principle applies to the outbound direction.** Heimdall now drives
-    [copyparty](https://github.com/9001/copyparty) as a subprocess to serve a
-    folder over HTTP/WebDAV — see "sharing" below. Writing a server with
-    resumable uploads, dedup and a browser UI is a project in its own right and
-    a good one already exists under MIT.
-
-    Remaining work on the inbound half:
-
-    - "Connect to server" action driving `gio mount` / kio-fuse
-    - Discover existing mounts under `/run/user/$UID/gvfs` and
-      `/run/user/$UID/kio-fuse-*` and show them in Places
-    - Treat a disconnected mount as an error state rather than an empty folder
-
-18. **Terminal panel** (F4 docked Konsole). Dolphin embeds Konsole via KParts,
-    which has no equivalent for us. Doing it properly means running a PTY and
-    writing a terminal emulator — a project in itself. Options: skip, or embed
-    an external terminal via X11 window reparenting (fragile, X11-only, and dead
-    on Wayland).
-
-19. **Archive browsing as folders.** Dolphin enters `.zip`/`.tar.gz` as if they
-    were directories. Note archives were built once and dropped at the user's
-    request; this would revive that decision in a different form.
+Confinement was wrong twice and the details matter: the volume is declared in a
+generated **config file**, never `-v src:dst:perm` (that syntax is
+colon-separated, so a folder named `notes:2026` parses into something else); the
+volflags **`xvol` and `xdev`** stop symlinks leaving the folder and stop crossing
+filesystems; the process CWD is **a temp directory, not the shared folder**,
+because copyparty with no volume serves its CWD read-write and a config failure
+would otherwise be quietly permissive; sharing `/` is refused. Share the
+**right-clicked** folder, not `pane.CurrentPath` — that bug exposed every sibling
+of the intended folder.
 
 ---
 
-## Sharing (done)
+## Open gaps
 
-Right-click a folder → **Share over network**, read-only or with uploads
-allowed. Heimdall launches copyparty scoped to that folder on a free port and shows
-the address; active shares appear in the sidebar with copy and stop buttons, and
-everything is torn down when the window closes.
+### 1. Large folders in the tile layouts — a genuine regression against Dolphin
 
-Read-only and read-write are separate commands rather than a toggle, because the
-difference is "people can look" versus "people can overwrite". The share list is
-always visible while anything is running — a folder open to the network must not
-be something you have to remember.
+The only place Heimdall currently *refuses* something Dolphin does. Grid and
+compact use `WrapPanel` and **Avalonia has no virtualizing wrap panel**, so every
+item they are given is realized. Above `UnvirtualizedLimit = 5000` the tile
+layouts are disabled and navigating into a huge folder while already in one drops
+back to list view. Refusing rather than truncating, because a file manager that
+silently omits files is dangerous.
 
-copyparty is located, not bundled: a `copyparty` binary on PATH, then
-`python3 -m copyparty`, then a downloaded `copyparty-sfx.py`. The feature hides
-itself when none is found.
+Dolphin handles 200k in icon view. Two ways to close it:
+
+- a custom `VirtualizingPanel` that wraps — preserves ListBox selection and
+  keyboard navigation, but hard to get right;
+- chunk items into rows and virtualize the rows — easier, but breaks ListBox
+  selection semantics.
+
+**Undecided.** Worth answering first: does the guard actually bite in daily use,
+or only in benchmarks? Grid and compact are picture-and-document layouts, and a
+200k-entry folder viewed as tiles may not be a real workflow.
+
+### 2. Medium — days each
+
+- **Per-folder view properties.** Dolphin remembers view mode, sort and zoom per
+  directory (`.directory` files or a central store). Also the OneCommander
+  behaviour deferred earlier. Needs a decision on where it is stored, and it
+  changes the session schema.
+- **Settings dialog.** There is a per-pane view flyout and nothing else. Dolphin
+  has startup, view modes, navigation, services, trash and general pages. This is
+  the recommended next piece of work: the application is a daily driver with no
+  way to change anything except by editing session JSON.
+- **Configurable shortcuts and toolbar.** Implies a settings surface and a command
+  registry, neither of which exists.
+- **Checksum tab in properties** (MD5/SHA1/SHA256). Easy computation; wants
+  progress and cancellation on large files.
+- **Version control decorations.** Git status per row. Dolphin does this through
+  plugins; here it means running `git status --porcelain` per repository and
+  caching. Rows already support per-entry async decoration.
+- **Selection mode.** Dolphin's touch-friendly checkbox selection.
+
+### 3. Large — need a decision first
+
+- **Terminal panel** (F4 docked Konsole). Dolphin embeds Konsole via KParts, which
+  has no equivalent here. Doing it properly means running a PTY and writing a
+  terminal emulator — a project in itself. **Recommended against**; F4 already
+  opens a terminal in the current folder.
+- **Archive browsing as folders.** Dolphin enters `.zip` and `.tar.gz` as if they
+  were directories. Archives were built once and dropped at the author's request;
+  this would revive that decision in a different form. Do not start it unbidden.
+
+---
 
 ## Deliberately not doing
 
-- **Service menus** (`.desktop` files in `servicemenus/`) — our scripts menu
-  covers the same need with less ceremony. Revisit only if interoperability
-  with existing KDE service menus is wanted.
-- **Baloo ratings and comments** — Dolphin exposes them; they are a Baloo
-  concept with little value outside it. Tags we already share.
+- **Service menus** (`.desktop` files in `servicemenus/`) — the scripts menu covers
+  the same need with less ceremony. Revisit only if interoperability with existing
+  KDE service menus is wanted.
+- **Baloo ratings and comments** — a Baloo concept with little value outside it.
+  Tags are already shared.
 - **Konqueror-style embedded viewers.**
 
 ---
 
 ## Proposed order
 
-1. The eight small gaps, plus batch rename. Each is self-contained and most of
-   the plumbing exists.
-2. Information panel and per-folder view properties — both change the session
-   schema, so they belong together.
-3. Decide on network access (item 17). If mounts, it is small; if protocols, it
-   is the largest thing in the project.
-4. Settings dialog, once there is enough to configure to justify one.
-5. Version control decorations.
-6. Terminal panel last, or never.
+1. **Settings dialog.** The largest gap between what the application can do and
+   what its user can reach.
+2. **Per-folder view properties.** Shares the session-schema change with anything
+   else that persists per-directory state, so it belongs near the settings work.
+3. **Decide the tile-layout virtualization question** — after establishing whether
+   the 5,000 guard bites in practice.
+4. Checksums, then version control decorations, then selection mode and
+   configurable shortcuts.
+5. Terminal panel last, or never.
+
+The Windows port sits outside this order and was deferred explicitly. It is not a
+parity item; it is the point at which twenty single-implementation interfaces get
+tested.
