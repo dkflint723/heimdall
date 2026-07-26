@@ -39,6 +39,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         _confirmPermanentDelete = general.ConfirmPermanentDelete;
         _confirmClosingMultipleTabs = general.ConfirmClosingMultipleTabs;
 
+        var menu = current.ContextMenu;
+
+        _menuCopyTo = menu.ShowCopyTo;
+        _menuMoveTo = menu.ShowMoveTo;
+        _menuSortBy = menu.ShowSortBy;
+        _menuDuplicate = menu.ShowDuplicate;
+        _menuOpenInNewTab = menu.ShowOpenInNewTab;
+        _menuAddToPlaces = menu.ShowAddToPlaces;
+        _menuCopyLocation = menu.ShowCopyLocation;
+
         _restoreLastSession = startup.ShowOnStartup == StartupLocation.RestoreSession;
         _startInHome = startup.ShowOnStartup == StartupLocation.HomeFolder;
         _startInSpecificFolder = startup.ShowOnStartup == StartupLocation.SpecificFolder;
@@ -109,6 +119,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     private static int Megabytes(string text)
         => int.TryParse(text, out var value) && value > 0 ? value : 0;
 
+    // ---- Context menu -----------------------------------------------------
+    //
+    // Seven of Dolphin's nine. "Open in new window" needs multi-window support,
+    // which this application does not have — App.axaml.cs creates exactly one
+    // MainWindow. "View mode" lives in the toolbar and the view flyout rather
+    // than the context menu, so there is nothing for a toggle to hide.
+
+    [ObservableProperty] private bool _menuCopyTo;
+    [ObservableProperty] private bool _menuMoveTo;
+    [ObservableProperty] private bool _menuSortBy;
+    [ObservableProperty] private bool _menuDuplicate;
+    [ObservableProperty] private bool _menuOpenInNewTab;
+    [ObservableProperty] private bool _menuAddToPlaces;
+    [ObservableProperty] private bool _menuCopyLocation;
+
     /// <summary>Set when the dialog was dismissed with Save.</summary>
     public bool Saved { get; private set; }
 
@@ -151,6 +176,17 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ConfirmMoveToTrash = ConfirmMoveToTrash,
                 ConfirmPermanentDelete = ConfirmPermanentDelete,
                 ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
+            },
+
+            ContextMenu = _original.ContextMenu with
+            {
+                ShowCopyTo = MenuCopyTo,
+                ShowMoveTo = MenuMoveTo,
+                ShowSortBy = MenuSortBy,
+                ShowDuplicate = MenuDuplicate,
+                ShowOpenInNewTab = MenuOpenInNewTab,
+                ShowAddToPlaces = MenuAddToPlaces,
+                ShowCopyLocation = MenuCopyLocation,
             },
 
             Startup = _original.Startup with

@@ -532,6 +532,19 @@
                 </MenuItem.Styles>
               </MenuItem>
               <Separator/>
+              <MenuItem Header="Open in new tab"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenInNewTabCommand}"
+                        CommandParameter="{Binding ActiveTab.SelectedEntry}"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowOpenInNewTabInMenu}"/>
+
+              <MenuItem Header="Add to places"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).AddSelectionToPlacesCommand}"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowAddToPlacesInMenu}"/>
+
+              <MenuItem Header="Copy location"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyLocationCommand}"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyLocationInMenu}"/>
+
               <MenuItem Header="Copy"  Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
               <MenuItem Header="Cut"   Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
               <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"/>
@@ -539,6 +552,7 @@
               <!-- Destinations are the Places the user already keeps, so pinning
                    a folder makes it a transfer target for free. -->
               <MenuItem Header="Copy to"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyToInMenu}"
                         ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
                 <MenuItem.ItemTemplate>
                   <DataTemplate x:DataType="vm:PlaceItemViewModel">
@@ -554,6 +568,7 @@
                 </MenuItem.Styles>
               </MenuItem>
               <MenuItem Header="Move to"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowMoveToInMenu}"
                         ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
                 <MenuItem.ItemTemplate>
                   <DataTemplate x:DataType="vm:PlaceItemViewModel">
@@ -575,7 +590,8 @@
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveToOtherPaneCommand}"
                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
               <Separator/>
-              <MenuItem Header="Duplicate"     Command="{Binding ActiveTab.DuplicateSelectedCommand}"/>
+              <MenuItem Header="Duplicate"     Command="{Binding ActiveTab.DuplicateSelectedCommand}"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowDuplicateInMenu}"/>
               <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"/>
               <MenuItem Header="Rename in bulk…"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"/>
@@ -625,7 +641,8 @@
                           IsChecked="{Binding ActiveTab.IsGroupedByKind, Mode=OneWay}"
                           Command="{Binding ActiveTab.GroupByKindCommand}"/>
               </MenuItem>
-              <MenuItem Header="Sort by">
+              <MenuItem Header="Sort by"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowSortByInMenu}">
                 <MenuItem Header="Name" ToggleType="Radio"
                           IsChecked="{Binding ActiveTab.IsSortedByName, Mode=OneWay}"
                           Command="{Binding ActiveTab.SortByNameCommand}"/>

@@ -646,6 +646,51 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool ShowFreeSpace => Settings.AppSettings.Current.General.ShowFreeSpace;
 
+    // ---- context menu visibility ------------------------------------------
+    //
+    // Straight off the preferences, like the status bar above. Bound with
+    // IsVisible on the MenuItems, which is how Dolphin's Services page works:
+    // the commands all still exist and keep their shortcuts, the menu just
+    // stops listing them.
+
+    private static Core.Settings.ContextMenuSettings Menu => Settings.AppSettings.Current.ContextMenu;
+
+    public bool ShowCopyToInMenu => Menu.ShowCopyTo;
+    public bool ShowMoveToInMenu => Menu.ShowMoveTo;
+    public bool ShowSortByInMenu => Menu.ShowSortBy;
+    public bool ShowDuplicateInMenu => Menu.ShowDuplicate;
+    public bool ShowOpenInNewTabInMenu => Menu.ShowOpenInNewTab;
+    public bool ShowAddToPlacesInMenu => Menu.ShowAddToPlaces;
+    public bool ShowCopyLocationInMenu => Menu.ShowCopyLocation;
+
+    /// <summary>
+    /// The selection's path on the clipboard. Reuses CopyTextRequested, which
+    /// already exists for share URLs and mount paths — the view owns the
+    /// clipboard, so the shell asks rather than reaches.
+    /// </summary>
+    [RelayCommand]
+    private void CopyLocation()
+    {
+        var path = ActiveTab?.SelectedEntry?.FullPath ?? ActiveTab?.CurrentPath;
+
+        if (!string.IsNullOrEmpty(path)) CopyTextRequested?.Invoke(this, path);
+    }
+
+    /// <summary>
+    /// Pins the selected folder rather than the current one, which is what a
+    /// context menu on a row should mean. Falls back to the current folder when
+    /// the click was on empty space.
+    /// </summary>
+    [RelayCommand]
+    private void AddSelectionToPlaces()
+    {
+        var path = ActiveTab?.SelectedEntry is { IsDirectory: true } entry
+            ? entry.FullPath
+            : ActiveTab?.CurrentPath;
+
+        if (path is { Length: > 0 }) _ = Sidebar.PinAsync(path);
+    }
+
     /// <summary>
     /// Called when preferences change. Most settings are read at the moment
     /// they matter and so need nothing; sorting is the exception, because a
@@ -655,6 +700,14 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowStatusBar));
         OnPropertyChanged(nameof(ShowFreeSpace));
+
+        OnPropertyChanged(nameof(ShowCopyToInMenu));
+        OnPropertyChanged(nameof(ShowMoveToInMenu));
+        OnPropertyChanged(nameof(ShowSortByInMenu));
+        OnPropertyChanged(nameof(ShowDuplicateInMenu));
+        OnPropertyChanged(nameof(ShowOpenInNewTabInMenu));
+        OnPropertyChanged(nameof(ShowAddToPlacesInMenu));
+        OnPropertyChanged(nameof(ShowCopyLocationInMenu));
 
         // Left and Right, not a Groups collection — this view model has no such
         // thing, and inventing one for a loop would be the tail wagging the dog.
