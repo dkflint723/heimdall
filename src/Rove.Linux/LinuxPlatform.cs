@@ -18,6 +18,7 @@ public sealed class LinuxPlatform : IPlatform
     {
         Places = new LinuxPlacesProvider(stateDirectory);
         Tags = new LinuxTagStore(stateDirectory);
+        Icons = new XdgIconTheme(Theme?.Read()?.IconTheme);
     }
 
     public string Name => "linux";
@@ -39,4 +40,12 @@ public sealed class LinuxPlatform : IPlatform
     public IScriptRunner Scripts { get; } = new LinuxScriptRunner();
 
     public ITagStore Tags { get; }
+
+    public IThemeProvider? Theme { get; } = new KdeThemeProvider();
+
+    /// <summary>
+    /// Built from the theme name Plasma reports, so it follows whatever the
+    /// user picked in System Settings rather than assuming Breeze.
+    /// </summary>
+    public IIconThemeProvider? Icons { get; }
 }

@@ -89,3 +89,12 @@ public static class RowTags
         }
     }
 }
+
+/// <summary>Exposes the tag colour to markup, so a swatch in the sidebar and a
+/// chip in a row are guaranteed to agree.</summary>
+public static class TagBrush
+{
+    public static readonly Avalonia.Data.Converters.IValueConverter ForName =
+        new Avalonia.Data.Converters.FuncValueConverter<string, IBrush>(
+            name => RowTags.ColourFor(name ?? ""));
+}

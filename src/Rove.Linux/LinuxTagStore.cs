@@ -51,8 +51,13 @@ public sealed partial class LinuxTagStore : ITagStore
         StringMarshalling = StringMarshalling.Utf8)]
     private static partial int RemoveXattr(string path, string name);
 
+    /// <summary>
+    /// Genuinely asynchronous. It used to return an already-completed ValueTask
+    /// wrapping a synchronous read, so every caller's await finished inline —
+    /// two getxattr syscalls per visible row, on the UI thread.
+    /// </summary>
     public ValueTask<IReadOnlyList<string>> GetAsync(string path, CancellationToken ct)
-        => ValueTask.FromResult(Read(path));
+        => new(Task.Run(() => Read(path), ct));
 
     private static IReadOnlyList<string> Read(string path)
     {
@@ -80,12 +85,12 @@ public sealed partial class LinuxTagStore : ITagStore
         }
     }
 
-    public ValueTask SetAsync(string path, IReadOnlyList<string> tags, CancellationToken ct)
+    public async ValueTask SetAsync(string path, IReadOnlyList<string> tags, CancellationToken ct)
     {
-        Write(path, tags);
+        await Task.Run(() => Write(path, tags), ct).ConfigureAwait(false);
+
         Remember(tags);
         TagsChanged?.Invoke(this, EventArgs.Empty);
-        return ValueTask.CompletedTask;
     }
 
     private static void Write(string path, IReadOnlyList<string> tags)
@@ -108,7 +113,18 @@ public sealed partial class LinuxTagStore : ITagStore
         }
     }
 
-    public ValueTask ToggleAsync(
+    public async ValueTask ToggleAsync(
+        IReadOnlyList<string> paths, string tag, bool add, CancellationToken ct)
+    {
+        // One hop off the UI thread for the whole batch rather than per file.
+        await Task.Run(() => ToggleCore(paths, tag, add, ct), ct).ConfigureAwait(false);
+
+        if (add) Remember([tag]);
+
+        TagsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ToggleCore(
         IReadOnlyList<string> paths, string tag, bool add, CancellationToken ct)
     {
         foreach (var path in paths)
@@ -125,11 +141,6 @@ public sealed partial class LinuxTagStore : ITagStore
 
             Write(path, current);
         }
-
-        if (add) Remember([tag]);
-
-        TagsChanged?.Invoke(this, EventArgs.Empty);
-        return ValueTask.CompletedTask;
     }
 
     /// <summary>

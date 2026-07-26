@@ -5,6 +5,9 @@
         x:Class="Rove.Ui.PropertiesWindow"
         x:DataType="vm:PropertiesViewModel"
         Title="properties"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
         Width="460" Height="520"
         WindowStartupLocation="CenterOwner">
 
@@ -20,7 +23,7 @@
                  Opacity="0.55"/>
     </StackPanel>
 
-    <Border DockPanel.Dock="Top" Background="#1d1d1d" Padding="12,10"
+    <Border DockPanel.Dock="Top" Background="{DynamicResource AppBackground}" Padding="12,10"
             CornerRadius="4" Margin="0,0,0,14">
       <DockPanel>
         <!-- Measuring is a button rather than automatic: walking a home
@@ -37,7 +40,7 @@
       </DockPanel>
     </Border>
 
-    <Border DockPanel.Dock="Top" Background="#1d1d1d" Padding="12,10"
+    <Border DockPanel.Dock="Top" Background="{DynamicResource AppBackground}" Padding="12,10"
             CornerRadius="4" Margin="0,0,0,14"
             IsVisible="{Binding CanEditAccess}">
       <StackPanel Spacing="8">

@@ -32,4 +32,10 @@ public interface IPlatform
     IScriptRunner Scripts { get; }
 
     ITagStore Tags { get; }
+
+    /// <summary>Null where the desktop exposes no readable theme.</summary>
+    IThemeProvider? Theme { get; }
+
+    /// <summary>Null where the desktop ships no icon theme we can read.</summary>
+    IIconThemeProvider? Icons { get; }
 }

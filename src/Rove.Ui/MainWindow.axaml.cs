@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private readonly ShellViewModel _shell;
     private readonly JsonSessionStore _store;
     private readonly IPropertiesProvider _properties;
+    private readonly IThemeProvider? _theme;
     private readonly IAccessEditor? _accessEditor;
     private bool _closeApproved;
 
@@ -47,6 +48,40 @@ public partial class MainWindow : Window
         Thumbnails.ThumbnailLoader.Provider = platform.Thumbnails;
         Thumbnails.RowMetadata.Provider = platform.Metadata;
         Thumbnails.RowTags.Store = platform.Tags;
+        Thumbnails.IconLoader.Provider = platform.Icons;
+
+        if (platform.Icons is { } icons)
+        {
+            var probe = icons.Resolve(["inode-directory", "folder"], 32);
+            Console.Error.WriteLine($"[rove] folder icon resolved to: {probe ?? "NOTHING"}");
+        }
+
+        // Applied before anything else paints, and re-applied whenever Plasma's
+        // scheme changes, so the window follows the desktop live.
+        _theme = platform.Theme;
+        var platformIcons = platform.Icons;
+        ThemeApplier.Apply(this, _theme?.Read());
+
+        if (_theme is not null)
+        {
+            _theme.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                // Plasma rewrites kdeglobals in pieces; a short settle avoids
+                // reading it mid-write and picking up half a scheme.
+                Task.Delay(150).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+                {
+                    var palette = _theme.Read();
+
+                    ThemeApplier.Apply(this, palette);
+
+                    // Icons follow the desktop too: the resolved paths belong to
+                    // the old icon theme and every cached drawable has the old
+                    // text colour baked into its currentColor.
+                    platformIcons?.Reload(palette?.IconTheme);
+                    Thumbnails.IconLoader.Invalidate();
+                }));
+            });
+        }
 
         // Not platform-specific: the clipboard comes from the toolkit.
         IClipboardService clipboard = ClipboardService.ForWindow(this);
@@ -68,7 +103,7 @@ public partial class MainWindow : Window
         };
         _shell.PaneCreated += (_, pane) => WirePane(pane);
         _shell.PropertiesRequested += (_, _) => ShowProperties();
-        _shell.ScaleApplier = ApplyUiScale;
+        _shell.ScaleApplier = ApplyScales;
         DataContext = _shell;
 
         PromptInput.KeyDown += OnPromptKeyDown;
@@ -101,7 +136,10 @@ public partial class MainWindow : Window
         PositionChanged += (_, _) => _shell.NotifyWindowChanged();
 
         // Applied before Start so the first paint is already at the right size.
-        ApplyUiScale(state?.Windows.FirstOrDefault()?.UiScale is > 0 and var s ? s : 1.0);
+        var geometry = state?.Windows.FirstOrDefault();
+        ApplyScales(
+            geometry?.FontScale is > 0 and var f ? f : 1.0,
+            geometry?.IconScale is > 0 and var i ? i : 1.0);
 
         _shell.Start(state);
 
@@ -172,23 +210,55 @@ public partial class MainWindow : Window
     /// pointing at these, so re-writing them here restyles the whole window
     /// without touching a single control.
     /// </summary>
-    private static readonly (string Key, double Value)[] BaseMetrics =
+    private static readonly (string Key, double Value)[] FontMetrics =
     [
         ("FontSizeTiny", 11),
         ("FontSizeSmall", 12.5),
         ("FontSizeBase", 14),
         ("FontSizeLarge", 15.5),
-        ("RowHeight", 34),
-        ("ThumbSize", 26),
-        ("IconSize", 17),
-        ("RailWidth", 44),
-        ("ColumnStripHeight", 108),
     ];
 
-    private void ApplyUiScale(double scale)
+    private static readonly (string Key, double Value)[] IconMetrics =
+    [
+        ("ThumbSize", 26),
+        ("IconSize", 17),
+        ("TileSize", 84),
+    ];
+
+    /// <summary>
+    /// Text and icons scale on separate axes; everything structural is derived
+    /// from whichever of the two drives it. A row has to fit the taller of its
+    /// label and its thumbnail, so its height cannot be a third free setting —
+    /// it would only ever be set wrong.
+    /// </summary>
+    private void ApplyScales(double fontScale, double iconScale)
     {
-        foreach (var (key, value) in BaseMetrics)
-            Resources[key] = Math.Round(value * scale, 1);
+        // Application-wide, not window-scoped: the properties window binds the
+        // same metrics, and resources set on MainWindow are invisible to it.
+        var target = Application.Current?.Resources ?? Resources;
+
+        foreach (var (key, value) in FontMetrics)
+            target[key] = Math.Round(value * fontScale, 1);
+
+        foreach (var (key, value) in IconMetrics)
+            target[key] = Math.Round(value * iconScale, 1);
+
+        var body = 14 * fontScale;
+        var thumb = 26 * iconScale;
+        var tile = 84 * iconScale;
+
+        var rowHeight = Math.Round(Math.Max(body * 2.1, thumb + 8), 1);
+
+        target["RowHeight"] = rowHeight;
+        target["TileWidth"] = Math.Round(tile + 24, 1);
+        // Two label lines plus the tile, and no more. The old allowance
+        // left slack under the text as well as over it.
+        target["TileHeight"] = Math.Round(tile + body * 2.9, 1);
+        target["RailWidth"] = Math.Round(44 * fontScale, 1);
+
+        // Three rows of chain, which is what was asked for — derived so the
+        // ratio survives any combination of the two scales.
+        target["ColumnStripHeight"] = Math.Round(rowHeight * 3 + 6, 1);
     }
 
     /// <summary>
@@ -206,6 +276,7 @@ public partial class MainWindow : Window
 
         if (paths.Count == 0) return;
 
+        // Theme and metrics are application-scoped, so this inherits them.
         new PropertiesWindow(new PropertiesViewModel(_properties, paths, _accessEditor)).Show(this);
     }
 
@@ -561,7 +632,11 @@ public partial class MainWindow : Window
 
         _prompt = PromptMode.NewTag;
 
-        PromptLabel.Text = "tag name";
+        var count = _shell.ActiveTab is { } t
+            ? (t.SelectedEntries.Count > 0 ? t.SelectedEntries.Count : t.SelectedEntry is null ? 0 : 1)
+            : 0;
+
+        PromptLabel.Text = $"tag {count} selected item(s)";
         PromptInput.Text = "";
         PromptInput.IsVisible = true;
         PromptConfirm.Content = "apply tag";

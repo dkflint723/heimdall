@@ -37,6 +37,9 @@ public sealed partial class SearchViewModel : ObservableObject
     [ObservableProperty] private bool _scopeToCurrentFolder = true;
     [ObservableProperty] private string _status = "";
 
+    /// <summary>Drives whether the sidebar shows results instead of its sections.</summary>
+    public bool HasQuery => Query.Length > 0;
+
     public string BackendName => _search?.BackendName ?? "none";
 
     /// <summary>Shown when falling back to a walk, so slow results are explained.</summary>
@@ -51,7 +54,11 @@ public sealed partial class SearchViewModel : ObservableObject
         if (entry is { } value) ResultChosen?.Invoke(this, value);
     }
 
-    partial void OnQueryChanged(string value) => Restart();
+    partial void OnQueryChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasQuery));
+        Restart();
+    }
     partial void OnScopeToCurrentFolderChanged(bool value) => Restart();
 
     private void Restart()

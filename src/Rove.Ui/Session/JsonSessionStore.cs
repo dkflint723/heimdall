@@ -94,8 +94,18 @@ public sealed class JsonSessionStore : ISessionStore, IAsyncDisposable
 
     private async void OnTick(object? sender, EventArgs e)
     {
-        _timer.Stop();
-        await WriteAsync(CancellationToken.None).ConfigureAwait(false);
+        // async void: anything escaping here terminates the process. WriteAsync
+        // catches its own failures, but taking the write lock can still throw
+        // if disposal races this tick.
+        try
+        {
+            _timer.Stop();
+            await WriteAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[rove] session write failed: {ex.Message}");
+        }
     }
 
     public async ValueTask FlushAsync(CancellationToken ct)

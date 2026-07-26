@@ -45,7 +45,15 @@ public static class FocusBehavior
                 // Posted: at the instant visibility flips the control is not
                 // yet laid out, and focusing an unrealized control silently
                 // does nothing.
-                Dispatcher.UIThread.Post(() => control.Focus());
+                Dispatcher.UIThread.Post(() =>
+                {
+                    control.Focus();
+
+                    // Select the existing text: the box opens pre-filled with
+                    // the current path, and without this typing appends to it
+                    // instead of replacing it.
+                    if (control is TextBox box) box.SelectAll();
+                });
             };
         });
     }

@@ -8,6 +8,9 @@
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="rove"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
         Width="1000" Height="680">
 
   <Window.Resources>
@@ -25,18 +28,11 @@
     <x:Double x:Key="RailWidth">44</x:Double>
     <x:Double x:Key="ColumnStripHeight">108</x:Double>
 
-    <!-- Colours from the Okabe-Ito palette, which is designed to stay
-         distinguishable under deuteranopia, protanopia and tritanopia. The
-         accent and the active-pane marker are a blue/orange pair rather than
-         anything red/green, and they also differ in lightness so they survive
-         being seen in greyscale.
-
-         The rule this sets for the rest of the app: hue never carries meaning
-         on its own. Anything colour-coded also gets position, shape or text —
-         which is what makes file-age shading and tags workable at all. -->
-    <SolidColorBrush x:Key="AccentBrush">#56B4E9</SolidColorBrush>
-    <SolidColorBrush x:Key="AccentDimBrush">#1E3A4C</SolidColorBrush>
-    <SolidColorBrush x:Key="ActivePaneBrush">#E69F00</SolidColorBrush>
+    <!-- Colours come from the desktop scheme at runtime (see ThemeApplier);
+         nothing is hardcoded here. The rule they must satisfy is unchanged:
+         hue never carries meaning on its own, so selection also gets an edge
+         bar, tags carry their names, and file age is a lightness ramp. That is
+         what makes adopting an arbitrary system theme safe. -->
 
     <!-- Both halves of a split render from this one template. The split is two
          instances of the same view, not a second code path — which is why
@@ -44,24 +40,138 @@
     <DataTemplate x:Key="PaneGroupTemplate" x:DataType="vm:PaneGroupViewModel">
       <DockPanel>
 
-        <Border DockPanel.Dock="Top" Background="#141414" Padding="6,4,6,0">
+        <!-- The accent rides the top of the ACTIVE side's tab bar. With two
+             identical listings side by side, which one takes the next keystroke
+             cannot be a subtle cue. -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource ChromeBrush}" Padding="8,7,8,0"
+                BorderThickness="0,2,0,0"
+                BorderBrush="{Binding IsActiveGroup, Converter={x:Static vm:FileConverters.ActiveEdge}}">
          <DockPanel>
           <!-- Per-pane, so in a split each side toggles its own chain. Binds
                through this group's ActiveTab rather than the shell's, which
                would only ever be the focused half. -->
-          <ToggleButton DockPanel.Dock="Right" Content="&#x2AFC;"
-                        FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
-                        Margin="6,0,0,4" VerticalAlignment="Center"
-                        IsChecked="{Binding ActiveTab.IsColumnsView, Mode=OneWay}"
-                        Command="{Binding ActiveTab.ToggleViewCommand}"
-                        ToolTip.Tip="column view  (f8)"/>
+          <!-- One control for all three axes: layout, and the two sizes.
+               They were previously spread across a toggle button and a pair of
+               keyboard shortcuts, which made two of them undiscoverable. -->
+          <!-- Layout is one click, per pane and per side. It was two clicks
+               behind a menu, which is too far for something switched this often. -->
+          <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,0,4"
+                       VerticalAlignment="Center" Padding="7,3"
+                       IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
+                       Command="{Binding ActiveTab.ShowAsGridCommand}"
+                       ToolTip.Tip="grid">
+            <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
+                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
+          </RadioButton>
+          <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,2,4"
+                       VerticalAlignment="Center" Padding="7,3"
+                       IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
+                       Command="{Binding ActiveTab.ShowAsDetailsCommand}"
+                       ToolTip.Tip="list">
+            <Path Data="M0,0 H12 V2 H0 Z M0,5 H12 V7 H0 Z M0,10 H12 V12 H0 Z"
+                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
+          </RadioButton>
+          <Button DockPanel.Dock="Right" Content="&#x2261;"
+                  FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
+                  Margin="6,0,0,4" VerticalAlignment="Center"
+                  Background="Transparent" BorderThickness="0"
+                  ToolTip.Tip="view options">
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight">
+                <StackPanel Width="230" Spacing="10" Margin="4">
+
+                  <TextBlock Text="Layout" FontSize="{DynamicResource FontSizeTiny}"
+                             Foreground="{DynamicResource ViewDimText}"/>
+                  <UniformGrid Columns="2">
+                    <RadioButton Content="List" GroupName="layout"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
+                                 Command="{Binding ActiveTab.ShowAsDetailsCommand}"/>
+                    <RadioButton Content="Grid" GroupName="layout"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
+                                 Command="{Binding ActiveTab.ShowAsGridCommand}"/>
+                  </UniformGrid>
+
+                  <CheckBox Content="Path columns above list"
+                            FontSize="{DynamicResource FontSizeSmall}"
+                            IsChecked="{Binding ActiveTab.ShowColumnStrip}"/>
+
+                  <!-- A view setting, so it belongs with the view settings
+                       rather than occupying every path bar permanently. -->
+                  <CheckBox Content="Show hidden files"
+                            FontSize="{DynamicResource FontSizeSmall}"
+                            IsChecked="{Binding ActiveTab.ShowHidden}"/>
+
+                  <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+                  <DockPanel>
+                    <TextBlock Text="Text size" VerticalAlignment="Center"
+                               FontSize="{DynamicResource FontSizeSmall}"/>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+                      <Button Content="&#x2212;" Width="28" Padding="0,2"
+                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontSmallerCommand}"/>
+                      <Button Content="+" Width="28" Padding="0,2"
+                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontLargerCommand}"/>
+                    </StackPanel>
+                  </DockPanel>
+
+                  <DockPanel>
+                    <TextBlock Text="Icon size" VerticalAlignment="Center"
+                               FontSize="{DynamicResource FontSizeSmall}"/>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+                      <Button Content="&#x2212;" Width="28" Padding="0,2"
+                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsSmallerCommand}"/>
+                      <Button Content="+" Width="28" Padding="0,2"
+                              Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsLargerCommand}"/>
+                    </StackPanel>
+                  </DockPanel>
+
+                  <Button Content="Reset sizes" HorizontalAlignment="Stretch"
+                          FontSize="{DynamicResource FontSizeSmall}"
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ZoomResetCommand}"/>
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
           <StackPanel Orientation="Horizontal">
           <TabStrip ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}">
+            <TabStrip.Styles>
+              <!-- The active tab takes the *content* colour, so it reads as
+                   continuous with the listing beneath it. Inactive tabs stay on
+                   the chrome. That contrast is the tab metaphor; without it a
+                   tab strip is just a row of labels on one flat band. -->
+              <Style Selector="TabStripItem">
+                <Setter Property="Foreground" Value="{DynamicResource ViewDimText}"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+              </Style>
+              <!-- Padding belongs on the ContentPresenter, not the item: the
+                   presenter is what draws the tab surface, so it is what has to
+                   grow. Padding on the item only helps if the control theme
+                   forwards it, and the visible box stays tight when it does not. -->
+              <Style Selector="TabStripItem /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="CornerRadius" Value="6,6,0,0"/>
+                <Setter Property="Padding" Value="18,11"/>
+              </Style>
+              <Style Selector="TabStripItem:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+              </Style>
+              <Style Selector="TabStripItem:selected">
+                <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
+              </Style>
+              <Style Selector="TabStripItem:selected /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource ViewBackground}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource EdgeHighlight}"/>
+                <Setter Property="BorderThickness" Value="1,1,1,0"/>
+              </Style>
+            </TabStrip.Styles>
             <TabStrip.ItemTemplate>
               <DataTemplate x:DataType="vm:PaneViewModel">
-                <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="11">
                   <TextBlock Text="{Binding Title}" FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"/>
-                  <Button Content="&#x2715;" FontSize="9" Opacity="0.45"
+                  <Button Content="&#x2715;" FontSize="9" Opacity="0.5"
                           Background="Transparent" BorderThickness="0"
                           Padding="2" VerticalAlignment="Center"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseTabCommand}"
@@ -70,46 +180,96 @@
               </DataTemplate>
             </TabStrip.ItemTemplate>
           </TabStrip>
-          <Button Content="+" FontSize="{DynamicResource FontSizeLarge}" Opacity="0.45"
+          <!-- A rule, then the action. It is not another tab, so it gets
+               neither the tab surface nor the tab text colour. -->
+          <Border Width="1" Margin="8,8,0,10"
+                  Background="{DynamicResource SeparatorColour}"/>
+          <Button Content="+" FontSize="{DynamicResource FontSizeLarge}"
+                  Foreground="{DynamicResource ViewDimText}"
                   Background="Transparent" BorderThickness="0"
-                  Padding="10,2" VerticalAlignment="Center"
+                  Padding="10,2" Margin="6,0,0,4" VerticalAlignment="Center"
                   Command="{Binding NewTabHereCommand}"
                   ToolTip.Tip="new tab in this pane  (ctrl+t)"/>
           </StackPanel>
          </DockPanel>
         </Border>
 
-        <!-- One path bar per side. Seeing both locations at once is the point
-             of a split; having to click between them to read a path is not. -->
-        <Border DockPanel.Dock="Top" Padding="6,5" Background="#181818">
+        <!-- One path bar per side, Dolphin-style: clickable ancestors, with
+             an editable box behind them for typing or pasting a path. -->
+        <Border DockPanel.Dock="Top" Padding="6,5"
+                Background="{DynamicResource ChromeBrush}"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource EdgeShadow}">
           <DockPanel>
-            <Button DockPanel.Dock="Left" Content="&#x2190;" Width="30" Margin="0,0,4,0"
+            <Button DockPanel.Dock="Left" Content="&#x2190;" Width="30" Margin="0,0,2,0"
+                    Background="Transparent" BorderThickness="0"
                     Command="{Binding ActiveTab.GoBackCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoBack}"/>
-            <Button DockPanel.Dock="Left" Content="&#x2192;" Width="30" Margin="0,0,4,0"
+            <Button DockPanel.Dock="Left" Content="&#x2192;" Width="30" Margin="0,0,2,0"
+                    Background="Transparent" BorderThickness="0"
                     Command="{Binding ActiveTab.GoForwardCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoForward}"/>
             <Button DockPanel.Dock="Left" Content="&#x2191;" Width="30" Margin="0,0,6,0"
+                    Background="Transparent" BorderThickness="0"
                     Command="{Binding ActiveTab.GoUpCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoUp}"/>
-            <CheckBox DockPanel.Dock="Right" Content="hidden" Margin="8,0,0,0"
-                      FontSize="{DynamicResource FontSizeSmall}"
-                      IsChecked="{Binding ActiveTab.ShowHidden}"/>
-            <TextBox Text="{Binding ActiveTab.PathText}"
-                     FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
-              <!-- Enter and Escape bound on the box itself: a control inside a
-                   template has no generated field to wire from code-behind. -->
-              <TextBox.KeyBindings>
-                <KeyBinding Gesture="Enter"
-                            Command="{Binding ActiveTab.NavigateToPathTextCommand}"/>
-                <KeyBinding Gesture="Escape"
-                            Command="{Binding ActiveTab.RevertPathTextCommand}"/>
-              </TextBox.KeyBindings>
-            </TextBox>
+
+            <Panel>
+              <!-- Crumbs. Clicking the empty space beside them starts editing,
+                   which is the affordance Dolphin uses. -->
+              <!-- Crumbs are buttons, so they must NOT sit inside another
+                   button — nested hit targets mean a click lands on whichever
+                   wins, and navigating a crumb would start an edit instead.
+                   The click-to-edit target is a separate strip that fills the
+                   space to their right. -->
+              <DockPanel IsVisible="{Binding !ActiveTab.IsPathEditing}">
+                <ItemsControl DockPanel.Dock="Left" ItemsSource="{Binding ActiveTab.Breadcrumbs}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PathSegment">
+                      <StackPanel Orientation="Horizontal">
+                        <Button Content="{Binding Name}" Command="{Binding Open}"
+                                Background="Transparent" BorderThickness="0"
+                                Padding="4,2" CornerRadius="3"
+                                FontWeight="{Binding IsLast, Converter={x:Static vm:FileConverters.CrumbWeight}}"
+                                Foreground="{Binding IsLast, Converter={x:Static vm:FileConverters.CrumbBrush}}"
+                                FontSize="{DynamicResource FontSizeBase}"/>
+                        <!-- No trailing separator after the current folder. -->
+                        <TextBlock Text="/" VerticalAlignment="Center" Margin="1,0"
+                                   IsVisible="{Binding !IsLast}"
+                                   Foreground="{DynamicResource ViewDimText}"
+                                   FontSize="{DynamicResource FontSizeSmall}"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Command="{Binding ActiveTab.BeginEditPathCommand}"
+                        Background="Transparent" BorderThickness="0"
+                        HorizontalAlignment="Stretch" Padding="0"
+                        ToolTip.Tip="click to edit the path  (ctrl+l)"/>
+              </DockPanel>
+
+              <TextBox Text="{Binding ActiveTab.PathText}"
+                       IsVisible="{Binding ActiveTab.IsPathEditing}"
+                       local:FocusBehavior.FocusOnVisible="True"
+                       FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter"
+                              Command="{Binding ActiveTab.NavigateToPathTextCommand}"/>
+                  <KeyBinding Gesture="Escape"
+                              Command="{Binding ActiveTab.RevertPathTextCommand}"/>
+                </TextBox.KeyBindings>
+              </TextBox>
+            </Panel>
           </DockPanel>
         </Border>
 
-        <Border DockPanel.Dock="Top" Padding="6,4" Background="#1d1d1d"
+        <Border DockPanel.Dock="Top" Padding="6,4" Background="{DynamicResource AppBackground}"
                 IsVisible="{Binding ActiveTab.IsFilterVisible}">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBlock Text="filter" FontSize="{DynamicResource FontSizeSmall}"
@@ -128,11 +288,9 @@
 
         <!-- The only cue for which half takes the next keystroke, so it has to
              be visible but quiet. -->
-        <Border DockPanel.Dock="Bottom" Height="3"
-                Background="{DynamicResource ActivePaneBrush}"
-                IsVisible="{Binding IsActiveGroup}"/>
 
-        <ItemsControl ItemsSource="{Binding Tabs}" Background="#0F0F0F">
+
+        <ItemsControl ItemsSource="{Binding Tabs}" Background="{DynamicResource ViewBackground}">
 
           <ItemsControl.ContextMenu>
             <ContextMenu x:DataType="vm:PaneGroupViewModel">
@@ -195,12 +353,19 @@
               <MenuItem Header="Tags" IsVisible="{Binding ActiveTab.HasTagStore}">
                 <MenuItem Header="New tag…" Command="{Binding ActiveTab.BeginNewTagCommand}"/>
                 <Separator/>
-                <MenuItem Header="Existing" ItemsSource="{Binding ActiveTab.KnownTags}">
+                <!-- Each option carries its own command, so the setter binds to
+                     the item and never walks up the tree. x:DataType on the
+                     Style is mandatory: without it the setters resolve against
+                     the window's type and fail silently inside a ContextMenu. -->
+                <MenuItem Header="Apply existing" ItemsSource="{Binding ActiveTab.KnownTags}">
+                  <MenuItem.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TagOption">
+                      <TextBlock Text="{Binding Name}"/>
+                    </DataTemplate>
+                  </MenuItem.ItemTemplate>
                   <MenuItem.Styles>
-                    <Style Selector="MenuItem > MenuItem">
-                      <Setter Property="Command"
-                              Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.ToggleTagCommand}"/>
-                      <Setter Property="CommandParameter" Value="{Binding}"/>
+                    <Style Selector="MenuItem > MenuItem" x:DataType="vm:TagOption">
+                      <Setter Property="Command" Value="{Binding Command}"/>
                     </Style>
                   </MenuItem.Styles>
                 </MenuItem>
@@ -234,8 +399,8 @@
                    operation working on a plain list. -->
               <Border DockPanel.Dock="Top"
                       Height="{DynamicResource ColumnStripHeight}"
-                      BorderThickness="0,0,0,0.5" BorderBrush="#242424"
-                      IsVisible="{Binding IsColumnsView}">
+                      BorderThickness="0,0,0,0.5" BorderBrush="{DynamicResource SeparatorColour}"
+                      IsVisible="{Binding ShowColumnStrip}">
               <ScrollViewer HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Disabled">
                 <ItemsControl ItemsSource="{Binding Miller.Columns}">
@@ -246,50 +411,50 @@
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:MillerColumnViewModel">
-                      <Border Width="210" BorderThickness="0,0,0.5,0" BorderBrush="#242424">
-                        <ListBox ItemsSource="{Binding Entries}"
-                                 SelectedItem="{Binding SelectedEntry}"
-                                 Background="Transparent" Padding="0">
-                          <ListBox.Styles>
-                            <Style Selector="ListBoxItem">
-                              <Setter Property="Padding" Value="0"/>
-                              <Setter Property="MinHeight" Value="0"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                              <Setter Property="Background" Value="Transparent"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
-                              <Setter Property="Background" Value="Transparent"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
-                              <Setter Property="Background" Value="Transparent"/>
-                            </Style>
-                          </ListBox.Styles>
-                          <ListBox.ItemsPanel>
-                            <ItemsPanelTemplate>
-                              <VirtualizingStackPanel/>
-                            </ItemsPanelTemplate>
-                          </ListBox.ItemsPanel>
-                          <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="fs:FileEntry">
-                              <Panel>
-                                <Border Background="{DynamicResource AccentDimBrush}"
-                                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                                <Border Width="3" HorizontalAlignment="Left"
-                                        Background="{DynamicResource AccentBrush}"
-                                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                                <Grid ColumnDefinitions="*,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
-                                  <TextBlock Grid.Column="0" Text="{Binding Name}"
-                                             FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
-                                             TextTrimming="CharacterEllipsis"/>
-                                  <TextBlock Grid.Column="1" Text="&#x203A;" FontSize="{DynamicResource FontSizeBase}"
-                                             Opacity="0.35" VerticalAlignment="Center"
-                                             IsVisible="{Binding IsDirectory}"/>
-                                </Grid>
-                              </Panel>
-                            </DataTemplate>
-                          </ListBox.ItemTemplate>
-                        </ListBox>
+                      <Border Width="210" BorderThickness="0,0,0.5,0" BorderBrush="{DynamicResource SeparatorColour}">
+                          <ListBox ItemsSource="{Binding Entries}"
+                                   SelectedItem="{Binding SelectedEntry}"
+                                   Background="Transparent" Padding="0">
+                            <ListBox.Styles>
+                              <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                              </Style>
+                              <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                <Setter Property="Background" Value="Transparent"/>
+                              </Style>
+                              <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
+                                <Setter Property="Background" Value="Transparent"/>
+                              </Style>
+                              <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="Transparent"/>
+                              </Style>
+                            </ListBox.Styles>
+                            <ListBox.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <VirtualizingStackPanel/>
+                              </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                              <DataTemplate x:DataType="fs:FileEntry">
+                                <Panel>
+                                  <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
+                                          Margin="4,1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                  <Border Width="3" HorizontalAlignment="Left" CornerRadius="2"
+                                          Margin="4,3" Background="{DynamicResource AccentColour}"
+                                          IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                  <Grid ColumnDefinitions="*,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                               FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Text="&#x203A;" FontSize="{DynamicResource FontSizeBase}"
+                                               Opacity="0.35" VerticalAlignment="Center"
+                                               IsVisible="{Binding IsDirectory}"/>
+                                  </Grid>
+                                </Panel>
+                              </DataTemplate>
+                            </ListBox.ItemTemplate>
+                          </ListBox>
                       </Border>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
@@ -300,36 +465,98 @@
               <!-- Below the chain, because it labels the listing rather than
                    the strip. Column widths and margin match the row template so
                    the headings actually sit over their columns. -->
-              <Border DockPanel.Dock="Top" Padding="0,3" Background="#202020">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="12,0,8,0">
+              <!-- The header is a raised band: highlight above, shadow below.
+                   Without it the column labels float on the same plane as the
+                   rows they describe. -->
+              <Border DockPanel.Dock="Top" Padding="0,4" Background="{DynamicResource ChromeBrush}"
+                      BorderThickness="0,1,0,1" BorderBrush="{DynamicResource EdgeShadow}"
+                      IsVisible="{Binding IsDetailsView}">
+                <!-- Headings sort. The sort state existed, was persisted per
+                     tab, and had no control anywhere that could set it. -->
+                <Grid Margin="12,0,8,0">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
                   <Border Grid.Column="0" Width="{DynamicResource ThumbSize}" Margin="0,0,8,0"/>
-                  <TextBlock Grid.Column="1" Text="name"
-                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+                  <Button Grid.Column="1" Command="{Binding SortByCommand}" CommandParameter="name"
+                          Background="Transparent" BorderThickness="0" Padding="0"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                    <TextBlock FontSize="{DynamicResource FontSizeSmall}"
+                               Foreground="{DynamicResource ViewDimText}">
+                      <Run Text="name"/><Run Text="{Binding NameSortGlyph}"/>
+                    </TextBlock>
+                  </Button>
                   <TextBlock Grid.Column="2" Width="120" Margin="8,0,0,0" Text="info"
                              IsVisible="{Binding ShowMetadata}"
-                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
-                  <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" Text="permissions"
+                             FontSize="{DynamicResource FontSizeSmall}"
+                             Foreground="{DynamicResource ViewDimText}"/>
+                  <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" Text="permissions" TextAlignment="Right"
                              IsVisible="{Binding ShowPermissions}"
-                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
-                  <TextBlock Grid.Column="4" Width="100" Text="size"
-                             IsVisible="{Binding ShowSize}"
-                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
-                  <TextBlock Grid.Column="5" Width="170" Text="modified"
-                             IsVisible="{Binding ShowModified}"
-                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+                             FontSize="{DynamicResource FontSizeSmall}"
+                             Foreground="{DynamicResource ViewDimText}"/>
+                  <Button Grid.Column="4" Width="100" Command="{Binding SortByCommand}" CommandParameter="size"
+                          IsVisible="{Binding ShowSize}"
+                          Background="Transparent" BorderThickness="0" Padding="0"
+                          HorizontalContentAlignment="Right">
+                    <TextBlock FontSize="{DynamicResource FontSizeSmall}"
+                               Foreground="{DynamicResource ViewDimText}">
+                      <Run Text="size"/><Run Text="{Binding SizeSortGlyph}"/>
+                    </TextBlock>
+                  </Button>
+                  <Button Grid.Column="5" Width="150" Command="{Binding SortByCommand}" CommandParameter="modified"
+                          IsVisible="{Binding ShowModified}"
+                          Background="Transparent" BorderThickness="0" Padding="0"
+                          HorizontalContentAlignment="Right">
+                    <TextBlock FontSize="{DynamicResource FontSizeSmall}"
+                               Foreground="{DynamicResource ViewDimText}">
+                      <Run Text="modified"/><Run Text="{Binding ModifiedSortGlyph}"/>
+                    </TextBlock>
+                  </Button>
                 </Grid>
               </Border>
 
+              <!-- Both layouts share one slot: in a DockPanel only the last child
+                   fills, so two bare siblings would dock the list to the left. -->
+              <Panel>
               <ListBox ItemsSource="{Binding Entries}"
                        SelectedItem="{Binding SelectedEntry}"
                        SelectedItems="{Binding SelectedEntries}"
                        DragDrop.AllowDrop="True"
                        SizeChanged="OnListSizeChanged"
-                       SelectionMode="Multiple" Background="Transparent" Padding="0">
+                       IsVisible="{Binding IsDetailsView}" SelectionMode="Multiple" Background="Transparent" Padding="0">
                 <ListBox.Styles>
                   <Style Selector="ListBoxItem">
                     <Setter Property="Padding" Value="0"/>
                     <Setter Property="MinHeight" Value="0"/>
+                  </Style>
+                  <!-- Banding, from the desktop's own alternate-row colour. It was being
+                       read out of kdeglobals and thrown away, which is much of why a long
+                       listing read as a single flat sheet. -->
+                  <Style Selector="ListBoxItem:nth-child(even) /template/ ContentPresenter">
+                    <Setter Property="Background" Value="{DynamicResource ViewAlternate}"/>
+                  </Style>
+                  <!-- Hover wash. Declared before the selection rules so selection wins. -->
+                  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                    <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+                  </Style>
+                  <!-- The theme's own selection fill is suppressed; the row template draws
+                       the cue, so it is guaranteed to appear. -->
+                  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                    <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                    <Setter Property="Background" Value="Transparent"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
+                    <Setter Property="Background" Value="Transparent"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+                    <Setter Property="Background" Value="Transparent"/>
                   </Style>
                 </ListBox.Styles>
                 <ListBox.ItemsPanel>
@@ -343,30 +570,52 @@
                       <!-- Selection marker drawn by us rather than by the control theme.
                            A 3px bar plus a fill means selection reads by position as well
                            as by colour, which the theme default does not. -->
-                      <Border Background="{DynamicResource AccentDimBrush}"
+                      <Border Background="{DynamicResource AccentDim}"
                               IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
                       <Border Width="3" HorizontalAlignment="Left"
-                              Background="{DynamicResource AccentBrush}"
+                              Background="{DynamicResource AccentColour}"
                               IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
-                        <Image Grid.Column="0" Width="{DynamicResource ThumbSize}" Height="{DynamicResource ThumbSize}" Margin="0,0,8,0"
-                               VerticalAlignment="Center"
-                               th:ThumbnailImage.Path="{Binding FullPath}"
-                               th:ThumbnailImage.Size="64"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
-                                    VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Name}"
-                                     FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
-                                     TextTrimming="CharacterEllipsis"/>
+                      <Grid Height="{DynamicResource RowHeight}" Margin="12,0,8,0" ClipToBounds="True">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <!-- The name takes all slack so the metadata block sits
+                             flush against the pane's right edge, the way every
+                             file manager does it. Truncation is handled in the
+                             cell itself, not by capping the column. -->
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                    <Panel Grid.Column="0" Width="{DynamicResource ThumbSize}"
+                           Height="{DynamicResource ThumbSize}" Margin="0,0,8,0"
+                           VerticalAlignment="Center">
+                      <!-- Two layers only: the icon (themed, or the drawn glyph
+                           as its own fallback source) and a thumbnail over it,
+                           which hides itself when there is none. -->
+                      <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="32"
+                             Stretch="Uniform"/>
+                      <Image th:ThumbnailImage.Path="{Binding FullPath}"
+                             th:ThumbnailImage.Size="64" Stretch="Uniform"/>
+                    </Panel>
+                        <!-- DockPanel, not StackPanel: a horizontal StackPanel gives
+                             its children unlimited width, so TextTrimming can never
+                             fire and a long name renders straight over the next
+                             column. Docking the chips first leaves the name a real
+                             width to trim into. -->
+                        <DockPanel Grid.Column="1" VerticalAlignment="Center"
+                                   ClipToBounds="True">
                           <!-- Tag chips: always a name, with colour as decoration. A bare
                                swatch would put the whole meaning in hue. -->
-                          <ItemsControl th:RowTags.Entry="{Binding}" VerticalAlignment="Center">
+                          <ItemsControl DockPanel.Dock="Right" Margin="8,0,0,0"
+                                        th:RowTags.Entry="{Binding}" VerticalAlignment="Center">
                             <ItemsControl.ItemsPanel>
                               <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="th:TagChip">
-                                <Border CornerRadius="3" Padding="5,1" Background="#22FFFFFF"
+                                <Border CornerRadius="3" Padding="5,1" Background="{DynamicResource ChipBackground}"
                                         BorderThickness="0,0,0,2" BorderBrush="{Binding Colour}">
                                   <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeTiny}"
                                              Opacity="0.8"/>
@@ -374,28 +623,31 @@
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-                        </StackPanel>
+                          <TextBlock Text="{Binding Name}"
+                                     FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
                         <!-- Type-specific fact: pixel dimensions for images, child count
                              for folders. First to drop when space runs out. -->
                         <TextBlock Grid.Column="2" Width="120" Margin="8,0,0,0"
                                    th:RowMetadata.Entry="{Binding}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowMetadata}"
-                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.45"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Foreground="{DynamicResource ViewDimText}"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         <!-- POSIX mode, formatted as ls -l prints it. -->
-                        <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0"
+                        <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" TextAlignment="Right"
                                    th:RowMetadata.Access="{Binding}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowPermissions}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.5"
                                    VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="4" Width="100" Text="{Binding Length}"
+                        <TextBlock Grid.Column="4" Width="100" Text="{Binding Converter={x:Static vm:FileConverters.Size}}" TextAlignment="Right"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowSize}"
-                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.55"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Foreground="{DynamicResource ViewDimText}"
                                    VerticalAlignment="Center"/>
                         <!-- Shaded by age: a single-hue lightness ramp, and the date itself
                              is still right there, so the colour is a shortcut rather than
                              the only signal. -->
-                        <TextBlock Grid.Column="5" Width="170" Text="{Binding LastWriteTime}"
+                        <TextBlock Grid.Column="5" Width="150" Text="{Binding LastWriteTime, Converter={x:Static vm:FileConverters.Modified}}" TextAlignment="Right"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowModified}"
                                    Foreground="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Brush}}"
                                    ToolTip.Tip="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Description}}"
@@ -407,26 +659,90 @@
                 </ListBox.ItemTemplate>
               </ListBox>
 
+              <!-- Grid layout. A separate ListBox rather than a swapped ItemsPanel: the
+                   panel and the item template change together, and two lists binding one
+                   selection are simpler than one list rewriting itself. -->
+              <ListBox ItemsSource="{Binding Entries}"
+                       SelectedItem="{Binding SelectedEntry}"
+                       SelectedItems="{Binding SelectedEntries}"
+                       IsVisible="{Binding IsGridView}"
+                       DragDrop.AllowDrop="True"
+                       SelectionMode="Multiple" Background="Transparent" Padding="6">
+                <ListBox.Styles>
+                  <Style Selector="ListBoxItem">
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="MinHeight" Value="0"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                    <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                    <Setter Property="Background" Value="Transparent"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
+                    <Setter Property="Background" Value="Transparent"/>
+                  </Style>
+                </ListBox.Styles>
+                <ListBox.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal"/>
+                  </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="fs:FileEntry">
+                    <Panel Width="{DynamicResource TileWidth}" Height="{DynamicResource TileHeight}" Margin="3">
+                      <Border Background="{DynamicResource AccentDim}" CornerRadius="6"
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                      <!-- A tile has no left edge to bar, so selection gets an outline —
+                           same principle as the row marker, different geometry. -->
+                      <Border BorderBrush="{DynamicResource AccentColour}" BorderThickness="2" CornerRadius="6"
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                      <StackPanel Margin="8,6" VerticalAlignment="Top" Spacing="2">
+                        <Panel Width="{DynamicResource TileSize}" Height="{DynamicResource TileSize}"
+                               HorizontalAlignment="Center">
+                          <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="64"
+                                 Stretch="Uniform" VerticalAlignment="Bottom"/>
+                          <Image th:ThumbnailImage.Path="{Binding FullPath}"
+                                 th:ThumbnailImage.Size="256" Stretch="Uniform"
+                                 VerticalAlignment="Bottom"/>
+                        </Panel>
+                        <TextBlock Text="{Binding Name}" TextAlignment="Center"
+                                   FontSize="{DynamicResource FontSizeSmall}"
+                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
+                    </Panel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              </Panel>
+
               </DockPanel>
+
+              <!-- An empty listing looked identical to one still loading. -->
+              <TextBlock Text="this folder is empty"
+                         IsVisible="{Binding IsEmpty}" IsHitTestVisible="False"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         FontSize="{DynamicResource FontSizeBase}"
+                         Foreground="{DynamicResource ViewDimText}"/>
 
               <!-- Drop target outline. Hit-testing is off so it never eats the
                    drag events it is drawn in response to. -->
               <Border IsVisible="{Binding IsDropTarget}" IsHitTestVisible="False"
-                      BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}"/>
+                      BorderThickness="2" BorderBrush="{DynamicResource AccentColour}"/>
 
               <!-- Preview sits over the listing rather than beside it: at this
                    width a side panel would squeeze the list to nothing, and
                    the overlay dismisses with the same key that opened it. -->
               <Border IsVisible="{Binding IsPreviewVisible}"
-                      Background="#0C0C0C" BorderThickness="0.5,0,0,0"
-                      BorderBrush="#242424" HorizontalAlignment="Right"
+                      Background="{DynamicResource ViewBackground}" BorderThickness="0.5,0,0,0"
+                      BorderBrush="{DynamicResource SeparatorColour}" HorizontalAlignment="Right"
                       Width="360" Padding="12">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,10">
                     <TextBlock Text="{Binding PreviewTitle}" FontSize="{DynamicResource FontSizeLarge}"
                                TextTrimming="CharacterEllipsis"/>
                     <TextBlock Text="{Binding PreviewDetail}" FontSize="{DynamicResource FontSizeTiny}"
-                               Opacity="0.45" FontFamily="monospace"/>
+                               Foreground="{DynamicResource ViewDimText}" FontFamily="monospace"/>
                   </StackPanel>
 
                   <Image Source="{Binding PreviewImage}"
@@ -479,31 +795,27 @@
     <KeyBinding Gesture="Ctrl+D"         Command="{Binding PinCurrentCommand}"/>
     <!-- Alt rather than Ctrl for panels: Ctrl+1..9 already switches tabs,
          browser-style, and that convention is the stronger one. -->
-    <KeyBinding Gesture="Alt+D1"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"/>
-    <KeyBinding Gesture="Alt+D2"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="tree"/>
-    <KeyBinding Gesture="Alt+D3"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="search"/>
-    <KeyBinding Gesture="Ctrl+F"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="search"/>
+    <KeyBinding Gesture="Ctrl+F"         Command="{Binding Sidebar.FocusSearchCommand}"/>
+    <KeyBinding Gesture="Ctrl+L"         Command="{Binding ActiveTab.BeginEditPathCommand}"/>
   </Window.KeyBindings>
 
   <DockPanel>
 
-    <!-- Only window-level controls remain here; navigation, path and filter
-         are per-pane and now live inside each side. -->
-    <Border DockPanel.Dock="Top" Padding="8,4" Background="#181818">
-      <ToggleButton Content="&#x25EB;" HorizontalAlignment="Right"
-                    FontSize="{DynamicResource FontSizeBase}" Padding="8,3"
-                    IsChecked="{Binding IsSplit, Mode=OneWay}"
-                    Command="{Binding ToggleSplitCommand}"
-                    ToolTip.Tip="split view  (f3)"/>
+
+
+    <Border DockPanel.Dock="Bottom" Padding="8,4" Background="{DynamicResource ChromeBrush}"
+            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EdgeHighlight}">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveTab.FreeSpace}"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Foreground="{DynamicResource ViewDimText}"/>
+        <TextBlock Text="{Binding ActiveStatus}"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Foreground="{DynamicResource ViewText}"/>
+      </DockPanel>
     </Border>
 
-
-    <Border DockPanel.Dock="Bottom" Padding="8,4" Background="#181818">
-      <TextBlock Text="{Binding ActiveTab.Status}" FontFamily="monospace"
-                 FontSize="{DynamicResource FontSizeSmall}" Opacity="0.7"/>
-    </Border>
-
-    <Border DockPanel.Dock="Bottom" Padding="8,5" Background="#1d1d1d"
+    <Border DockPanel.Dock="Bottom" Padding="8,5" Background="{DynamicResource AppBackground}"
             IsVisible="{Binding ActiveOperation, Converter={x:Static ObjectConverters.IsNotNull}}">
       <StackPanel Orientation="Horizontal" Spacing="10">
         <TextBlock Text="{Binding OperationStatus}" FontFamily="monospace"
@@ -516,7 +828,7 @@
     <!-- Inline bar rather than a modal dialog: when you are about to destroy
          something you want the listing still visible behind the question. -->
     <Border x:Name="PromptBar" DockPanel.Dock="Bottom" Padding="8,6"
-            Background="#232323" IsVisible="False">
+            Background="{DynamicResource AppBackground}" IsVisible="False">
       <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock x:Name="PromptLabel" FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"/>
         <TextBox x:Name="PromptInput" Width="320" FontFamily="monospace"
@@ -533,138 +845,166 @@
       </StackPanel>
     </Border>
 
-    <Border DockPanel.Dock="Left" Background="#141414" Width="{DynamicResource RailWidth}"
-            IsVisible="{Binding Sidebar.IsRailVisible}">
-      <StackPanel Orientation="Vertical" Spacing="4" Margin="0,8">
-        <Button Content="&#x2605;" FontSize="{DynamicResource IconSize}" Width="{DynamicResource RailWidth}" Height="40"
-                Background="Transparent" BorderThickness="0"
-                Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"
-                ToolTip.Tip="places  (alt+1)"/>
-        <Button Content="&#x25B8;" FontSize="{DynamicResource IconSize}" Width="{DynamicResource RailWidth}" Height="40"
-                Background="Transparent" BorderThickness="0"
-                Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="tree"
-                ToolTip.Tip="tree  (alt+2)"/>
-        <Button Content="&#x2315;" FontSize="{DynamicResource IconSize}" Width="{DynamicResource RailWidth}" Height="40"
-                Background="Transparent" BorderThickness="0"
-                Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="search"
-                ToolTip.Tip="search  (ctrl+f)"/>
-      </StackPanel>
-    </Border>
 
-    <Border DockPanel.Dock="Left" Background="#181818"
+    <!-- One wide sidebar with every section present at once. The point of the
+         workspace layout is that the things you organise by — places, tags,
+         devices — are never behind a panel toggle. -->
+    <Border DockPanel.Dock="Left" Background="{DynamicResource PanelBackground}"
+            BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EdgeShadow}"
             Width="{Binding Sidebar.Width}"
             IsVisible="{Binding Sidebar.IsPanelVisible}">
-      <Panel>
+      <DockPanel>
 
-        <ScrollViewer IsVisible="{Binding Sidebar.IsPlacesVisible}">
-          <ItemsControl ItemsSource="{Binding Sidebar.Groups}" Margin="0,8">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:PlaceGroupViewModel">
-                <StackPanel Margin="0,0,0,10">
-                  <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.4"
-                             Margin="12,0,0,4"/>
-                  <ItemsControl ItemsSource="{Binding Places}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:PlaceItemViewModel">
-                        <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
-                                CommandParameter="{Binding Path}"
-                                Background="Transparent" BorderThickness="0"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Padding="12,3" Opacity="{Binding Opacity}">
-                          <StackPanel>
-                            <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeBase}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
-                                         Height="3" Margin="0,4,8,0"
-                                         IsVisible="{Binding HasCapacity}"/>
-                            <TextBlock Text="{Binding CapacityText}" FontSize="{DynamicResource FontSizeTiny}"
-                                       Opacity="0.4" IsVisible="{Binding HasCapacity}"/>
-                          </StackPanel>
-                        </Button>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
+        <Border DockPanel.Dock="Top" Padding="10,10,10,6">
+          <DockPanel>
+            <!-- Split is window-level, so it lives in a window-level place
+                 rather than owning a toolbar row of its own. -->
+            <ToggleButton DockPanel.Dock="Right" Margin="6,0,0,0" Padding="7,3"
+                          Content="&#x25EB;" FontSize="{DynamicResource FontSizeBase}"
+                          IsChecked="{Binding IsSplit, Mode=OneWay}"
+                          Command="{Binding ToggleSplitCommand}"
+                          ToolTip.Tip="split view  (f3)"/>
+            <TextBox Text="{Binding Sidebar.Search.Query}"
+                     PlaceholderText="Search files"
+                     FontSize="{DynamicResource FontSizeSmall}"/>
+          </DockPanel>
+        </Border>
 
-        <DockPanel IsVisible="{Binding Sidebar.IsSearchVisible}" Margin="8,8">
-          <StackPanel DockPanel.Dock="Top" Spacing="6">
-            <TextBox x:Name="SearchBox" Text="{Binding Sidebar.Search.Query}"
-                     PlaceholderText="search…" FontSize="{DynamicResource FontSizeBase}"/>
-            <CheckBox Content="this folder only" FontSize="{DynamicResource FontSizeSmall}"
-                      IsChecked="{Binding Sidebar.Search.ScopeToCurrentFolder}"/>
-            <TextBlock Text="{Binding Sidebar.Search.Status}" FontSize="{DynamicResource FontSizeTiny}"
-                       Opacity="0.45" FontFamily="monospace"
-                       TextWrapping="Wrap" Margin="0,0,0,4"/>
-          </StackPanel>
+        <ScrollViewer>
+          <StackPanel Margin="0,0,0,12">
 
-          <ListBox ItemsSource="{Binding Sidebar.Search.Results}"
-                   Background="Transparent" Padding="0">
-            <ListBox.Styles>
-              <Style Selector="ListBoxItem">
-                <Setter Property="Padding" Value="0"/>
-                <Setter Property="MinHeight" Value="0"/>
-              </Style>
-              <!-- A left edge bar as well as a fill: selection stays legible
-                   without relying on the colour being perceived. -->
-              <!-- The theme's own selection fill is suppressed; the row
-                   template draws the cue so it is guaranteed to appear. -->
-              <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                <Setter Property="Background" Value="Transparent"/>
-              </Style>
-              <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
-                <Setter Property="Background" Value="Transparent"/>
-              </Style>
-              <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
-                <Setter Property="Background" Value="Transparent"/>
-              </Style>
-            </ListBox.Styles>
-            <ListBox.ItemsPanel>
-              <ItemsPanelTemplate>
-                <VirtualizingStackPanel/>
-              </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="fs:FileEntry">
-                <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.OpenCommand}"
-                        CommandParameter="{Binding}"
+            <!-- Search results take over the sidebar while a query is live,
+                 rather than opening a separate panel. -->
+            <StackPanel IsVisible="{Binding Sidebar.Search.HasQuery}">
+              <TextBlock Text="{Binding Sidebar.Search.Status}" Margin="12,4,12,6"
+                         FontSize="{DynamicResource FontSizeTiny}"
+                         Foreground="{DynamicResource ViewDimText}" TextWrapping="Wrap"/>
+              <ItemsControl ItemsSource="{Binding Sidebar.Search.Results}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="fs:FileEntry">
+                    <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.OpenCommand}"
+                            CommandParameter="{Binding}"
+                            Background="Transparent" BorderThickness="0"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Padding="12,3">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeSmall}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding FullPath}" FontSize="{DynamicResource FontSizeTiny}"
+                                   Foreground="{DynamicResource ViewDimText}"
+                                   TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding !Sidebar.Search.HasQuery}">
+
+              <ItemsControl ItemsSource="{Binding Sidebar.Groups}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PlaceGroupViewModel">
+                    <StackPanel Margin="0,8,0,0">
+                      <TextBlock Text="{Binding Label}" Margin="12,0,12,4"
+                                 FontSize="{DynamicResource FontSizeTiny}"
+                                 Foreground="{DynamicResource ViewDimText}"/>
+                      <ItemsControl ItemsSource="{Binding Places}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:PlaceItemViewModel">
+                            <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
+                                    CommandParameter="{Binding Path}"
+                                    Background="Transparent" BorderThickness="0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Padding="12,4" Opacity="{Binding Opacity}">
+                              <StackPanel>
+                                <TextBlock Text="{Binding Label}"
+                                           FontSize="{DynamicResource FontSizeSmall}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
+                                             Height="2" Margin="0,4,10,0"
+                                             IsVisible="{Binding HasCapacity}"/>
+                                <TextBlock Text="{Binding CapacityText}"
+                                           FontSize="{DynamicResource FontSizeTiny}"
+                                           Foreground="{DynamicResource ViewDimText}"
+                                           IsVisible="{Binding HasCapacity}"/>
+                              </StackPanel>
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <!-- Tags sit beside places rather than under a menu: they are a
+                   way of organising, so they belong where the places are. -->
+              <StackPanel Margin="0,10,0,0" IsVisible="{Binding Sidebar.HasTags}">
+                <TextBlock Text="tags" Margin="12,0,12,4"
+                           FontSize="{DynamicResource FontSizeTiny}"
+                           Foreground="{DynamicResource ViewDimText}"/>
+                <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TagOption">
+                      <Button Command="{Binding Command}"
+                              Background="Transparent" BorderThickness="0"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Left" Padding="12,4">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <Border Width="9" Height="9" CornerRadius="2"
+                                  VerticalAlignment="Center"
+                                  Background="{Binding Name, Converter={x:Static th:TagBrush.ForName}}"/>
+                          <TextBlock Text="{Binding Name}"
+                                     FontSize="{DynamicResource FontSizeSmall}"/>
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
+              <!-- The tree is the one section worth collapsing: it is tall, and
+                   it is the least reached for of the four. -->
+              <StackPanel Margin="0,10,0,0">
+                <!-- A disclosure arrow, so a collapsed section reads as
+                     collapsed rather than as a heading with nothing under it. -->
+                <Button Command="{Binding Sidebar.ToggleTreeCommand}"
                         Background="Transparent" BorderThickness="0"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left" Padding="4,3">
-                  <StackPanel>
-                    <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBase}"
-                               TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding FullPath}" FontSize="{DynamicResource FontSizeTiny}" Opacity="0.35"
-                               FontFamily="monospace"
-                               TextTrimming="CharacterEllipsis"/>
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Padding="12,2">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <TextBlock Text="{Binding Sidebar.TreeGlyph}"
+                               FontSize="{DynamicResource FontSizeTiny}"
+                               Foreground="{DynamicResource ViewDimText}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="folders" FontSize="{DynamicResource FontSizeTiny}"
+                               Foreground="{DynamicResource ViewDimText}"/>
                   </StackPanel>
                 </Button>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </DockPanel>
+                <TreeView ItemsSource="{Binding Sidebar.Tree.Roots}"
+                          IsVisible="{Binding Sidebar.IsTreeExpanded}"
+                          Background="Transparent" Margin="4,2,4,0">
+                  <TreeView.ItemTemplate>
+                    <TreeDataTemplate x:DataType="vm:FolderNode" ItemsSource="{Binding Children}">
+                      <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeSmall}"
+                                 TextTrimming="CharacterEllipsis"/>
+                    </TreeDataTemplate>
+                  </TreeView.ItemTemplate>
+                  <TreeView.Styles>
+                    <Style Selector="TreeViewItem" x:DataType="vm:FolderNode">
+                      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                    </Style>
+                  </TreeView.Styles>
+                </TreeView>
+              </StackPanel>
 
-        <TreeView ItemsSource="{Binding Sidebar.Tree.Roots}"
-                  IsVisible="{Binding Sidebar.IsTreeVisible}"
-                  Background="Transparent" Margin="4,8">
-          <TreeView.ItemTemplate>
-            <TreeDataTemplate x:DataType="vm:FolderNode" ItemsSource="{Binding Children}">
-              <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeBase}"
-                         TextTrimming="CharacterEllipsis"/>
-            </TreeDataTemplate>
-          </TreeView.ItemTemplate>
-          <TreeView.Styles>
-            <Style Selector="TreeViewItem" x:DataType="vm:FolderNode">
-              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-            </Style>
-          </TreeView.Styles>
-        </TreeView>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
 
-      </Panel>
+      </DockPanel>
     </Border>
 
     <Grid x:Name="SplitGrid">
@@ -678,7 +1018,7 @@
                       ContentTemplate="{StaticResource PaneGroupTemplate}"/>
 
       <GridSplitter x:Name="SplitHandle" Grid.Column="1" Width="4"
-                    Background="#0A0A0A" ResizeDirection="Columns"
+                    Background="{DynamicResource BorderColour}" ResizeDirection="Columns"
                     IsVisible="{Binding IsSplit}"/>
 
       <ContentControl Grid.Column="2" Content="{Binding Right}"

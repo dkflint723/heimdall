@@ -14,19 +14,37 @@ namespace Rove.Ui.ViewModels;
 /// </summary>
 public static class AgeConverters
 {
-    private static readonly (TimeSpan Within, Color Colour)[] Ramp =
+    private static readonly TimeSpan[] Steps =
     [
-        (TimeSpan.FromHours(1),   Color.Parse("#B4DCF2")),
-        (TimeSpan.FromDays(1),    Color.Parse("#93BDD4")),
-        (TimeSpan.FromDays(7),    Color.Parse("#7A9CB0")),
-        (TimeSpan.FromDays(30),   Color.Parse("#647E8C")),
-        (TimeSpan.FromDays(365),  Color.Parse("#55656F")),
+        TimeSpan.FromHours(1),
+        TimeSpan.FromDays(1),
+        TimeSpan.FromDays(7),
+        TimeSpan.FromDays(30),
+        TimeSpan.FromDays(365),
     ];
 
-    private static readonly IBrush Ancient = new SolidColorBrush(Color.Parse("#4A555C"));
+    /// <summary>
+    /// Six brushes, freshest first, supplied by the theme.
+    ///
+    /// Previously these were fixed pale blues — which vanish entirely on a
+    /// light colour scheme. Now the ramp is derived from the desktop's own text
+    /// and dim-text colours, so it stays a legible lightness ramp whatever the
+    /// scheme, which is the whole point of using lightness rather than hue.
+    /// </summary>
+    private static IBrush[] _ramp =
+    [
+        new SolidColorBrush(Color.Parse("#B4DCF2")),
+        new SolidColorBrush(Color.Parse("#93BDD4")),
+        new SolidColorBrush(Color.Parse("#7A9CB0")),
+        new SolidColorBrush(Color.Parse("#647E8C")),
+        new SolidColorBrush(Color.Parse("#55656F")),
+        new SolidColorBrush(Color.Parse("#4A555C")),
+    ];
 
-    private static readonly Dictionary<Color, IBrush> Brushes = Ramp
-        .ToDictionary(step => step.Colour, step => (IBrush)new SolidColorBrush(step.Colour));
+    public static void SetRamp(IBrush[] ramp)
+    {
+        if (ramp.Length == 6) _ramp = ramp;
+    }
 
     public static readonly IValueConverter Brush =
         new FuncValueConverter<DateTimeOffset, IBrush>(modified =>
@@ -35,12 +53,12 @@ public static class AgeConverters
 
             // A clock skew or a file dated in the future reads as brand new,
             // which is closer to the truth than treating it as ancient.
-            if (age < TimeSpan.Zero) return Brushes[Ramp[0].Colour];
+            if (age < TimeSpan.Zero) return _ramp[0];
 
-            foreach (var (within, colour) in Ramp)
-                if (age < within) return Brushes[colour];
+            for (var i = 0; i < Steps.Length; i++)
+                if (age < Steps[i]) return _ramp[i];
 
-            return Ancient;
+            return _ramp[^1];
         });
 
     /// <summary>

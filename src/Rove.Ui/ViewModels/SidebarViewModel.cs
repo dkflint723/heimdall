@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
+using Rove.Core;
 using Rove.Core.FileSystem;
 using Rove.Core.Places;
 using Rove.Core.Search;
@@ -36,6 +37,31 @@ public sealed partial class SidebarViewModel : ObservableObject
     }
 
     public ObservableCollection<PlaceGroupViewModel> Groups { get; } = new();
+
+    private ITagStore? _tags;
+    private Action<string>? _onTagChosen;
+
+    /// <summary>Wired by the shell, which owns what a tag click actually does.</summary>
+    public void AttachTags(ITagStore? tags, Action<string> onChosen)
+    {
+        _tags = tags;
+        _onTagChosen = onChosen;
+        RefreshTags();
+    }
+
+    public void RefreshTags()
+    {
+        Tags.Clear();
+        if (_tags is null) return;
+
+        foreach (var tag in _tags.KnownTags)
+        {
+            var name = tag;
+            Tags.Add(new TagOption(name, new RelayCommand(() => _onTagChosen?.Invoke(name))));
+        }
+
+        OnPropertyChanged(nameof(HasTags));
+    }
     public FolderTreeViewModel Tree { get; }
     public SearchViewModel Search { get; }
 
@@ -43,33 +69,45 @@ public sealed partial class SidebarViewModel : ObservableObject
     [ObservableProperty] private RailState _rail = RailState.Full;
     [ObservableProperty] private double _width = 210;
 
-    public bool IsPlacesVisible => Rail == RailState.Full && ActivePanel == "places";
-    public bool IsTreeVisible   => Rail == RailState.Full && ActivePanel == "tree";
-    public bool IsSearchVisible => Rail == RailState.Full && ActivePanel == "search";
-    public bool IsRailVisible   => Rail != RailState.Hidden;
-    public bool IsPanelVisible  => Rail == RailState.Full;
+    // One sidebar, all sections visible at once — the point of the workspace
+    // layout is that the things you organise by are never behind a toggle.
+    // ActivePanel survives only as "which section is expanded".
+    public bool IsPanelVisible => Rail != RailState.Hidden;
+
+    /// <summary>The folder tree is the one section worth collapsing: it is tall,
+    /// and it is the least used of the four.</summary>
+    [ObservableProperty] private bool _isTreeExpanded;
+
+    public string TreeGlyph => IsTreeExpanded ? "\u25BE" : "\u25B8";
+
+    partial void OnIsTreeExpandedChanged(bool value) => OnPropertyChanged(nameof(TreeGlyph));
+
+    [ObservableProperty] private bool _isSearching;
+
+    public ObservableCollection<TagOption> Tags { get; } = new();
+
+    public bool HasTags => Tags.Count > 0;
+
+    /// <summary>Ctrl+F reveals the sidebar and puts the caret in its search box.</summary>
+    [RelayCommand]
+    private void FocusSearch()
+    {
+        Rail = RailState.Full;
+        IsSearching = true;
+    }
+
+    [RelayCommand]
+    private void ToggleTree() => IsTreeExpanded = !IsTreeExpanded;
 
     partial void OnActivePanelChanged(string value) => NotifyVisibility();
     partial void OnRailChanged(RailState value) => NotifyVisibility();
 
-    private void NotifyVisibility()
-    {
-        OnPropertyChanged(nameof(IsPlacesVisible));
-        OnPropertyChanged(nameof(IsTreeVisible));
-        OnPropertyChanged(nameof(IsSearchVisible));
-        OnPropertyChanged(nameof(IsRailVisible));
-        OnPropertyChanged(nameof(IsPanelVisible));
-    }
+    private void NotifyVisibility() => OnPropertyChanged(nameof(IsPanelVisible));
 
-    /// <summary>Ctrl+B cycles rather than toggles, so the icon rail is a state
-    /// of the sidebar rather than a separate design.</summary>
+    /// <summary>Two states now, not three: with no icon rail there is nothing
+    /// meaningful between "shown" and "hidden".</summary>
     [RelayCommand]
-    public void CycleRail() => Rail = Rail switch
-    {
-        RailState.Full => RailState.RailOnly,
-        RailState.RailOnly => RailState.Hidden,
-        _ => RailState.Full,
-    };
+    public void CycleRail() => Rail = Rail == RailState.Hidden ? RailState.Full : RailState.Hidden;
 
     [RelayCommand]
     public void ShowPanel(string? panel)

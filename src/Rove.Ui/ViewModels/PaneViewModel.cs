@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
 using Rove.Core;
@@ -8,6 +9,12 @@ using Rove.Core.FileSystem;
 using Rove.Core.Session;
 
 namespace Rove.Ui.ViewModels;
+
+/// <summary>One clickable ancestor in the breadcrumb bar.</summary>
+public sealed record PathSegment(string Name, string FullPath, ICommand Open, bool IsLast);
+
+/// <summary>A tag in the context menu, carrying the command that applies it.</summary>
+public sealed record TagOption(string Name, ICommand Command);
 
 /// <summary>
 /// One pane: a path, its listing, its own navigation history, its own sort.
@@ -65,9 +72,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     // ---- tags ----------------------------------------------------------
 
-    /// <summary>Tags offered in the menu — names seen before, plus whatever is
-    /// on the current selection.</summary>
-    public ObservableCollection<string> KnownTags { get; } = new();
+    /// <summary>
+    /// Tags offered in the menu. Each option carries its own command rather
+    /// than relying on a Style setter that walks up to the window: bindings
+    /// inside a ContextMenu are not compile-checked, so the less they depend
+    /// on, the fewer ways they fail silently.
+    /// </summary>
+    public ObservableCollection<TagOption> KnownTags { get; } = new();
 
     public bool HasTagStore => _tags is not null;
 
@@ -80,11 +91,23 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         KnownTags.Clear();
         if (_tags is null) return;
 
-        foreach (var tag in _tags.KnownTags) KnownTags.Add(tag);
+        foreach (var tag in _tags.KnownTags)
+            KnownTags.Add(new TagOption(tag, new RelayCommand(() => _ = ToggleTagAsync(tag))));
     }
 
     [RelayCommand]
-    public void BeginNewTag() => NewTagRequested?.Invoke(this, EventArgs.Empty);
+    public void BeginNewTag()
+    {
+        // Checked here so the reason is stated up front, rather than the prompt
+        // opening, being filled in, and quietly doing nothing.
+        if (SelectionPaths().Count == 0)
+        {
+            Status = "select something to tag first";
+            return;
+        }
+
+        NewTagRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// Adds the tag when any selected file lacks it, removes it when they all
@@ -100,12 +123,20 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
-            var add = false;
-            foreach (var path in paths)
+            var store = _tags;
+
+            var add = await Task.Run(() =>
             {
-                var existing = await _tags.GetAsync(path, CancellationToken.None).ConfigureAwait(false);
-                if (!existing.Contains(tag, StringComparer.OrdinalIgnoreCase)) { add = true; break; }
-            }
+                foreach (var path in paths)
+                {
+                    var existing = store.GetAsync(path, CancellationToken.None)
+                                        .AsTask().GetAwaiter().GetResult();
+
+                    if (!existing.Contains(tag, StringComparer.OrdinalIgnoreCase)) return true;
+                }
+
+                return false;
+            }).ConfigureAwait(false);
 
             await _tags.ToggleAsync(paths, tag, add, CancellationToken.None).ConfigureAwait(false);
 
@@ -122,8 +153,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand]
-    public Task ToggleTag(string? tag) => tag is null ? Task.CompletedTask : ToggleTagAsync(tag);
+
 
     // ---- user scripts --------------------------------------------------
 
@@ -192,6 +222,46 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _pathText = "";
     [ObservableProperty] private string _title = "…";
     [ObservableProperty] private string _status = "";
+
+    /// <summary>Free space on the filesystem holding this folder — Dolphin
+    /// keeps it in the status bar and it is genuinely useful there.</summary>
+    [ObservableProperty] private string _freeSpace = "";
+
+    /// <summary>
+    /// Off the UI thread: DriveInfo stats the filesystem, and on an unreachable
+    /// NFS or SMB mount that blocks for the mount timeout — which would freeze
+    /// the window on every navigation into it.
+    /// </summary>
+    private async Task RefreshFreeSpaceAsync(string path)
+    {
+        string text;
+
+        try
+        {
+            text = await Task.Run(() =>
+            {
+                var drive = new DriveInfo(path);
+                return $"{Bytes(drive.AvailableFreeSpace)} free";
+            }).ConfigureAwait(false);
+        }
+        catch
+        {
+            text = "";
+        }
+
+        // Discard if we have navigated on since.
+        if (CurrentPath != path) return;
+
+        await Dispatcher.UIThread.InvokeAsync(() => FreeSpace = text);
+    }
+
+    private static string Bytes(long value) => value switch
+    {
+        < 1024 => $"{value} B",
+        < 1024L * 1024 => $"{value / 1024.0:0.#} KB",
+        < 1024L * 1024 * 1024 => $"{value / (1024.0 * 1024):0.#} MB",
+        _ => $"{value / (1024.0 * 1024 * 1024):0.#} GB",
+    };
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isLoaded;
@@ -215,18 +285,36 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty] private double _viewportWidth = 1000;
 
-    public bool ShowSize => ViewportWidth >= 340;
-    public bool ShowModified => ViewportWidth >= 520;
-    public bool ShowPermissions => ViewportWidth >= 660;
-    public bool ShowMetadata => ViewportWidth >= 800;
+    /// <summary>
+    /// Set from the window's UI scale. Column content grows with the type
+    /// scale, so the widths at which columns stop fitting have to grow with it
+    /// too — fixed thresholds meant that at 2x every column still claimed to
+    /// fit while overflowing the pane.
+    /// </summary>
+    /// <summary>
+    /// The text scale, pushed in by the shell. Column thresholds are about how
+    /// much room *text* needs, so they follow the font axis — not the icon one.
+    /// This was left orphaned by the font/icon split and nothing assigned it,
+    /// so the thresholds silently stopped following the text size.
+    /// </summary>
+    [ObservableProperty] private double _textScale = 1.0;
 
-    partial void OnViewportWidthChanged(double value)
+    public bool ShowSize => ViewportWidth >= 340 * TextScale;
+    public bool ShowModified => ViewportWidth >= 520 * TextScale;
+    public bool ShowPermissions => ViewportWidth >= 680 * TextScale;
+    public bool ShowMetadata => ViewportWidth >= 840 * TextScale;
+
+    partial void OnTextScaleChanged(double value) => NotifyColumns();
+
+    private void NotifyColumns()
     {
         OnPropertyChanged(nameof(ShowSize));
         OnPropertyChanged(nameof(ShowModified));
         OnPropertyChanged(nameof(ShowPermissions));
         OnPropertyChanged(nameof(ShowMetadata));
     }
+
+    partial void OnViewportWidthChanged(double value) => NotifyColumns();
 
     // ---- preview -------------------------------------------------------
 
@@ -328,8 +416,42 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         return new string(buffer, 0, read);
     }
 
-    public bool IsColumnsView => View == ViewMode.Columns;
+    /// <summary>An empty listing used to look identical to one still loading.</summary>
+    public bool IsEmpty => IsLoaded && !IsLoading && Entries.Count == 0;
+
+    /// <summary>Stable left-hand status: what is here and what is picked.</summary>
+    public string Summary => SelectedEntries.Count > 1
+        ? $"{Entries.Count:N0} items · {SelectedEntries.Count:N0} selected"
+        : $"{Entries.Count:N0} items";
+
+    private void NotifyListingState()
+    {
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(Summary));
+    }
+
     public bool IsDetailsView => View == ViewMode.Details;
+    public bool IsGridView => View == ViewMode.Grid;
+
+    /// <summary>The chain is orthogonal to the layout — it can sit above either.</summary>
+    [ObservableProperty] private bool _showColumnStrip;
+
+    partial void OnShowColumnStripChanged(bool value)
+    {
+        if (_suppressReload) return;
+
+        if (value) _ = Miller.ShowAsync(CurrentPath);
+        else _miller?.Clear();
+    }
+
+    [RelayCommand]
+    public void ToggleColumnStrip() => ShowColumnStrip = !ShowColumnStrip;
+
+    [RelayCommand]
+    public void ShowAsDetails() => View = ViewMode.Details;
+
+    [RelayCommand]
+    public void ShowAsGrid() => View = ViewMode.Grid;
 
     private MillerViewModel? _miller;
 
@@ -367,20 +489,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnViewChanged(ViewMode value)
     {
-        OnPropertyChanged(nameof(IsColumnsView));
         OnPropertyChanged(nameof(IsDetailsView));
-
-        if (_suppressReload) return;
-
-        if (value == ViewMode.Columns)
-            _ = Miller.ShowAsync(CurrentPath);
-        else
-            _miller?.Clear();
+        OnPropertyChanged(nameof(IsGridView));
     }
 
     [RelayCommand]
     public void ToggleView()
-        => View = View == ViewMode.Details ? ViewMode.Columns : ViewMode.Details;
+        => View = View == ViewMode.Details ? ViewMode.Grid : ViewMode.Details;
 
     public bool CanGoBack => _back.Count > 0;
     public bool CanGoForward => _forward.Count > 0;
@@ -658,6 +773,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnCurrentPathChanged(string value)
     {
+        // CurrentPath is assigned from LoadListingAsync after a ConfigureAwait,
+        // so this runs on a pool thread. Breadcrumbs is bound to the UI, and
+        // mutating it from here is a crash waiting for a slow directory.
+        Dispatcher.UIThread.Post(RebuildBreadcrumbs);
+        _ = RefreshFreeSpaceAsync(value);
+
         var name = Path.GetFileName(value.TrimEnd('/'));
         Title = string.IsNullOrEmpty(name) ? "/" : name;
     }
@@ -689,6 +810,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             SortDescending = tab.SortDescending;
             ShowHidden = tab.ShowHidden;
             View = tab.View;
+            ShowColumnStrip = tab.ShowColumnStrip;
 
             _back.Clear();
             foreach (var p in tab.BackStack) _back.Push(p);
@@ -724,6 +846,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         SortDescending = SortDescending,
         ShowHidden = ShowHidden,
         View = View,
+        ShowColumnStrip = ShowColumnStrip,
         // Stacks serialise oldest-first so RestoreFrom can push in order.
         BackStack = _back.Reverse().ToList(),
         ForwardStack = _forward.Reverse().ToList(),
@@ -734,8 +857,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         if (!_suppressReload) _ = LoadAsync(CurrentPath);
     }
 
+    partial void OnIsLoadedChanged(bool value) => NotifyListingState();
+    partial void OnIsLoadingChanged(bool value) => NotifyListingState();
+
     partial void OnSortChanged(SortField value)
     {
+        NotifySortGlyphs();
         if (!_suppressReload) ResortInPlace();
     }
 
@@ -757,6 +884,89 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }, TaskScheduler.Default);
     }
 
+    // ---- sorting -------------------------------------------------------
+
+    /// <summary>
+    /// Click a column heading to sort by it; click again to reverse. The sort
+    /// state was implemented, persisted per tab and completely unreachable —
+    /// there was no control anywhere that set it.
+    /// </summary>
+    [RelayCommand]
+    public void SortBy(string? field)
+    {
+        var target = field switch
+        {
+            "size" => SortField.Size,
+            "modified" => SortField.Modified,
+            "kind" => SortField.Kind,
+            _ => SortField.Name,
+        };
+
+        if (Sort == target) SortDescending = !SortDescending;
+        else { Sort = target; SortDescending = false; }
+
+        NotifySortGlyphs();
+    }
+
+    private string Glyph(SortField field)
+        => Sort != field ? "" : SortDescending ? " \u25BE" : " \u25B4";
+
+    public string NameSortGlyph => Glyph(SortField.Name);
+    public string SizeSortGlyph => Glyph(SortField.Size);
+    public string ModifiedSortGlyph => Glyph(SortField.Modified);
+
+    private void NotifySortGlyphs()
+    {
+        OnPropertyChanged(nameof(NameSortGlyph));
+        OnPropertyChanged(nameof(SizeSortGlyph));
+        OnPropertyChanged(nameof(ModifiedSortGlyph));
+    }
+
+    // ---- breadcrumbs ---------------------------------------------------
+
+    /// <summary>
+    /// The path as clickable ancestors, Dolphin-style. Navigating two levels up
+    /// is one click rather than two, and the shape of the location is readable
+    /// without parsing a string.
+    /// </summary>
+    public ObservableCollection<PathSegment> Breadcrumbs { get; } = new();
+
+    /// <summary>Swaps the crumbs for an editable box — Ctrl+L, or clicking the
+    /// empty space beside them, exactly as Dolphin does it.</summary>
+    [ObservableProperty] private bool _isPathEditing;
+
+    [RelayCommand]
+    public void BeginEditPath()
+    {
+        PathText = CurrentPath;
+        IsPathEditing = true;
+    }
+
+    [RelayCommand]
+    public void EndEditPath() => IsPathEditing = false;
+
+    private void RebuildBreadcrumbs()
+    {
+        Breadcrumbs.Clear();
+        if (string.IsNullOrEmpty(CurrentPath)) return;
+
+        var parts = CurrentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var accumulated = "";
+
+        Breadcrumbs.Add(new PathSegment(
+            "/", "/", new RelayCommand(() => _ = NavigateAsync("/")), parts.Length == 0));
+
+        for (var i = 0; i < parts.Length; i++)
+        {
+            accumulated += "/" + parts[i];
+            var target = accumulated;
+
+            Breadcrumbs.Add(new PathSegment(parts[i], target,
+                new RelayCommand(() => _ = NavigateAsync(target)),
+                i == parts.Length - 1));
+        }
+    }
+
     /// <summary>
     /// Enter in the path box. A command rather than a code-behind KeyDown
     /// handler because there is now one path box per split side, and named
@@ -764,11 +974,62 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     [RelayCommand]
     public Task NavigateToPathText()
-        => string.IsNullOrWhiteSpace(PathText) ? Task.CompletedTask : NavigateAsync(PathText.Trim());
+    {
+        IsPathEditing = false;
+        return string.IsNullOrWhiteSpace(PathText) ? Task.CompletedTask : NavigateAsync(PathText.Trim());
+    }
 
     /// <summary>Escape in the path box: put back what is actually being shown.</summary>
     [RelayCommand]
-    public void RevertPathText() => PathText = CurrentPath;
+    public void RevertPathText()
+    {
+        PathText = CurrentPath;
+        IsPathEditing = false;
+    }
+
+    /// <summary>
+    /// Narrows the current listing to entries carrying a tag. Scoped to the
+    /// folder on screen rather than the whole home directory: tags live in
+    /// extended attributes with no index behind them, so anything wider would
+    /// mean walking the filesystem and reading an xattr per file.
+    /// </summary>
+    public async Task FilterByTagAsync(string tag)
+    {
+        if (_tags is null) return;
+
+        Status = $"finding \u201c{tag}\u201d here…";
+
+        // The whole scan in one hop rather than an await per file: this reads an
+        // extended attribute for every entry in the folder, and doing that from
+        // the UI thread froze the window on a large directory.
+        var snapshot = _all.ToList();
+        var store = _tags;
+
+        var matches = await Task.Run(() =>
+        {
+            var found = new List<string>();
+
+            foreach (var entry in snapshot)
+            {
+                if (store.GetAsync(entry.FullPath, CancellationToken.None)
+                         .AsTask().GetAwaiter().GetResult()
+                         .Contains(tag, StringComparer.OrdinalIgnoreCase))
+                    found.Add(entry.FullPath);
+            }
+
+            return found;
+        }).ConfigureAwait(false);
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var set = matches.ToHashSet(StringComparer.Ordinal);
+
+            Entries.ReplaceAll(_all.Where(e => set.Contains(e.FullPath)).ToList());
+            Status = $"{matches.Count} tagged \u201c{tag}\u201d · esc to clear";
+            IsFilterVisible = true;
+            FilterText = "";
+        });
+    }
 
     [RelayCommand]
     public void ClearFilter()
@@ -801,6 +1062,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnSortDescendingChanged(bool value)
     {
+        NotifySortGlyphs();
         if (!_suppressReload) ResortInPlace();
     }
 
@@ -808,7 +1070,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrEmpty(path)) return;
 
-        if (View == ViewMode.Columns)
+        if (ShowColumnStrip)
             await Miller.ShowAsync(path).ConfigureAwait(false);
 
         await LoadListingAsync(path).ConfigureAwait(false);
@@ -881,7 +1143,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 if (FilterText.Length > 0) ApplyFilter(); else ResortInPlace();
                 StartWatching(path);
                 sw.Stop();
-                Status = $"{count:N0} items · {sw.ElapsedMilliseconds:N0} ms";
+                Status = $"{Entries.Count:N0} items";
                 IsLoading = false;
                 IsLoaded = true;
             });

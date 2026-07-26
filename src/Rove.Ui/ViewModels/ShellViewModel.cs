@@ -56,6 +56,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
         // A chosen result navigates the active tab to its folder and selects it,
         // rather than opening the file — search is for finding, not launching.
+        // A tag click narrows whichever pane has focus.
+        Sidebar.AttachTags(tags, tag =>
+        {
+            if (ActiveTab is { } pane) _ = pane.FilterByTagAsync(tag);
+        });
+
         Sidebar.Search.ResultChosen += (_, entry) =>
         {
             var folder = entry.IsDirectory
@@ -99,25 +105,49 @@ public sealed partial class ShellViewModel : ObservableObject
     /// is an accessibility problem, and the right size depends on the display
     /// and the person, not on a value picked at build time.
     /// </summary>
-    [ObservableProperty] private double _uiScale = 1.0;
+    [ObservableProperty] private double _fontScale = 1.0;
+    [ObservableProperty] private double _iconScale = 1.0;
 
     /// <summary>Set by the view so scale changes can re-write the resources.</summary>
-    public Action<double>? ScaleApplier { get; set; }
+    public Action<double, double>? ScaleApplier { get; set; }
 
-    partial void OnUiScaleChanged(double value)
+    partial void OnFontScaleChanged(double value) => ApplyScales();
+    partial void OnIconScaleChanged(double value) => ApplyScales();
+
+    private void ApplyScales()
     {
-        ScaleApplier?.Invoke(value);
+        ScaleApplier?.Invoke(FontScale, IconScale);
+
+        // Column thresholds live on the pane and are measured in text width, so
+        // the font axis has to reach them or they stop matching what is drawn.
+        foreach (var group in new[] { Left, Right })
+        {
+            if (group is null) continue;
+            foreach (var tab in group.Tabs) tab.TextScale = FontScale;
+        }
+
         MarkDirty();
     }
 
-    [RelayCommand]
-    private void ZoomIn() => UiScale = Math.Round(Math.Min(UiScale + 0.1, 2.5), 2);
+    private static double Step(double value, double delta)
+        => Math.Round(Math.Clamp(value + delta, 0.7, 2.5), 2);
 
-    [RelayCommand]
-    private void ZoomOut() => UiScale = Math.Round(Math.Max(UiScale - 0.1, 0.8), 2);
+    [RelayCommand] private void FontLarger() => FontScale = Step(FontScale, 0.1);
+    [RelayCommand] private void FontSmaller() => FontScale = Step(FontScale, -0.1);
+    [RelayCommand] private void IconsLarger() => IconScale = Step(IconScale, 0.15);
+    [RelayCommand] private void IconsSmaller() => IconScale = Step(IconScale, -0.15);
 
+    /// <summary>Ctrl+0 puts both back, since one control resetting only half of
+    /// the sizing would be a puzzle rather than a reset.</summary>
     [RelayCommand]
-    private void ZoomReset() => UiScale = 1.0;
+    private void ZoomReset()
+    {
+        FontScale = 1.0;
+        IconScale = 1.0;
+    }
+
+    [RelayCommand] private void ZoomIn() => FontScale = Step(FontScale, 0.1);
+    [RelayCommand] private void ZoomOut() => FontScale = Step(FontScale, -0.1);
 
     public bool IsSplit => Right is not null;
 
@@ -143,6 +173,14 @@ public sealed partial class ShellViewModel : ObservableObject
     /// to know whether the window is split.
     /// </summary>
     public PaneViewModel? ActiveTab => ActiveGroup?.ActiveTab;
+
+    /// <summary>
+    /// The status line, named with the folder it describes. In a split, a bare
+    /// "21 items" does not say which of two identical listings it counted.
+    /// </summary>
+    public string ActiveStatus => ActiveTab is { } pane && IsSplit
+        ? $"{pane.Title} — {pane.Status}"
+        : ActiveTab?.Status ?? "";
 
     /// <summary>The other side, when split. Where "copy to other pane" sends things.</summary>
     public PaneGroupViewModel? OtherGroup
@@ -172,7 +210,10 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private PaneViewModel NewPane()
     {
-        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts, _tags);
+        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts, _tags)
+        {
+            TextScale = FontScale,
+        };
         pane.OperationStarted += OnOperationStarted;
         pane.PropertyChanged += OnPaneChanged;
         PaneCreated?.Invoke(this, pane);
@@ -184,7 +225,10 @@ public sealed partial class ShellViewModel : ObservableObject
         if (e.PropertyName != nameof(PaneGroupViewModel.ActiveTab)) return;
 
         if (ReferenceEquals(sender, ActiveGroup))
+        {
             OnPropertyChanged(nameof(ActiveTab));
+            OnPropertyChanged(nameof(ActiveStatus));
+        }
 
         MarkDirty();
     }
@@ -195,6 +239,7 @@ public sealed partial class ShellViewModel : ObservableObject
         newValue.IsActiveGroup = true;
 
         OnPropertyChanged(nameof(ActiveTab));
+        OnPropertyChanged(nameof(ActiveStatus));
         OnPropertyChanged(nameof(OtherGroup));
         MarkDirty();
     }
@@ -391,7 +436,8 @@ public sealed partial class ShellViewModel : ObservableObject
             Sidebar.Width = window.SidebarWidth;
             Sidebar.Rail = window.Rail;
             SplitRatio = window.SplitRatio;
-            UiScale = window.UiScale <= 0 ? 1.0 : window.UiScale;
+            FontScale = window.FontScale <= 0 ? 1.0 : window.FontScale;
+            IconScale = window.IconScale <= 0 ? 1.0 : window.IconScale;
         }
 
         _ = Sidebar.InitializeAsync();
@@ -460,7 +506,8 @@ public sealed partial class ShellViewModel : ObservableObject
                     SidebarWidth = Sidebar.Width,
                     Rail = Sidebar.Rail,
                     SplitRatio = SplitRatio,
-                    UiScale = UiScale,
+                    FontScale = FontScale,
+                    IconScale = IconScale,
                     RememberedRightPane = Right is null ? _rememberedRight : null,
                     Panes = panes,
                     ActivePaneIndex = ReferenceEquals(ActiveGroup, Right) ? 1 : 0,
@@ -488,6 +535,11 @@ public sealed partial class ShellViewModel : ObservableObject
             case nameof(PaneViewModel.SortDescending):
             case nameof(PaneViewModel.ShowHidden):
                 MarkDirty();
+                break;
+
+            case nameof(PaneViewModel.Status):
+            case nameof(PaneViewModel.Title):
+                OnPropertyChanged(nameof(ActiveStatus));
                 break;
         }
     }

@@ -4,8 +4,12 @@ namespace Rove.Core.Session;
 
 public enum SortField { Name, Size, Modified, Kind }
 
-/// <summary>Flat detail list, or Miller columns — one column per path level.</summary>
-public enum ViewMode { Details, Columns }
+/// <summary>
+/// How the listing itself is laid out. The Miller chain is deliberately NOT a
+/// member: it is a navigation strip that sits above a layout, so it can be on
+/// or off for either of these rather than being a third mutually exclusive mode.
+/// </summary>
+public enum ViewMode { Details, Grid }
 
 /// <summary>Ctrl+B cycles full → rail only → hidden.</summary>
 public enum RailState { Full, RailOnly, Hidden }
@@ -23,6 +27,9 @@ public sealed record TabState
     public bool SortDescending { get; init; }
     public bool ShowHidden { get; init; }
     public ViewMode View { get; init; } = ViewMode.Details;
+
+    /// <summary>The Miller navigation strip, independent of the layout.</summary>
+    public bool ShowColumnStrip { get; init; }
 
     /// <summary>
     /// Back/forward stacks, oldest first. Nobody restores navigation history —
@@ -57,7 +64,13 @@ public sealed record WindowSession
 
     /// <summary>Multiplies the whole type scale. Persisted because it is an
     /// accessibility setting, not a transient view state.</summary>
-    public double UiScale { get; init; } = 1.0;
+    /// <summary>
+    /// Text and icons scale independently. One combined control could not
+    /// express "large icons, small labels" or the reverse, and those are the
+    /// two settings people actually reach for.
+    /// </summary>
+    public double FontScale { get; init; } = 1.0;
+    public double IconScale { get; init; } = 1.0;
 
     /// <summary>
     /// The right side as it was when the split was last closed. Reopening the
@@ -82,10 +95,13 @@ public sealed record SessionState
     /// v5 added RememberedRightPane, so closing a split does not forget it.
     /// v6 added the per-tab View, once Miller columns existed.
     /// v7 added UiScale.
+    /// v8 split UiScale into FontScale and IconScale, made ViewMode mean the
+    /// listing layout (Details or Grid), and moved the Miller chain to its own
+    /// ShowColumnStrip flag.
     /// An unrecognised version is ignored rather than migrated or thrown on —
     /// a session file must never prevent startup.
     /// </summary>
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
 
     public int Version { get; init; } = CurrentVersion;
     public IReadOnlyList<WindowSession> Windows { get; init; } = [];
