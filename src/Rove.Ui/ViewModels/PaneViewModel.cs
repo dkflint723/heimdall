@@ -89,6 +89,28 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// <summary>Highlights the pane a drop would land in.</summary>
     [ObservableProperty] private bool _isDropTarget;
 
+    // ---- dynamic columns -----------------------------------------------
+
+    /// <summary>
+    /// Set by the view as the pane resizes. Columns drop out in priority order
+    /// as space runs out rather than being squeezed or clipped — which is what
+    /// makes a narrow split pane still readable.
+    /// </summary>
+    [ObservableProperty] private double _viewportWidth = 1000;
+
+    public bool ShowSize => ViewportWidth >= 340;
+    public bool ShowModified => ViewportWidth >= 520;
+    public bool ShowPermissions => ViewportWidth >= 660;
+    public bool ShowMetadata => ViewportWidth >= 800;
+
+    partial void OnViewportWidthChanged(double value)
+    {
+        OnPropertyChanged(nameof(ShowSize));
+        OnPropertyChanged(nameof(ShowModified));
+        OnPropertyChanged(nameof(ShowPermissions));
+        OnPropertyChanged(nameof(ShowMetadata));
+    }
+
     // ---- preview -------------------------------------------------------
 
     [ObservableProperty] private bool _isPreviewVisible;

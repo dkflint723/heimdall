@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Rove.Core.FileSystem;
+using Rove.Core;
 using Rove.Core.Places;
 using Rove.Core.Search;
 using Rove.Core.Session;
@@ -21,25 +22,33 @@ public partial class MainWindow : Window
 {
     private readonly ShellViewModel _shell;
     private readonly JsonSessionStore _store;
+    private readonly IPropertiesProvider _properties;
+    private readonly IAccessEditor? _accessEditor;
     private bool _closeApproved;
 
     public MainWindow()
     {
         InitializeComponent();
 
-        // Providers are constructed directly for now. This is the seam that
-        // becomes DI resolution once Rove.Windows exists — the window must
-        // never name a platform type beyond these lines.
-        IFileSystemProvider fs = new LinuxFileSystemProvider();
-        IFileOperations ops = new LinuxFileOperations();
-        IPlacesProvider places = new LinuxPlacesProvider(JsonSessionStore.DefaultDirectory());
-        IApplicationLauncher launcher = new LinuxLauncher();
-        IClipboardService clipboard = ClipboardService.ForWindow(this);
-        ISearchProvider search = new LinuxSearchProvider();
+        // The one and only place a platform type is named, and the one guard
+        // the analyser needs — the platform assemblies are annotated
+        // Linux-only, so everything inside them is free of per-call checks.
+        IPlatform platform;
 
-        // Static because the thumbnail attached property is reached from XAML,
-        // which has no constructor to inject into.
-        Thumbnails.ThumbnailLoader.Provider = new XdgThumbnailProvider();
+        if (OperatingSystem.IsLinux())
+            platform = new LinuxPlatform(JsonSessionStore.DefaultDirectory());
+        else
+            throw new PlatformNotSupportedException(
+                "No platform implementation for this operating system yet.");
+
+        _properties = platform.Properties;
+        _accessEditor = platform.AccessEditor;
+
+        Thumbnails.ThumbnailLoader.Provider = platform.Thumbnails;
+        Thumbnails.RowMetadata.Provider = platform.Metadata;
+
+        // Not platform-specific: the clipboard comes from the toolkit.
+        IClipboardService clipboard = ClipboardService.ForWindow(this);
 
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
@@ -49,11 +58,14 @@ public partial class MainWindow : Window
         var state = _store.Load();
         ApplyGeometry(state);
 
-        _shell = new ShellViewModel(fs, ops, _store, places, launcher, clipboard, search)
+        _shell = new ShellViewModel(
+            platform.FileSystem, platform.Operations, _store,
+            platform.Places, platform.Launcher, clipboard, platform.Search)
         {
             GeometryProvider = CaptureGeometry,
         };
         _shell.PaneCreated += (_, pane) => WirePane(pane);
+        _shell.PropertiesRequested += (_, _) => ShowProperties();
         _shell.ScaleApplier = ApplyUiScale;
         DataContext = _shell;
 
@@ -174,6 +186,32 @@ public partial class MainWindow : Window
     {
         foreach (var (key, value) in BaseMetrics)
             Resources[key] = Math.Round(value * scale, 1);
+    }
+
+    /// <summary>
+    /// Non-modal on purpose: you frequently want to compare two files, and a
+    /// modal dialog makes that impossible without closing it first.
+    /// </summary>
+    private void ShowProperties()
+    {
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var paths = pane.SelectedEntries.Count > 0
+            ? pane.SelectedEntries.Select(x => x.FullPath).ToList()
+            : pane.SelectedEntry is { } one ? [one.FullPath]
+            : new List<string> { pane.CurrentPath };
+
+        if (paths.Count == 0) return;
+
+        new PropertiesWindow(new PropertiesViewModel(_properties, paths, _accessEditor)).Show(this);
+    }
+
+    /// <summary>Feeds the pane its own width so columns can drop out in
+    /// priority order rather than being squeezed.</summary>
+    private void OnListSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is Control { DataContext: PaneViewModel pane })
+            pane.ViewportWidth = e.NewSize.Width;
     }
 
     // ---- drag and drop -------------------------------------------------
@@ -614,6 +652,11 @@ public partial class MainWindow : Window
 
         switch (e.Key)
         {
+            case Key.Enter when e.KeyModifiers.HasFlag(KeyModifiers.Alt):
+                e.Handled = true;
+                ShowProperties();
+                break;
+
             case Key.Enter:
                 e.Handled = true;
                 _ = pane.OpenSelectedAsync();
@@ -623,6 +666,7 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 _ = pane.GoBackAsync();
                 break;
+
 
             // Delete trashes, which is recoverable and needs no prompt.
             // Shift+Delete is irreversible and always confirms first.

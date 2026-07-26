@@ -127,6 +127,9 @@
               <Separator/>
               <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
               <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
+              <Separator/>
+              <MenuItem Header="Properties"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"/>
             </ContextMenu>
           </ItemsControl.ContextMenu>
 
@@ -218,13 +221,21 @@
                    the strip. Column widths and margin match the row template so
                    the headings actually sit over their columns. -->
               <Border DockPanel.Dock="Top" Padding="0,3" Background="#202020">
-                <Grid ColumnDefinitions="Auto,*,100,170" Margin="12,0,8,0">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="12,0,8,0">
                   <Border Grid.Column="0" Width="{DynamicResource ThumbSize}" Margin="0,0,8,0"/>
                   <TextBlock Grid.Column="1" Text="name"
                              FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
-                  <TextBlock Grid.Column="2" Text="size"
+                  <TextBlock Grid.Column="2" Width="120" Margin="8,0,0,0" Text="info"
+                             IsVisible="{Binding ShowMetadata}"
                              FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
-                  <TextBlock Grid.Column="3" Text="modified"
+                  <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" Text="permissions"
+                             IsVisible="{Binding ShowPermissions}"
+                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+                  <TextBlock Grid.Column="4" Width="100" Text="size"
+                             IsVisible="{Binding ShowSize}"
+                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+                  <TextBlock Grid.Column="5" Width="170" Text="modified"
+                             IsVisible="{Binding ShowModified}"
                              FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
                 </Grid>
               </Border>
@@ -233,6 +244,7 @@
                        SelectedItem="{Binding SelectedEntry}"
                        SelectedItems="{Binding SelectedEntries}"
                        DragDrop.AllowDrop="True"
+                       SizeChanged="OnListSizeChanged"
                        SelectionMode="Multiple" Background="Transparent" Padding="0">
                 <ListBox.Styles>
                   <Style Selector="ListBoxItem">
@@ -256,7 +268,7 @@
                       <Border Width="3" HorizontalAlignment="Left"
                               Background="{DynamicResource AccentBrush}"
                               IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                      <Grid ColumnDefinitions="Auto,*,100,170" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
+                      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
                         <Image Grid.Column="0" Width="{DynamicResource ThumbSize}" Height="{DynamicResource ThumbSize}" Margin="0,0,8,0"
                                VerticalAlignment="Center"
                                th:ThumbnailImage.Path="{Binding FullPath}"
@@ -264,10 +276,25 @@
                         <TextBlock Grid.Column="1" Text="{Binding Name}"
                                    FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" Text="{Binding Length}"
+                        <!-- Type-specific fact: pixel dimensions for images, child count
+                             for folders. First to drop when space runs out. -->
+                        <TextBlock Grid.Column="2" Width="120" Margin="8,0,0,0"
+                                   th:RowMetadata.Entry="{Binding}"
+                                   IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowMetadata}"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.45"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        <!-- POSIX mode, formatted as ls -l prints it. -->
+                        <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0"
+                                   th:RowMetadata.Access="{Binding}"
+                                   IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowPermissions}"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.5"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="4" Width="100" Text="{Binding Length}"
+                                   IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowSize}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.55"
                                    VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="3" Text="{Binding LastWriteTime}"
+                        <TextBlock Grid.Column="5" Width="170" Text="{Binding LastWriteTime}"
+                                   IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowModified}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.55"
                                    VerticalAlignment="Center"/>
                       </Grid>

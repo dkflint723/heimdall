@@ -143,6 +143,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public event EventHandler<PaneViewModel>? PaneCreated;
 
+    /// <summary>The view owns window creation, so the command just asks.</summary>
+    public event EventHandler? PropertiesRequested;
+
+    [RelayCommand]
+    private void ShowProperties() => PropertiesRequested?.Invoke(this, EventArgs.Empty);
+
     public Func<WindowSession>? GeometryProvider { get; set; }
 
     [ObservableProperty] private string _operationStatus = "";
@@ -332,14 +338,11 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         ActiveOperation = handle;
 
-        if (handle is Rove.Linux.OperationHandle concrete)
-        {
-            concrete.Progressed += (_, p) =>
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    OperationStatus = p.ItemsTotal <= 1 && p.BytesTotal == 0
-                        ? p.CurrentItem ?? ""
-                        : $"{p.ItemsDone}/{p.ItemsTotal}  {Format(p.BytesDone)}/{Format(p.BytesTotal)}  {p.CurrentItem}");
-        }
+        handle.Progressed += (_, p) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                OperationStatus = p.ItemsTotal <= 1 && p.BytesTotal == 0
+                    ? p.CurrentItem ?? ""
+                    : $"{p.ItemsDone}/{p.ItemsTotal}  {Format(p.BytesDone)}/{Format(p.BytesTotal)}  {p.CurrentItem}");
 
         _ = handle.Completion.ContinueWith(_ =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>

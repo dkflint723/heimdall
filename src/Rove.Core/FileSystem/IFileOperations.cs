@@ -27,6 +27,14 @@ public interface IOperationHandle
     void Cancel();
 
     Task Completion { get; }
+
+    /// <summary>
+    /// Progress as it happens. On the interface rather than the concrete type
+    /// because the shell subscribes to it, and reaching into a platform
+    /// assembly for an event is exactly the leak the platform split exists to
+    /// prevent.
+    /// </summary>
+    event EventHandler<OperationProgress>? Progressed;
 }
 
 /// <summary>
