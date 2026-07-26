@@ -86,6 +86,32 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty] private double _splitRatio = 0.5;
 
+    /// <summary>
+    /// Multiplies the whole type scale and every metric derived from it. Exists
+    /// as a user control rather than a constant because "the text is too small"
+    /// is an accessibility problem, and the right size depends on the display
+    /// and the person, not on a value picked at build time.
+    /// </summary>
+    [ObservableProperty] private double _uiScale = 1.0;
+
+    /// <summary>Set by the view so scale changes can re-write the resources.</summary>
+    public Action<double>? ScaleApplier { get; set; }
+
+    partial void OnUiScaleChanged(double value)
+    {
+        ScaleApplier?.Invoke(value);
+        MarkDirty();
+    }
+
+    [RelayCommand]
+    private void ZoomIn() => UiScale = Math.Round(Math.Min(UiScale + 0.1, 2.5), 2);
+
+    [RelayCommand]
+    private void ZoomOut() => UiScale = Math.Round(Math.Max(UiScale - 0.1, 0.8), 2);
+
+    [RelayCommand]
+    private void ZoomReset() => UiScale = 1.0;
+
     public bool IsSplit => Right is not null;
 
     // Hiding a control does not give its column back — an invisible pane in a
@@ -347,6 +373,7 @@ public sealed partial class ShellViewModel : ObservableObject
             Sidebar.Width = window.SidebarWidth;
             Sidebar.Rail = window.Rail;
             SplitRatio = window.SplitRatio;
+            UiScale = window.UiScale <= 0 ? 1.0 : window.UiScale;
         }
 
         _ = Sidebar.InitializeAsync();
@@ -415,6 +442,7 @@ public sealed partial class ShellViewModel : ObservableObject
                     SidebarWidth = Sidebar.Width,
                     Rail = Sidebar.Rail,
                     SplitRatio = SplitRatio,
+                    UiScale = UiScale,
                     RememberedRightPane = Right is null ? _rememberedRight : null,
                     Panes = panes,
                     ActivePaneIndex = ReferenceEquals(ActiveGroup, Right) ? 1 : 0,

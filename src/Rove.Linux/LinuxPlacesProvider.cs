@@ -50,6 +50,13 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
 
     private List<Place> BuildUserPlaces()
     {
+        // Imported Dolphin and GTK bookmarks routinely point at the same
+        // folders as the XDG user dirs, so without this every one of Home,
+        // Documents, Downloads and friends appears twice.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        static string Normalise(string path) => path.TrimEnd('/');
+
         var places = new List<Place>
         {
             new()
@@ -58,6 +65,8 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
                 Kind = PlaceKind.UserFolder, Icon = "home",
             },
         };
+
+        seen.Add(Normalise(Home));
 
         // XDG user dirs rather than hardcoded English names — this file is also
         // what makes the folder names correct in a localised install.
@@ -71,7 +80,8 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
             ("XDG_VIDEOS_DIR", "video"),
         })
         {
-            if (ReadUserDir(key) is { } path && Directory.Exists(path))
+            if (ReadUserDir(key) is { } path && Directory.Exists(path)
+                && seen.Add(Normalise(path)))
             {
                 places.Add(new Place
                 {
@@ -83,6 +93,8 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
 
         foreach (var pin in _pins)
         {
+            if (!seen.Add(Normalise(pin.Path))) continue;
+
             places.Add(new Place
             {
                 Id = "pin:" + pin.Path,
@@ -279,14 +291,38 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
     /// shortcuts already in place matters more for whether they keep using this
     /// than any individual feature does.
     /// </summary>
+    /// <summary>Paths already offered as built-in entries, so importing a
+    /// bookmark to one of them adds nothing.</summary>
+    private HashSet<string> BuiltInPaths()
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal) { Home.TrimEnd('/') };
+
+        foreach (var key in new[]
+        {
+            "XDG_DESKTOP_DIR", "XDG_DOWNLOAD_DIR", "XDG_DOCUMENTS_DIR",
+            "XDG_PICTURES_DIR", "XDG_MUSIC_DIR", "XDG_VIDEOS_DIR",
+        })
+        {
+            if (ReadUserDir(key) is { } path) set.Add(path.TrimEnd('/'));
+        }
+
+        return set;
+    }
+
     public ValueTask<int> ImportExistingAsync(CancellationToken ct)
     {
         var before = _pins.Count;
 
-        ImportXbel(Path.Combine(Home, ".local", "share", "user-places.xbel"));
-        ImportGtkBookmarks(Path.Combine(Home, ".config", "gtk-3.0", "bookmarks"));
+        var builtIn = BuiltInPaths();
 
-        if (_pins.Count != before)
+        ImportXbel(Path.Combine(Home, ".local", "share", "user-places.xbel"), builtIn);
+        ImportGtkBookmarks(Path.Combine(Home, ".config", "gtk-3.0", "bookmarks"), builtIn);
+
+        // Anything previously imported that duplicates a built-in is dropped
+        // too, so an existing places.json is repaired rather than preserved.
+        _pins.RemoveAll(pin => builtIn.Contains(pin.Path.TrimEnd('/')));
+
+        if (_pins.Count != before || builtIn.Overlaps(_pins.Select(p => p.Path.TrimEnd('/'))))
         {
             SavePins();
             PlacesChanged?.Invoke(this, EventArgs.Empty);
@@ -295,7 +331,7 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
         return ValueTask.FromResult(_pins.Count - before);
     }
 
-    private void ImportXbel(string path)
+    private void ImportXbel(string path, HashSet<string> builtIn)
     {
         if (!File.Exists(path)) return;
 
@@ -312,6 +348,8 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
                 var title = bookmark.Element("title")?.Value
                             ?? Path.GetFileName(dir.TrimEnd('/'));
 
+                if (builtIn.Contains(dir.TrimEnd('/'))) continue;
+
                 if (!_pins.Any(p => p.Path == dir))
                     _pins.Add(new PinnedPlace(dir, title));
             }
@@ -319,7 +357,7 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
         catch { /* a malformed bookmarks file is not worth failing startup over */ }
     }
 
-    private void ImportGtkBookmarks(string path)
+    private void ImportGtkBookmarks(string path, HashSet<string> builtIn)
     {
         if (!File.Exists(path)) return;
 
@@ -335,6 +373,8 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
 
                 var dir = Uri.UnescapeDataString(uri[7..]);
                 if (!Directory.Exists(dir)) continue;
+
+                if (builtIn.Contains(dir.TrimEnd('/'))) continue;
 
                 if (!_pins.Any(p => p.Path == dir))
                     _pins.Add(new PinnedPlace(dir, label ?? Path.GetFileName(dir.TrimEnd('/'))));

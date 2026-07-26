@@ -53,20 +53,23 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _clipboard = clipboard;
     }
 
+    public BulkObservableCollection<FileEntry> Entries { get; } = new();
+
     /// <summary>
     /// Bound to the list's SelectedItems. Operations act on this, not on
     /// SelectedEntry — deleting one of five selected files would be a nasty
     /// surprise.
     /// </summary>
-    public System.Collections.ObjectModel.ObservableCollection<FileEntry> SelectedEntries { get; } = new();
+    public ObservableCollection<FileEntry> SelectedEntries { get; } = new();
+
+    /// <summary>Applications offered by the "open with" submenu.</summary>
+    public ObservableCollection<LaunchOption> OpenWithOptions { get; } = new();
 
     /// <summary>Raised when an operation starts, so the shell can show progress.</summary>
     public event EventHandler<IOperationHandle>? OperationStarted;
 
     /// <summary>Raised when a rename is requested, so the view can prompt.</summary>
     public event EventHandler<FileEntry>? RenameRequested;
-
-    public BulkObservableCollection<FileEntry> Entries { get; } = new();
 
     [ObservableProperty] private string _currentPath = "";
     [ObservableProperty] private string _pathText = "";
@@ -81,6 +84,161 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isFilterVisible;
     [ObservableProperty] private SortField _sort = SortField.Name;
     [ObservableProperty] private bool _sortDescending;
+    [ObservableProperty] private ViewMode _view = ViewMode.Details;
+
+    // ---- preview -------------------------------------------------------
+
+    [ObservableProperty] private bool _isPreviewVisible;
+    [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _previewImage;
+    [ObservableProperty] private string _previewText = "";
+    [ObservableProperty] private string _previewTitle = "";
+    [ObservableProperty] private string _previewDetail = "";
+
+    public bool HasPreviewImage => PreviewImage is not null;
+    public bool HasPreviewText => PreviewText.Length > 0;
+
+    private CancellationTokenSource? _previewCts;
+
+    [RelayCommand]
+    public void TogglePreview()
+    {
+        IsPreviewVisible = !IsPreviewVisible;
+        if (IsPreviewVisible) _ = RefreshPreviewAsync();
+    }
+
+    partial void OnPreviewImageChanged(Avalonia.Media.Imaging.Bitmap? value)
+        => OnPropertyChanged(nameof(HasPreviewImage));
+
+    partial void OnPreviewTextChanged(string value)
+        => OnPropertyChanged(nameof(HasPreviewText));
+
+    private async Task RefreshPreviewAsync()
+    {
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _previewCts = new CancellationTokenSource();
+        var ct = _previewCts.Token;
+
+        PreviewImage = null;
+        PreviewText = "";
+
+        if (SelectedEntry is not { } entry)
+        {
+            PreviewTitle = "";
+            PreviewDetail = "nothing selected";
+            return;
+        }
+
+        PreviewTitle = entry.Name;
+        PreviewDetail = entry.IsDirectory
+            ? "folder"
+            : $"{entry.Length:N0} bytes · {entry.LastWriteTime:yyyy-MM-dd HH:mm}";
+
+        if (entry.IsDirectory) return;
+
+        try
+        {
+            var bitmap = await Thumbnails.ThumbnailLoader
+                .LoadAsync(entry.FullPath, 512, ct).ConfigureAwait(false);
+
+            if (bitmap is not null)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() => PreviewImage = bitmap);
+                return;
+            }
+
+            // Not an image — show the head of the file if it looks like text.
+            // Capped hard: previewing a gigabyte log should cost the same as
+            // previewing a config file.
+            if (entry.Length is > 0 and < 8_000_000 && LooksTextual(entry.Name))
+            {
+                var text = await ReadHeadAsync(entry.FullPath, 4000, ct).ConfigureAwait(false);
+                await Dispatcher.UIThread.InvokeAsync(() => PreviewText = text);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => PreviewDetail = ex.Message);
+        }
+    }
+
+    private static bool LooksTextual(string name)
+    {
+        var ext = Path.GetExtension(name);
+
+        if (ext.Length == 0) return true;
+
+        return ext.ToLowerInvariant() is
+            ".txt" or ".md" or ".log" or ".json" or ".xml" or ".yaml" or ".yml" or
+            ".cs" or ".py" or ".sh" or ".ps1" or ".c" or ".h" or ".cpp" or ".rs" or
+            ".go" or ".js" or ".ts" or ".html" or ".css" or ".ini" or ".conf" or
+            ".toml" or ".csv" or ".sql" or ".axaml" or ".xaml" or ".csproj" or ".props";
+    }
+
+    private static async Task<string> ReadHeadAsync(string path, int chars, CancellationToken ct)
+    {
+        using var reader = new StreamReader(path);
+        var buffer = new char[chars];
+        var read = await reader.ReadAsync(buffer, ct).ConfigureAwait(false);
+        return new string(buffer, 0, read);
+    }
+
+    public bool IsColumnsView => View == ViewMode.Columns;
+    public bool IsDetailsView => View == ViewMode.Details;
+
+    private MillerViewModel? _miller;
+
+    /// <summary>Built lazily — a pane that never enters column view never pays for it.</summary>
+    public MillerViewModel Miller => _miller ??= CreateMiller();
+
+    private MillerViewModel CreateMiller()
+    {
+        var miller = new MillerViewModel(_fs, () => ShowHidden, Compare);
+
+        // The chain reports its deepest selected directory, and that becomes
+        // CurrentPath. Every existing operation — paste, new folder, rename,
+        // the context menu — therefore keeps working without knowing this view
+        // exists at all.
+        miller.DirectoryChanged += (_, path) =>
+        {
+            if (CurrentPath == path) return;
+
+            PathText = path;
+
+            // LoadAsync would rebuild the chain we are currently inside, so the
+            // listing is loaded directly. CurrentPath is set by it.
+            _ = LoadListingAsync(path);
+        };
+
+        miller.EntryChanged += (_, entry) =>
+        {
+            SelectedEntry = entry;
+            SelectedEntries.Clear();
+            if (entry is { } value) SelectedEntries.Add(value);
+        };
+
+        return miller;
+    }
+
+    partial void OnViewChanged(ViewMode value)
+    {
+        OnPropertyChanged(nameof(IsColumnsView));
+        OnPropertyChanged(nameof(IsDetailsView));
+
+        if (_suppressReload) return;
+
+        if (value == ViewMode.Columns)
+            _ = Miller.ShowAsync(CurrentPath);
+        else
+            _miller?.Clear();
+    }
+
+    [RelayCommand]
+    public void ToggleView()
+        => View = View == ViewMode.Details ? ViewMode.Columns : ViewMode.Details;
 
     public bool CanGoBack => _back.Count > 0;
     public bool CanGoForward => _forward.Count > 0;
@@ -132,12 +290,26 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         return Task.CompletedTask;
     }
 
-    /// <summary>Applications offered by the "open with" submenu, rebuilt as the
-    /// selection changes so the list always matches the highlighted file.</summary>
-    public ObservableCollection<LaunchOption> OpenWithOptions { get; } = new();
+    private IReadOnlyList<string> SelectionPaths()
+        => SelectedEntries.Count > 0
+            ? SelectedEntries.Select(e => e.FullPath).ToList()
+            : SelectedEntry is { } one ? [one.FullPath] : [];
+
+    private void Track(IOperationHandle handle)
+    {
+        OperationStarted?.Invoke(this, handle);
+
+        // The listing is refreshed once, at the end — refreshing per item would
+        // rebuild the view thousands of times during a large copy.
+        _ = handle.Completion.ContinueWith(
+            _ => Dispatcher.UIThread.Post(() => _ = RefreshAsync()),
+            TaskScheduler.Default);
+    }
 
     partial void OnSelectedEntryChanged(FileEntry? value)
     {
+        if (IsPreviewVisible) _ = RefreshPreviewAsync();
+
         OpenWithOptions.Clear();
         if (_launcher is null || value is not { IsDirectory: false } entry) return;
 
@@ -265,10 +437,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public Task OpenSelectedAsync()
         => SelectedEntry is { } entry ? OpenAsync(entry) : Task.CompletedTask;
 
-    private IReadOnlyList<string> SelectionPaths()
-        => SelectedEntries.Count > 0
-            ? SelectedEntries.Select(e => e.FullPath).ToList()
-            : SelectedEntry is { } one ? [one.FullPath] : [];
 
     /// <summary>Delete key. Recoverable, so no confirmation prompt.</summary>
     [RelayCommand]
@@ -332,16 +500,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void Track(IOperationHandle handle)
-    {
-        OperationStarted?.Invoke(this, handle);
-
-        // The listing is only refreshed once, at the end — refreshing per item
-        // would rebuild the view thousands of times during a large copy.
-        _ = handle.Completion.ContinueWith(
-            _ => Dispatcher.UIThread.Post(() => _ = RefreshAsync()),
-            TaskScheduler.Default);
-    }
 
     partial void OnCurrentPathChanged(string value)
     {
@@ -375,6 +533,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             Sort = tab.Sort;
             SortDescending = tab.SortDescending;
             ShowHidden = tab.ShowHidden;
+            View = tab.View;
 
             _back.Clear();
             foreach (var p in tab.BackStack) _back.Push(p);
@@ -409,6 +568,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         Sort = Sort,
         SortDescending = SortDescending,
         ShowHidden = ShowHidden,
+        View = View,
         // Stacks serialise oldest-first so RestoreFrom can push in order.
         BackStack = _back.Reverse().ToList(),
         ForwardStack = _forward.Reverse().ToList(),
@@ -470,6 +630,16 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     }
 
     private async Task LoadAsync(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+
+        if (View == ViewMode.Columns)
+            await Miller.ShowAsync(path).ConfigureAwait(false);
+
+        await LoadListingAsync(path).ConfigureAwait(false);
+    }
+
+    private async Task LoadListingAsync(string path)
     {
         if (string.IsNullOrEmpty(path)) return;
 
@@ -733,6 +903,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _miller?.Clear();
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = null;

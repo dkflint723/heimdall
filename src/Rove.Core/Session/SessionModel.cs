@@ -4,6 +4,9 @@ namespace Rove.Core.Session;
 
 public enum SortField { Name, Size, Modified, Kind }
 
+/// <summary>Flat detail list, or Miller columns — one column per path level.</summary>
+public enum ViewMode { Details, Columns }
+
 /// <summary>Ctrl+B cycles full → rail only → hidden.</summary>
 public enum RailState { Full, RailOnly, Hidden }
 
@@ -19,6 +22,7 @@ public sealed record TabState
     public SortField Sort { get; init; } = SortField.Name;
     public bool SortDescending { get; init; }
     public bool ShowHidden { get; init; }
+    public ViewMode View { get; init; } = ViewMode.Details;
 
     /// <summary>
     /// Back/forward stacks, oldest first. Nobody restores navigation history —
@@ -51,6 +55,10 @@ public sealed record WindowSession
     public int ActivePaneIndex { get; init; }
     public double SplitRatio { get; init; } = 0.5;
 
+    /// <summary>Multiplies the whole type scale. Persisted because it is an
+    /// accessibility setting, not a transient view state.</summary>
+    public double UiScale { get; init; } = 1.0;
+
     /// <summary>
     /// The right side as it was when the split was last closed. Reopening the
     /// split restores this rather than starting over, and it survives a restart
@@ -72,10 +80,12 @@ public sealed record SessionState
     /// v3 added the sidebar fields back, once there was a sidebar to store.
     /// v4 added SplitRatio, once split view existed.
     /// v5 added RememberedRightPane, so closing a split does not forget it.
+    /// v6 added the per-tab View, once Miller columns existed.
+    /// v7 added UiScale.
     /// An unrecognised version is ignored rather than migrated or thrown on —
     /// a session file must never prevent startup.
     /// </summary>
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 7;
 
     public int Version { get; init; } = CurrentVersion;
     public IReadOnlyList<WindowSession> Windows { get; init; } = [];

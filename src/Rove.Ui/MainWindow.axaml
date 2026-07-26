@@ -2,12 +2,39 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fs="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
         xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
+        xmlns:th="clr-namespace:Rove.Ui.Thumbnails"
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="rove"
         Width="1000" Height="680">
 
   <Window.Resources>
+
+    <!-- Type scale and row metrics in one place, as DynamicResource so Ctrl +/-
+         re-writes them at runtime. Every hardcoded 11/12/13 in this file used
+         to be its own decision; now there is one. -->
+    <x:Double x:Key="FontSizeTiny">11</x:Double>
+    <x:Double x:Key="FontSizeSmall">12.5</x:Double>
+    <x:Double x:Key="FontSizeBase">14</x:Double>
+    <x:Double x:Key="FontSizeLarge">15.5</x:Double>
+    <x:Double x:Key="RowHeight">34</x:Double>
+    <x:Double x:Key="ThumbSize">26</x:Double>
+    <x:Double x:Key="IconSize">17</x:Double>
+    <x:Double x:Key="RailWidth">44</x:Double>
+    <x:Double x:Key="ColumnStripHeight">108</x:Double>
+
+    <!-- Colours from the Okabe-Ito palette, which is designed to stay
+         distinguishable under deuteranopia, protanopia and tritanopia. The
+         accent and the active-pane marker are a blue/orange pair rather than
+         anything red/green, and they also differ in lightness so they survive
+         being seen in greyscale.
+
+         The rule this sets for the rest of the app: hue never carries meaning
+         on its own. Anything colour-coded also gets position, shape or text —
+         which is what makes file-age shading and tags workable at all. -->
+    <SolidColorBrush x:Key="AccentBrush">#56B4E9</SolidColorBrush>
+    <SolidColorBrush x:Key="AccentDimBrush">#1E3A4C</SolidColorBrush>
+    <SolidColorBrush x:Key="ActivePaneBrush">#E69F00</SolidColorBrush>
 
     <!-- Both halves of a split render from this one template. The split is two
          instances of the same view, not a second code path — which is why
@@ -16,12 +43,22 @@
       <DockPanel>
 
         <Border DockPanel.Dock="Top" Background="#141414" Padding="6,4,6,0">
-         <StackPanel Orientation="Horizontal">
+         <DockPanel>
+          <!-- Per-pane, so in a split each side toggles its own chain. Binds
+               through this group's ActiveTab rather than the shell's, which
+               would only ever be the focused half. -->
+          <ToggleButton DockPanel.Dock="Right" Content="&#x2AFC;"
+                        FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
+                        Margin="6,0,0,4" VerticalAlignment="Center"
+                        IsChecked="{Binding ActiveTab.IsColumnsView, Mode=OneWay}"
+                        Command="{Binding ActiveTab.ToggleViewCommand}"
+                        ToolTip.Tip="column view  (f8)"/>
+          <StackPanel Orientation="Horizontal">
           <TabStrip ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}">
             <TabStrip.ItemTemplate>
               <DataTemplate x:DataType="vm:PaneViewModel">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="{Binding Title}" FontSize="12" VerticalAlignment="Center"/>
+                  <TextBlock Text="{Binding Title}" FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"/>
                   <Button Content="&#x2715;" FontSize="9" Opacity="0.45"
                           Background="Transparent" BorderThickness="0"
                           Padding="2" VerticalAlignment="Center"
@@ -31,25 +68,19 @@
               </DataTemplate>
             </TabStrip.ItemTemplate>
           </TabStrip>
-          <Button Content="+" FontSize="14" Opacity="0.45"
+          <Button Content="+" FontSize="{DynamicResource FontSizeLarge}" Opacity="0.45"
                   Background="Transparent" BorderThickness="0"
                   Padding="10,2" VerticalAlignment="Center"
                   Command="{Binding NewTabHereCommand}"
                   ToolTip.Tip="new tab in this pane  (ctrl+t)"/>
-         </StackPanel>
-        </Border>
-
-        <Border DockPanel.Dock="Top" Padding="8,3" Background="#202020">
-          <Grid ColumnDefinitions="*,100,170">
-            <TextBlock Grid.Column="0" Text="name"     FontSize="11" Opacity="0.45"/>
-            <TextBlock Grid.Column="1" Text="size"     FontSize="11" Opacity="0.45"/>
-            <TextBlock Grid.Column="2" Text="modified" FontSize="11" Opacity="0.45"/>
-          </Grid>
+          </StackPanel>
+         </DockPanel>
         </Border>
 
         <!-- The only cue for which half takes the next keystroke, so it has to
              be visible but quiet. -->
-        <Border DockPanel.Dock="Bottom" Height="2" Background="#4F46E5"
+        <Border DockPanel.Dock="Bottom" Height="3"
+                Background="{DynamicResource ActivePaneBrush}"
                 IsVisible="{Binding IsActiveGroup}"/>
 
         <ItemsControl ItemsSource="{Binding Tabs}" Background="#0F0F0F">
@@ -110,10 +141,97 @@
               <!-- Every pane's view stays alive, toggled by IsVisible rather
                    than swapped through a ContentControl, so switching tabs
                    never resets scroll position. -->
+              <Panel IsVisible="{Binding IsActive}">
+
+              <DockPanel>
+
+              <!-- Miller columns as a navigation strip above the listing, not
+                   instead of it. The chain is for getting around; the list
+                   below keeps the detail columns, multi-select and every
+                   operation working on a plain list. -->
+              <Border DockPanel.Dock="Top"
+                      Height="{DynamicResource ColumnStripHeight}"
+                      BorderThickness="0,0,0,0.5" BorderBrush="#242424"
+                      IsVisible="{Binding IsColumnsView}">
+              <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Miller.Columns}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MillerColumnViewModel">
+                      <Border Width="210" BorderThickness="0,0,0.5,0" BorderBrush="#242424">
+                        <ListBox ItemsSource="{Binding Entries}"
+                                 SelectedItem="{Binding SelectedEntry}"
+                                 Background="Transparent" Padding="0">
+                          <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                              <Setter Property="Padding" Value="0"/>
+                              <Setter Property="MinHeight" Value="0"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                              <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
+                              <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+                              <Setter Property="Background" Value="Transparent"/>
+                            </Style>
+                          </ListBox.Styles>
+                          <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <VirtualizingStackPanel/>
+                            </ItemsPanelTemplate>
+                          </ListBox.ItemsPanel>
+                          <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="fs:FileEntry">
+                              <Panel>
+                                <Border Background="{DynamicResource AccentDimBrush}"
+                                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                <Border Width="3" HorizontalAlignment="Left"
+                                        Background="{DynamicResource AccentBrush}"
+                                        IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                <Grid ColumnDefinitions="*,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
+                                  <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                             FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
+                                             TextTrimming="CharacterEllipsis"/>
+                                  <TextBlock Grid.Column="1" Text="&#x203A;" FontSize="{DynamicResource FontSizeBase}"
+                                             Opacity="0.35" VerticalAlignment="Center"
+                                             IsVisible="{Binding IsDirectory}"/>
+                                </Grid>
+                              </Panel>
+                            </DataTemplate>
+                          </ListBox.ItemTemplate>
+                        </ListBox>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+              </Border>
+
+              <!-- Below the chain, because it labels the listing rather than
+                   the strip. Column widths and margin match the row template so
+                   the headings actually sit over their columns. -->
+              <Border DockPanel.Dock="Top" Padding="0,3" Background="#202020">
+                <Grid ColumnDefinitions="Auto,*,100,170" Margin="12,0,8,0">
+                  <Border Grid.Column="0" Width="{DynamicResource ThumbSize}" Margin="0,0,8,0"/>
+                  <TextBlock Grid.Column="1" Text="name"
+                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+                  <TextBlock Grid.Column="2" Text="size"
+                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+                  <TextBlock Grid.Column="3" Text="modified"
+                             FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+                </Grid>
+              </Border>
+
               <ListBox ItemsSource="{Binding Entries}"
                        SelectedItem="{Binding SelectedEntry}"
                        SelectedItems="{Binding SelectedEntries}"
-                       IsVisible="{Binding IsActive}"
                        SelectionMode="Multiple" Background="Transparent" Padding="0">
                 <ListBox.Styles>
                   <Style Selector="ListBoxItem">
@@ -128,20 +246,65 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="fs:FileEntry">
-                    <Grid ColumnDefinitions="*,100,170" Height="22" Margin="8,0">
-                      <TextBlock Grid.Column="0" Text="{Binding Name}"
-                                 FontSize="12" VerticalAlignment="Center"
-                                 TextTrimming="CharacterEllipsis"/>
-                      <TextBlock Grid.Column="1" Text="{Binding Length}"
-                                 FontSize="11" FontFamily="monospace" Opacity="0.55"
-                                 VerticalAlignment="Center"/>
-                      <TextBlock Grid.Column="2" Text="{Binding LastWriteTime}"
-                                 FontSize="11" FontFamily="monospace" Opacity="0.55"
-                                 VerticalAlignment="Center"/>
-                    </Grid>
+                    <Panel>
+                      <!-- Selection marker drawn by us rather than by the control theme.
+                           A 3px bar plus a fill means selection reads by position as well
+                           as by colour, which the theme default does not. -->
+                      <Border Background="{DynamicResource AccentDimBrush}"
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                      <Border Width="3" HorizontalAlignment="Left"
+                              Background="{DynamicResource AccentBrush}"
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                      <Grid ColumnDefinitions="Auto,*,100,170" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
+                        <Image Grid.Column="0" Width="{DynamicResource ThumbSize}" Height="{DynamicResource ThumbSize}" Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               th:ThumbnailImage.Path="{Binding FullPath}"
+                               th:ThumbnailImage.Size="64"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                   FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" Text="{Binding Length}"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.55"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="3" Text="{Binding LastWriteTime}"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.55"
+                                   VerticalAlignment="Center"/>
+                      </Grid>
+                    </Panel>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
+
+              </DockPanel>
+
+              <!-- Preview sits over the listing rather than beside it: at this
+                   width a side panel would squeeze the list to nothing, and
+                   the overlay dismisses with the same key that opened it. -->
+              <Border IsVisible="{Binding IsPreviewVisible}"
+                      Background="#0C0C0C" BorderThickness="0.5,0,0,0"
+                      BorderBrush="#242424" HorizontalAlignment="Right"
+                      Width="360" Padding="12">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,10">
+                    <TextBlock Text="{Binding PreviewTitle}" FontSize="{DynamicResource FontSizeLarge}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding PreviewDetail}" FontSize="{DynamicResource FontSizeTiny}"
+                               Opacity="0.45" FontFamily="monospace"/>
+                  </StackPanel>
+
+                  <Image Source="{Binding PreviewImage}"
+                         IsVisible="{Binding HasPreviewImage}"
+                         Stretch="Uniform" VerticalAlignment="Top"/>
+
+                  <ScrollViewer IsVisible="{Binding HasPreviewText}">
+                    <TextBlock Text="{Binding PreviewText}" FontSize="{DynamicResource FontSizeSmall}"
+                               FontFamily="monospace" TextWrapping="NoWrap"
+                               Opacity="0.75"/>
+                  </ScrollViewer>
+                </DockPanel>
+              </Border>
+
+              </Panel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
 
@@ -163,6 +326,8 @@
     <KeyBinding Gesture="F5"             Command="{Binding ActiveTab.RefreshCommand}"/>
     <KeyBinding Gesture="F2"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
     <KeyBinding Gesture="F3"             Command="{Binding ToggleSplitCommand}"/>
+    <KeyBinding Gesture="F8"             Command="{Binding ActiveTab.ToggleViewCommand}"/>
+    <KeyBinding Gesture="Space"          Command="{Binding ActiveTab.TogglePreviewCommand}"/>
     <KeyBinding Gesture="F4"             Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
     <KeyBinding Gesture="Ctrl+Z"         Command="{Binding ActiveTab.UndoCommand}"/>
     <KeyBinding Gesture="Ctrl+C"         Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
@@ -170,6 +335,9 @@
     <KeyBinding Gesture="Ctrl+V"         Command="{Binding ActiveTab.PasteCommand}"/>
     <KeyBinding Gesture="Ctrl+I"         Command="{Binding ActiveTab.ToggleFilterCommand}"/>
     <KeyBinding Gesture="Ctrl+Shift+N"   Command="{Binding ActiveTab.NewFolderCommand}"/>
+    <KeyBinding Gesture="Ctrl+OemPlus"   Command="{Binding ZoomInCommand}"/>
+    <KeyBinding Gesture="Ctrl+OemMinus"  Command="{Binding ZoomOutCommand}"/>
+    <KeyBinding Gesture="Ctrl+D0"        Command="{Binding ZoomResetCommand}"/>
     <KeyBinding Gesture="Ctrl+B"         Command="{Binding Sidebar.CycleRailCommand}"/>
     <KeyBinding Gesture="Ctrl+D"         Command="{Binding PinCurrentCommand}"/>
     <!-- Alt rather than Ctrl for panels: Ctrl+1..9 already switches tabs,
@@ -190,10 +358,10 @@
                 IsEnabled="{Binding ActiveTab.CanGoForward}" Width="32"/>
         <Button Content="&#x2191;" Command="{Binding ActiveTab.GoUpCommand}"
                 IsEnabled="{Binding ActiveTab.CanGoUp}" Width="32"/>
-        <TextBox x:Name="PathBox" Text="{Binding ActiveTab.PathText}" Width="560"
-                 FontFamily="monospace" FontSize="12"/>
+        <TextBox x:Name="PathBox" Text="{Binding ActiveTab.PathText}" MinWidth="320"
+                 FontFamily="monospace" FontSize="{DynamicResource FontSizeBase}"/>
         <CheckBox Content="hidden" IsChecked="{Binding ActiveTab.ShowHidden}"/>
-        <ToggleButton Content="&#x25EB;" FontSize="14" Padding="8,2"
+        <ToggleButton Content="&#x25EB;" FontSize="{DynamicResource FontSizeBase}" Padding="8,3"
                       IsChecked="{Binding IsSplit, Mode=OneWay}"
                       Command="{Binding ToggleSplitCommand}"
                       ToolTip.Tip="split view  (f3)"/>
@@ -203,24 +371,24 @@
     <Border DockPanel.Dock="Top" Padding="8,5" Background="#1d1d1d"
             IsVisible="{Binding ActiveTab.IsFilterVisible}">
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="filter" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
+        <TextBlock Text="filter" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center"/>
         <TextBox x:Name="FilterBox" Text="{Binding ActiveTab.FilterText}"
-                 Width="300" FontFamily="monospace" FontSize="12"/>
-        <TextBlock Text="esc to clear" FontSize="11" Opacity="0.35" VerticalAlignment="Center"/>
+                 Width="300" FontFamily="monospace" FontSize="{DynamicResource FontSizeBase}"/>
+        <TextBlock Text="esc to clear" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.35" VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
 
     <Border DockPanel.Dock="Bottom" Padding="8,4" Background="#181818">
       <TextBlock Text="{Binding ActiveTab.Status}" FontFamily="monospace"
-                 FontSize="11" Opacity="0.7"/>
+                 FontSize="{DynamicResource FontSizeSmall}" Opacity="0.7"/>
     </Border>
 
     <Border DockPanel.Dock="Bottom" Padding="8,5" Background="#1d1d1d"
             IsVisible="{Binding ActiveOperation, Converter={x:Static ObjectConverters.IsNotNull}}">
       <StackPanel Orientation="Horizontal" Spacing="10">
         <TextBlock Text="{Binding OperationStatus}" FontFamily="monospace"
-                   FontSize="11" VerticalAlignment="Center"/>
-        <Button Content="cancel" FontSize="11" Padding="8,2"
+                   FontSize="{DynamicResource FontSizeSmall}" VerticalAlignment="Center"/>
+        <Button Content="cancel" FontSize="{DynamicResource FontSizeSmall}" Padding="8,2"
                 Command="{Binding CancelOperationCommand}"/>
       </StackPanel>
     </Border>
@@ -230,25 +398,25 @@
     <Border x:Name="PromptBar" DockPanel.Dock="Bottom" Padding="8,6"
             Background="#232323" IsVisible="False">
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock x:Name="PromptLabel" FontSize="12" VerticalAlignment="Center"/>
+        <TextBlock x:Name="PromptLabel" FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"/>
         <TextBox x:Name="PromptInput" Width="320" FontFamily="monospace"
-                 FontSize="12" IsVisible="False"/>
-        <TextBlock x:Name="PromptHint" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
+                 FontSize="{DynamicResource FontSizeBase}" IsVisible="False"/>
+        <TextBlock x:Name="PromptHint" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
 
-    <Border DockPanel.Dock="Left" Background="#141414" Width="38"
+    <Border DockPanel.Dock="Left" Background="#141414" Width="{DynamicResource RailWidth}"
             IsVisible="{Binding Sidebar.IsRailVisible}">
       <StackPanel Orientation="Vertical" Spacing="4" Margin="0,8">
-        <Button Content="&#x2605;" FontSize="15" Width="38" Height="34"
+        <Button Content="&#x2605;" FontSize="{DynamicResource IconSize}" Width="{DynamicResource RailWidth}" Height="40"
                 Background="Transparent" BorderThickness="0"
                 Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"
                 ToolTip.Tip="places  (alt+1)"/>
-        <Button Content="&#x25B8;" FontSize="15" Width="38" Height="34"
+        <Button Content="&#x25B8;" FontSize="{DynamicResource IconSize}" Width="{DynamicResource RailWidth}" Height="40"
                 Background="Transparent" BorderThickness="0"
                 Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="tree"
                 ToolTip.Tip="tree  (alt+2)"/>
-        <Button Content="&#x2315;" FontSize="16" Width="38" Height="34"
+        <Button Content="&#x2315;" FontSize="{DynamicResource IconSize}" Width="{DynamicResource RailWidth}" Height="40"
                 Background="Transparent" BorderThickness="0"
                 Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="search"
                 ToolTip.Tip="search  (ctrl+f)"/>
@@ -265,7 +433,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:PlaceGroupViewModel">
                 <StackPanel Margin="0,0,0,10">
-                  <TextBlock Text="{Binding Label}" FontSize="11" Opacity="0.4"
+                  <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.4"
                              Margin="12,0,0,4"/>
                   <ItemsControl ItemsSource="{Binding Places}">
                     <ItemsControl.ItemTemplate>
@@ -277,12 +445,12 @@
                                 HorizontalContentAlignment="Left"
                                 Padding="12,3" Opacity="{Binding Opacity}">
                           <StackPanel>
-                            <TextBlock Text="{Binding Label}" FontSize="12"
+                            <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeBase}"
                                        TextTrimming="CharacterEllipsis"/>
                             <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
                                          Height="3" Margin="0,4,8,0"
                                          IsVisible="{Binding HasCapacity}"/>
-                            <TextBlock Text="{Binding CapacityText}" FontSize="10"
+                            <TextBlock Text="{Binding CapacityText}" FontSize="{DynamicResource FontSizeTiny}"
                                        Opacity="0.4" IsVisible="{Binding HasCapacity}"/>
                           </StackPanel>
                         </Button>
@@ -298,10 +466,10 @@
         <DockPanel IsVisible="{Binding Sidebar.IsSearchVisible}" Margin="8,8">
           <StackPanel DockPanel.Dock="Top" Spacing="6">
             <TextBox x:Name="SearchBox" Text="{Binding Sidebar.Search.Query}"
-                     PlaceholderText="search…" FontSize="12"/>
-            <CheckBox Content="this folder only" FontSize="11"
+                     PlaceholderText="search…" FontSize="{DynamicResource FontSizeBase}"/>
+            <CheckBox Content="this folder only" FontSize="{DynamicResource FontSizeSmall}"
                       IsChecked="{Binding Sidebar.Search.ScopeToCurrentFolder}"/>
-            <TextBlock Text="{Binding Sidebar.Search.Status}" FontSize="10"
+            <TextBlock Text="{Binding Sidebar.Search.Status}" FontSize="{DynamicResource FontSizeTiny}"
                        Opacity="0.45" FontFamily="monospace"
                        TextWrapping="Wrap" Margin="0,0,0,4"/>
           </StackPanel>
@@ -312,6 +480,19 @@
               <Style Selector="ListBoxItem">
                 <Setter Property="Padding" Value="0"/>
                 <Setter Property="MinHeight" Value="0"/>
+              </Style>
+              <!-- A left edge bar as well as a fill: selection stays legible
+                   without relying on the colour being perceived. -->
+              <!-- The theme's own selection fill is suppressed; the row
+                   template draws the cue so it is guaranteed to appear. -->
+              <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent"/>
+              </Style>
+              <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent"/>
+              </Style>
+              <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent"/>
               </Style>
             </ListBox.Styles>
             <ListBox.ItemsPanel>
@@ -327,9 +508,9 @@
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left" Padding="4,3">
                   <StackPanel>
-                    <TextBlock Text="{Binding Name}" FontSize="12"
+                    <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBase}"
                                TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding FullPath}" FontSize="10" Opacity="0.35"
+                    <TextBlock Text="{Binding FullPath}" FontSize="{DynamicResource FontSizeTiny}" Opacity="0.35"
                                FontFamily="monospace"
                                TextTrimming="CharacterEllipsis"/>
                   </StackPanel>
@@ -344,7 +525,7 @@
                   Background="Transparent" Margin="4,8">
           <TreeView.ItemTemplate>
             <TreeDataTemplate x:DataType="vm:FolderNode" ItemsSource="{Binding Children}">
-              <TextBlock Text="{Binding Label}" FontSize="12"
+              <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeBase}"
                          TextTrimming="CharacterEllipsis"/>
             </TreeDataTemplate>
           </TreeView.ItemTemplate>

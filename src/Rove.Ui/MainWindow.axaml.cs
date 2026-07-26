@@ -35,6 +35,10 @@ public partial class MainWindow : Window
         IClipboardService clipboard = ClipboardService.ForWindow(this);
         ISearchProvider search = new LinuxSearchProvider();
 
+        // Static because the thumbnail attached property is reached from XAML,
+        // which has no constructor to inject into.
+        Thumbnails.ThumbnailLoader.Provider = new XdgThumbnailProvider();
+
         _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
 
         // Loaded synchronously so geometry is applied before first paint. An
@@ -48,6 +52,7 @@ public partial class MainWindow : Window
             GeometryProvider = CaptureGeometry,
         };
         _shell.PaneCreated += (_, pane) => WirePane(pane);
+        _shell.ScaleApplier = ApplyUiScale;
         DataContext = _shell;
 
         PathBox.KeyDown += OnPathBoxKeyDown;
@@ -71,6 +76,9 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         Resized += (_, _) => _shell.NotifyWindowChanged();
         PositionChanged += (_, _) => _shell.NotifyWindowChanged();
+
+        // Applied before Start so the first paint is already at the right size.
+        ApplyUiScale(state?.Windows.FirstOrDefault()?.UiScale is > 0 and var s ? s : 1.0);
 
         _shell.Start(state);
 
@@ -124,6 +132,32 @@ public partial class MainWindow : Window
         var total = left + right;
 
         if (total > 1) _shell.SplitRatio = Math.Clamp(left / total, 0.1, 0.9);
+    }
+
+    // ---- ui scale ------------------------------------------------------
+
+    /// <summary>
+    /// Base metrics at scale 1.0. Everything in the markup is a DynamicResource
+    /// pointing at these, so re-writing them here restyles the whole window
+    /// without touching a single control.
+    /// </summary>
+    private static readonly (string Key, double Value)[] BaseMetrics =
+    [
+        ("FontSizeTiny", 11),
+        ("FontSizeSmall", 12.5),
+        ("FontSizeBase", 14),
+        ("FontSizeLarge", 15.5),
+        ("RowHeight", 34),
+        ("ThumbSize", 26),
+        ("IconSize", 17),
+        ("RailWidth", 44),
+        ("ColumnStripHeight", 108),
+    ];
+
+    private void ApplyUiScale(double scale)
+    {
+        foreach (var (key, value) in BaseMetrics)
+            Resources[key] = Math.Round(value * scale, 1);
     }
 
     // ---- geometry ------------------------------------------------------
