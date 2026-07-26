@@ -46,8 +46,17 @@ public sealed record WindowSession
     public double Height { get; init; } = 680;
     public bool IsMaximized { get; init; }
 
+    /// <summary>One entry when unsplit, two when split.</summary>
     public IReadOnlyList<PaneState> Panes { get; init; } = [];
     public int ActivePaneIndex { get; init; }
+    public double SplitRatio { get; init; } = 0.5;
+
+    /// <summary>
+    /// The right side as it was when the split was last closed. Reopening the
+    /// split restores this rather than starting over, and it survives a restart
+    /// so closing the split isn't a quiet way to lose a location.
+    /// </summary>
+    public PaneState? RememberedRightPane { get; init; }
 
     // Re-added in v3 now that the sidebar exists. These were removed in v2
     // precisely because nothing read or wrote them.
@@ -61,10 +70,12 @@ public sealed record SessionState
     /// <summary>
     /// v2 removed scroll/selection/view/column fields and added ShowHidden.
     /// v3 added the sidebar fields back, once there was a sidebar to store.
+    /// v4 added SplitRatio, once split view existed.
+    /// v5 added RememberedRightPane, so closing a split does not forget it.
     /// An unrecognised version is ignored rather than migrated or thrown on —
     /// a session file must never prevent startup.
     /// </summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 5;
 
     public int Version { get; init; } = CurrentVersion;
     public IReadOnlyList<WindowSession> Windows { get; init; } = [];

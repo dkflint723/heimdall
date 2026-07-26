@@ -1,12 +1,156 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fs="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
-        xmlns:fsys="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
         xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="rove"
         Width="1000" Height="680">
+
+  <Window.Resources>
+
+    <!-- Both halves of a split render from this one template. The split is two
+         instances of the same view, not a second code path — which is why
+         PaneViewModel was built to own its own path, history and selection. -->
+    <DataTemplate x:Key="PaneGroupTemplate" x:DataType="vm:PaneGroupViewModel">
+      <DockPanel>
+
+        <Border DockPanel.Dock="Top" Background="#141414" Padding="6,4,6,0">
+         <StackPanel Orientation="Horizontal">
+          <TabStrip ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}">
+            <TabStrip.ItemTemplate>
+              <DataTemplate x:DataType="vm:PaneViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Title}" FontSize="12" VerticalAlignment="Center"/>
+                  <Button Content="&#x2715;" FontSize="9" Opacity="0.45"
+                          Background="Transparent" BorderThickness="0"
+                          Padding="2" VerticalAlignment="Center"
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseTabCommand}"
+                          CommandParameter="{Binding}"/>
+                </StackPanel>
+              </DataTemplate>
+            </TabStrip.ItemTemplate>
+          </TabStrip>
+          <Button Content="+" FontSize="14" Opacity="0.45"
+                  Background="Transparent" BorderThickness="0"
+                  Padding="10,2" VerticalAlignment="Center"
+                  Command="{Binding NewTabHereCommand}"
+                  ToolTip.Tip="new tab in this pane  (ctrl+t)"/>
+         </StackPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top" Padding="8,3" Background="#202020">
+          <Grid ColumnDefinitions="*,100,170">
+            <TextBlock Grid.Column="0" Text="name"     FontSize="11" Opacity="0.45"/>
+            <TextBlock Grid.Column="1" Text="size"     FontSize="11" Opacity="0.45"/>
+            <TextBlock Grid.Column="2" Text="modified" FontSize="11" Opacity="0.45"/>
+          </Grid>
+        </Border>
+
+        <!-- The only cue for which half takes the next keystroke, so it has to
+             be visible but quiet. -->
+        <Border DockPanel.Dock="Bottom" Height="2" Background="#4F46E5"
+                IsVisible="{Binding IsActiveGroup}"/>
+
+        <ItemsControl ItemsSource="{Binding Tabs}" Background="#0F0F0F">
+
+          <ItemsControl.ContextMenu>
+            <ContextMenu x:DataType="vm:PaneGroupViewModel">
+              <ContextMenu.Styles>
+                <Style Selector="ContextMenu ScrollViewer">
+                  <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+                  <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+                </Style>
+              </ContextMenu.Styles>
+              <MenuItem Header="Open"
+                        Command="{Binding ActiveTab.OpenSelectedCommand}"/>
+              <MenuItem Header="Open with"
+                        ItemsSource="{Binding ActiveTab.OpenWithOptions}">
+                <MenuItem.ItemTemplate>
+                  <DataTemplate x:DataType="fs:LaunchOption">
+                    <TextBlock Text="{Binding Name}"/>
+                  </DataTemplate>
+                </MenuItem.ItemTemplate>
+                <MenuItem.Styles>
+                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:LaunchOption">
+                    <Setter Property="Command"
+                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.OpenWithAppCommand}"/>
+                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                  </Style>
+                </MenuItem.Styles>
+              </MenuItem>
+              <Separator/>
+              <MenuItem Header="Copy"  Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
+              <MenuItem Header="Cut"   Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
+              <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"/>
+              <Separator/>
+              <MenuItem Header="Copy to other pane"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyToOtherPaneCommand}"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
+              <MenuItem Header="Move to other pane"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveToOtherPaneCommand}"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
+              <Separator/>
+              <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"/>
+              <MenuItem Header="Move to trash" Command="{Binding ActiveTab.TrashSelectedCommand}"/>
+              <Separator/>
+              <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
+              <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
+            </ContextMenu>
+          </ItemsControl.ContextMenu>
+
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <Grid/>
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PaneViewModel">
+              <!-- Every pane's view stays alive, toggled by IsVisible rather
+                   than swapped through a ContentControl, so switching tabs
+                   never resets scroll position. -->
+              <ListBox ItemsSource="{Binding Entries}"
+                       SelectedItem="{Binding SelectedEntry}"
+                       SelectedItems="{Binding SelectedEntries}"
+                       IsVisible="{Binding IsActive}"
+                       SelectionMode="Multiple" Background="Transparent" Padding="0">
+                <ListBox.Styles>
+                  <Style Selector="ListBoxItem">
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="MinHeight" Value="0"/>
+                  </Style>
+                </ListBox.Styles>
+                <ListBox.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                  </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="fs:FileEntry">
+                    <Grid ColumnDefinitions="*,100,170" Height="22" Margin="8,0">
+                      <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                 FontSize="12" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Length}"
+                                 FontSize="11" FontFamily="monospace" Opacity="0.55"
+                                 VerticalAlignment="Center"/>
+                      <TextBlock Grid.Column="2" Text="{Binding LastWriteTime}"
+                                 FontSize="11" FontFamily="monospace" Opacity="0.55"
+                                 VerticalAlignment="Center"/>
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+
+        </ItemsControl>
+
+      </DockPanel>
+    </DataTemplate>
+
+  </Window.Resources>
 
   <Window.KeyBindings>
     <KeyBinding Gesture="Ctrl+T"         Command="{Binding NewTabCommand}"/>
@@ -18,15 +162,16 @@
     <KeyBinding Gesture="Alt+Up"         Command="{Binding ActiveTab.GoUpCommand}"/>
     <KeyBinding Gesture="F5"             Command="{Binding ActiveTab.RefreshCommand}"/>
     <KeyBinding Gesture="F2"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
+    <KeyBinding Gesture="F3"             Command="{Binding ToggleSplitCommand}"/>
+    <KeyBinding Gesture="F4"             Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
     <KeyBinding Gesture="Ctrl+Z"         Command="{Binding ActiveTab.UndoCommand}"/>
-    <KeyBinding Gesture="Ctrl+B"         Command="{Binding Sidebar.CycleRailCommand}"/>
-    <KeyBinding Gesture="Ctrl+D"         Command="{Binding PinCurrentCommand}"/>
     <KeyBinding Gesture="Ctrl+C"         Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
     <KeyBinding Gesture="Ctrl+X"         Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
     <KeyBinding Gesture="Ctrl+V"         Command="{Binding ActiveTab.PasteCommand}"/>
     <KeyBinding Gesture="Ctrl+I"         Command="{Binding ActiveTab.ToggleFilterCommand}"/>
     <KeyBinding Gesture="Ctrl+Shift+N"   Command="{Binding ActiveTab.NewFolderCommand}"/>
-    <KeyBinding Gesture="F4"             Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
+    <KeyBinding Gesture="Ctrl+B"         Command="{Binding Sidebar.CycleRailCommand}"/>
+    <KeyBinding Gesture="Ctrl+D"         Command="{Binding PinCurrentCommand}"/>
     <!-- Alt rather than Ctrl for panels: Ctrl+1..9 already switches tabs,
          browser-style, and that convention is the stronger one. -->
     <KeyBinding Gesture="Alt+D1"         Command="{Binding Sidebar.ShowPanelCommand}" CommandParameter="places"/>
@@ -34,28 +179,6 @@
   </Window.KeyBindings>
 
   <DockPanel>
-
-    <!-- Stock TabStrip rather than a hand-rolled ItemsControl. SelectedItem
-         binds straight to ActiveTab, which removes the $parent[Window] command
-         plumbing the previous version needed to select a tab. -->
-    <Border DockPanel.Dock="Top" Background="#141414" Padding="6,4,6,0">
-      <TabStrip ItemsSource="{Binding Tabs}"
-                SelectedItem="{Binding ActiveTab}">
-        <TabStrip.ItemTemplate>
-          <DataTemplate x:DataType="vm:PaneViewModel">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <TextBlock Text="{Binding Title}" FontSize="12"
-                         VerticalAlignment="Center"/>
-              <Button Content="&#x2715;" FontSize="9" Opacity="0.45"
-                      Background="Transparent" BorderThickness="0"
-                      Padding="2" VerticalAlignment="Center"
-                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseTabCommand}"
-                      CommandParameter="{Binding}"/>
-            </StackPanel>
-          </DataTemplate>
-        </TabStrip.ItemTemplate>
-      </TabStrip>
-    </Border>
 
     <Border DockPanel.Dock="Top" Padding="8,6" Background="#181818">
       <StackPanel Orientation="Horizontal" Spacing="6">
@@ -68,6 +191,20 @@
         <TextBox x:Name="PathBox" Text="{Binding ActiveTab.PathText}" Width="560"
                  FontFamily="monospace" FontSize="12"/>
         <CheckBox Content="hidden" IsChecked="{Binding ActiveTab.ShowHidden}"/>
+        <ToggleButton Content="&#x25EB;" FontSize="14" Padding="8,2"
+                      IsChecked="{Binding IsSplit, Mode=OneWay}"
+                      Command="{Binding ToggleSplitCommand}"
+                      ToolTip.Tip="split view  (f3)"/>
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" Padding="8,5" Background="#1d1d1d"
+            IsVisible="{Binding ActiveTab.IsFilterVisible}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="filter" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
+        <TextBox x:Name="FilterBox" Text="{Binding ActiveTab.FilterText}"
+                 Width="300" FontFamily="monospace" FontSize="12"/>
+        <TextBlock Text="esc to clear" FontSize="11" Opacity="0.35" VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
 
@@ -76,8 +213,6 @@
                  FontSize="11" Opacity="0.7"/>
     </Border>
 
-    <!-- Operation progress. Present only while something is running, so the
-         common case costs no vertical space. -->
     <Border DockPanel.Dock="Bottom" Padding="8,5" Background="#1d1d1d"
             IsVisible="{Binding ActiveOperation, Converter={x:Static ObjectConverters.IsNotNull}}">
       <StackPanel Orientation="Horizontal" Spacing="10">
@@ -88,45 +223,18 @@
       </StackPanel>
     </Border>
 
-    <!-- Inline prompt for rename and for confirming an irreversible delete.
-         A bar rather than a modal dialog: it keeps the listing visible, which
-         matters when you are about to destroy something in it. -->
+    <!-- Inline bar rather than a modal dialog: when you are about to destroy
+         something you want the listing still visible behind the question. -->
     <Border x:Name="PromptBar" DockPanel.Dock="Bottom" Padding="8,6"
             Background="#232323" IsVisible="False">
       <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock x:Name="PromptLabel" FontSize="12" VerticalAlignment="Center"/>
         <TextBox x:Name="PromptInput" Width="320" FontFamily="monospace"
                  FontSize="12" IsVisible="False"/>
-        <TextBlock x:Name="PromptHint" FontSize="11" Opacity="0.5"
-                   VerticalAlignment="Center"/>
+        <TextBlock x:Name="PromptHint" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
 
-    <Border DockPanel.Dock="Top" Padding="8,5" Background="#1d1d1d"
-            IsVisible="{Binding ActiveTab.IsFilterVisible}">
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="filter" FontSize="11" Opacity="0.5" VerticalAlignment="Center"/>
-        <TextBox x:Name="FilterBox" Text="{Binding ActiveTab.FilterText}"
-                 Width="300" FontFamily="monospace" FontSize="12"/>
-        <TextBlock Text="esc to clear" FontSize="11" Opacity="0.35"
-                   VerticalAlignment="Center"/>
-      </StackPanel>
-    </Border>
-
-    <Border DockPanel.Dock="Top" Padding="8,3" Background="#202020">
-      <Grid ColumnDefinitions="*,100,170">
-        <TextBlock Grid.Column="0" Text="name"     FontSize="11" Opacity="0.45"/>
-        <TextBlock Grid.Column="1" Text="size"     FontSize="11" Opacity="0.45"/>
-        <TextBlock Grid.Column="2" Text="modified" FontSize="11" Opacity="0.45"/>
-      </Grid>
-    </Border>
-
-    <!-- Every pane's view stays alive and is toggled by IsVisible rather than
-         being swapped through a ContentControl. Recreating the view on tab
-         switch would reset scroll position every time, which is exactly the
-         kind of forgetting this project exists to avoid. -->
-    <!-- Icon rail. Narrow enough to be nearly free, and a state of the
-         sidebar rather than a separate design. -->
     <Border DockPanel.Dock="Left" Background="#141414" Width="38"
             IsVisible="{Binding Sidebar.IsRailVisible}">
       <StackPanel Orientation="Vertical" Spacing="4" Margin="0,8">
@@ -200,92 +308,24 @@
       </Panel>
     </Border>
 
-    <!-- The context menu lives here rather than inside the item template.
-         Inside the template its DataContext depended on which pane instantiated
-         it; here it is always the ShellViewModel, so every entry routes through
-         ActiveTab exactly like the keyboard shortcuts do. -->
-    <ItemsControl ItemsSource="{Binding Tabs}" Background="#0F0F0F">
-      <ItemsControl.ContextMenu>
-        <ContextMenu x:DataType="vm:ShellViewModel">
-          <ContextMenu.Styles>
-            <!-- The stock template wraps items in a ScrollViewer, which shows a
-                 bar the moment it thinks it is constrained. With a menu this
-                 short that is pure noise. -->
-            <Style Selector="ContextMenu ScrollViewer">
-              <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
-              <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
-            </Style>
-          </ContextMenu.Styles>
-          <MenuItem Header="Open"               Command="{Binding ActiveTab.OpenSelectedCommand}"/>
-          <MenuItem Header="Open with"
-                    ItemsSource="{Binding ActiveTab.OpenWithOptions}">
-            <MenuItem.ItemTemplate>
-              <DataTemplate x:DataType="fsys:LaunchOption">
-                <TextBlock Text="{Binding Name}"/>
-              </DataTemplate>
-            </MenuItem.ItemTemplate>
-            <MenuItem.Styles>
-              <Style Selector="MenuItem > MenuItem" x:DataType="fsys:LaunchOption">
-                <Setter Property="Command"
-                        Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.OpenWithAppCommand}"/>
-                <Setter Property="CommandParameter" Value="{Binding}"/>
-              </Style>
-            </MenuItem.Styles>
-          </MenuItem>
-          <Separator/>
-          <MenuItem Header="Copy"               Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
-          <MenuItem Header="Cut"                Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
-          <MenuItem Header="Paste"              Command="{Binding ActiveTab.PasteCommand}"/>
-          <Separator/>
-          <MenuItem Header="Rename"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
-          <MenuItem Header="Move to trash"      Command="{Binding ActiveTab.TrashSelectedCommand}"/>
-          <Separator/>
-          <MenuItem Header="New folder"         Command="{Binding ActiveTab.NewFolderCommand}"/>
-          <MenuItem Header="Open terminal here" Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
-        </ContextMenu>
-      </ItemsControl.ContextMenu>
-      <ItemsControl.ItemsPanel>
-        <ItemsPanelTemplate>
-          <Grid/>
-        </ItemsPanelTemplate>
-      </ItemsControl.ItemsPanel>
-      <ItemsControl.ItemTemplate>
-        <DataTemplate x:DataType="vm:PaneViewModel">
-          <ListBox ItemsSource="{Binding Entries}"
-                   SelectedItem="{Binding SelectedEntry}"
-                   SelectedItems="{Binding SelectedEntries}"
-                   IsVisible="{Binding IsActive}"
-                   SelectionMode="Multiple" Background="Transparent" Padding="0">
-            <ListBox.Styles>
-              <Style Selector="ListBoxItem">
-                <Setter Property="Padding" Value="0"/>
-                <Setter Property="MinHeight" Value="0"/>
-              </Style>
-            </ListBox.Styles>
-            <ListBox.ItemsPanel>
-              <ItemsPanelTemplate>
-                <VirtualizingStackPanel/>
-              </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="fs:FileEntry">
-                <Grid ColumnDefinitions="*,100,170" Height="22" Margin="8,0">
-                  <TextBlock Grid.Column="0" Text="{Binding Name}"
-                             FontSize="12" VerticalAlignment="Center"
-                             TextTrimming="CharacterEllipsis"/>
-                  <TextBlock Grid.Column="1" Text="{Binding Length}"
-                             FontSize="11" FontFamily="monospace" Opacity="0.55"
-                             VerticalAlignment="Center"/>
-                  <TextBlock Grid.Column="2" Text="{Binding LastWriteTime}"
-                             FontSize="11" FontFamily="monospace" Opacity="0.55"
-                             VerticalAlignment="Center"/>
-                </Grid>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </DataTemplate>
-      </ItemsControl.ItemTemplate>
-    </ItemsControl>
+    <Grid x:Name="SplitGrid">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="{Binding LeftColumnWidth}"/>
+        <ColumnDefinition Width="Auto"/>
+        <ColumnDefinition Width="{Binding RightColumnWidth}"/>
+      </Grid.ColumnDefinitions>
+
+      <ContentControl Grid.Column="0" Content="{Binding Left}"
+                      ContentTemplate="{StaticResource PaneGroupTemplate}"/>
+
+      <GridSplitter x:Name="SplitHandle" Grid.Column="1" Width="4"
+                    Background="#0A0A0A" ResizeDirection="Columns"
+                    IsVisible="{Binding IsSplit}"/>
+
+      <ContentControl Grid.Column="2" Content="{Binding Right}"
+                      ContentTemplate="{StaticResource PaneGroupTemplate}"
+                      IsVisible="{Binding IsSplit}"/>
+    </Grid>
 
   </DockPanel>
 </Window>

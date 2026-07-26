@@ -1,6 +1,5 @@
-using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Rove.Core.FileSystem;
@@ -10,10 +9,9 @@ using Rove.Core.Session;
 namespace Rove.Ui.ViewModels;
 
 /// <summary>
-/// Owns the set of open tabs. Deliberately thin — it holds panes and decides
-/// which is active, and nothing else. All the behaviour lives in PaneViewModel,
-/// which is what makes a split view later just two of these lists side by side
-/// rather than a rewrite.
+/// Owns one or two pane groups. Deliberately thin — it decides which side is
+/// active and nothing else; all the behaviour lives in PaneViewModel, which is
+/// what made split view an addition rather than a rewrite.
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
@@ -25,6 +23,12 @@ public sealed partial class ShellViewModel : ObservableObject
     private bool _restoring;
     private bool _started;
 
+    /// <summary>
+    /// The right side as it was when last closed. Reopening restores it, so
+    /// toggling the split off is not a way to silently lose where you were.
+    /// </summary>
+    private PaneState? _rememberedRight;
+
     public ShellViewModel(
         IFileSystemProvider fs,
         IFileOperations? ops = null,
@@ -33,12 +37,17 @@ public sealed partial class ShellViewModel : ObservableObject
         IApplicationLauncher? launcher = null,
         IClipboardService? clipboard = null)
     {
-        _clipboard = clipboard;
         _fs = fs;
         _ops = ops;
-        _launcher = launcher;
         _store = store;
+        _launcher = launcher;
+        _clipboard = clipboard;
+
         Sidebar = new SidebarViewModel(fs, places);
+
+        Left = CreateGroup();
+        ActiveGroup = Left;
+
         Sidebar.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(SidebarViewModel.ActivePanel)
@@ -46,44 +55,234 @@ public sealed partial class ShellViewModel : ObservableObject
                                or nameof(SidebarViewModel.Width))
                 MarkDirty();
         };
-        Tabs.CollectionChanged += OnTabsChanged;
     }
 
     public SidebarViewModel Sidebar { get; }
 
-    /// <summary>The view subscribes here to wire clipboard and rename prompts
-    /// onto every pane, including ones created later.</summary>
+    public PaneGroupViewModel Left { get; private set; }
+
+    /// <summary>Null unless split. The XAML binds its column's visibility to this.</summary>
+    [ObservableProperty] private PaneGroupViewModel? _right;
+
+    [ObservableProperty] private PaneGroupViewModel _activeGroup = null!;
+
+    [ObservableProperty] private double _splitRatio = 0.5;
+
+    public bool IsSplit => Right is not null;
+
+    // Hiding a control does not give its column back — an invisible pane in a
+    // "*" column still reserves half the window. The definitions themselves
+    // have to collapse, so they are driven from here.
+    public GridLength LeftColumnWidth
+        => new(IsSplit ? Math.Clamp(SplitRatio, 0.1, 0.9) : 1, GridUnitType.Star);
+
+    public GridLength RightColumnWidth
+        => IsSplit ? new GridLength(1 - Math.Clamp(SplitRatio, 0.1, 0.9), GridUnitType.Star)
+                   : new GridLength(0);
+
+    private void NotifyColumns()
+    {
+        OnPropertyChanged(nameof(LeftColumnWidth));
+        OnPropertyChanged(nameof(RightColumnWidth));
+    }
+
+    /// <summary>
+    /// The active tab of the active side. Everything outside this class —
+    /// toolbar, key bindings, context menu — binds through here and never needs
+    /// to know whether the window is split.
+    /// </summary>
+    public PaneViewModel? ActiveTab => ActiveGroup?.ActiveTab;
+
+    /// <summary>The other side, when split. Where "copy to other pane" sends things.</summary>
+    public PaneGroupViewModel? OtherGroup
+        => Right is null ? null : ReferenceEquals(ActiveGroup, Left) ? Right : Left;
+
     public event EventHandler<PaneViewModel>? PaneCreated;
 
-    /// <summary>Clicking a place navigates the active tab rather than opening
-    /// a new one — the sidebar is navigation, not tab management.</summary>
-    [RelayCommand]
-    private void GoToPlace(string? path)
-    {
-        if (!string.IsNullOrEmpty(path))
-            _ = ActiveTab?.NavigateAsync(path);
-    }
+    public Func<WindowSession>? GeometryProvider { get; set; }
 
-    [RelayCommand]
-    private void PinCurrent()
-    {
-        if (ActiveTab?.CurrentPath is { Length: > 0 } path)
-            _ = Sidebar.PinAsync(path);
-    }
-
-    /// <summary>Progress line for whatever operation is running, or empty.</summary>
     [ObservableProperty] private string _operationStatus = "";
-
-    /// <summary>The running operation, so the view can offer pause and cancel.</summary>
     [ObservableProperty] private IOperationHandle? _activeOperation;
+
+    // ---- construction --------------------------------------------------
+
+    private PaneGroupViewModel CreateGroup()
+    {
+        var group = new PaneGroupViewModel(NewPane);
+        group.PropertyChanged += OnGroupChanged;
+        return group;
+    }
 
     private PaneViewModel NewPane()
     {
         var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard);
         pane.OperationStarted += OnOperationStarted;
+        pane.PropertyChanged += OnPaneChanged;
         PaneCreated?.Invoke(this, pane);
         return pane;
     }
+
+    private void OnGroupChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(PaneGroupViewModel.ActiveTab)) return;
+
+        if (ReferenceEquals(sender, ActiveGroup))
+            OnPropertyChanged(nameof(ActiveTab));
+
+        MarkDirty();
+    }
+
+    partial void OnActiveGroupChanged(PaneGroupViewModel? oldValue, PaneGroupViewModel newValue)
+    {
+        if (oldValue is not null) oldValue.IsActiveGroup = false;
+        newValue.IsActiveGroup = true;
+
+        OnPropertyChanged(nameof(ActiveTab));
+        OnPropertyChanged(nameof(OtherGroup));
+        MarkDirty();
+    }
+
+    partial void OnRightChanged(PaneGroupViewModel? value)
+    {
+        OnPropertyChanged(nameof(IsSplit));
+        OnPropertyChanged(nameof(OtherGroup));
+        NotifyColumns();
+        MarkDirty();
+    }
+
+    partial void OnSplitRatioChanged(double value)
+    {
+        NotifyColumns();
+        MarkDirty();
+    }
+
+    // ---- split ---------------------------------------------------------
+
+    /// <summary>
+    /// F3, matching Dolphin. Opening a split clones the current location so the
+    /// second side starts somewhere useful rather than at home.
+    /// </summary>
+    [RelayCommand]
+    public void ToggleSplit()
+    {
+        if (Right is null)
+        {
+            var right = CreateGroup();
+
+            // Populated before being assigned, so the column never flashes empty.
+            if (_rememberedRight is { Tabs.Count: > 0 } remembered)
+                Restore(right, remembered);
+            else
+                right.AddTab(ActiveTab?.CurrentPath
+                             ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+            Right = right;
+            ActiveGroup = right;
+        }
+        else
+        {
+            // Closing the split always keeps the left side, so which half
+            // survives is predictable rather than depending on focus.
+            var closing = Right;
+
+            _rememberedRight = closing.ToPaneState();
+
+            Right = null;
+            ActiveGroup = Left;
+            closing.DisposeAll();
+        }
+    }
+
+    /// <summary>Tab, matching Dolphin.</summary>
+    [RelayCommand]
+    public void FocusOtherPane()
+    {
+        if (OtherGroup is { } other) ActiveGroup = other;
+    }
+
+    [RelayCommand]
+    public void CopyToOtherPane() => TransferToOther(move: false);
+
+    [RelayCommand]
+    public void MoveToOtherPane() => TransferToOther(move: true);
+
+    private void TransferToOther(bool move)
+    {
+        if (_ops is null || OtherGroup?.ActiveTab is not { } target) return;
+        if (ActiveTab is not { } source) return;
+
+        var paths = source.SelectedEntries.Count > 0
+            ? source.SelectedEntries.Select(e => e.FullPath).ToList()
+            : source.SelectedEntry is { } one ? [one.FullPath] : [];
+
+        if (paths.Count == 0) return;
+
+        target.PasteInto(paths, move);
+    }
+
+    // ---- tabs ----------------------------------------------------------
+
+    [RelayCommand]
+    private void NewTab()
+        => ActiveGroup.AddTab(ActiveTab?.CurrentPath
+                              ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+    [RelayCommand]
+    private void OpenInNewTab(FileEntry entry)
+    {
+        if (entry.IsDirectory) ActiveGroup.AddTab(entry.FullPath);
+    }
+
+    [RelayCommand]
+    private void CloseTab(PaneViewModel? pane)
+    {
+        // Closing the last tab of the right side collapses the split rather
+        // than refusing, which is what the user actually means.
+        if (Right is not null && ActiveGroup.Tabs.Count <= 1 &&
+            (pane is null || ActiveGroup.Tabs.Contains(pane)))
+        {
+            if (ReferenceEquals(ActiveGroup, Right)) { ToggleSplit(); return; }
+
+            // Closing the last left tab: promote the right side to be the only one.
+            var survivor = Right;
+            Left.DisposeAll();
+            Left = survivor;
+            Right = null;
+            ActiveGroup = Left;
+            OnPropertyChanged(nameof(Left));
+            return;
+        }
+
+        ActiveGroup.CloseTab(pane);
+    }
+
+    [RelayCommand] private void SelectTab(PaneViewModel? pane) { if (pane is not null) ActiveGroup.ActiveTab = pane; }
+    [RelayCommand] private void NextTab() => ActiveGroup.Cycle(1);
+    [RelayCommand] private void PreviousTab() => ActiveGroup.Cycle(-1);
+    [RelayCommand] private void CancelOperation() => ActiveOperation?.Cancel();
+
+    public void SelectTabByIndex(int index) => ActiveGroup.SelectTabByIndex(index);
+
+    public void ActivateGroup(PaneGroupViewModel group)
+    {
+        if (!ReferenceEquals(ActiveGroup, group)) ActiveGroup = group;
+    }
+
+    // ---- places --------------------------------------------------------
+
+    [RelayCommand]
+    private void GoToPlace(string? path)
+    {
+        if (!string.IsNullOrEmpty(path)) _ = ActiveTab?.NavigateAsync(path);
+    }
+
+    [RelayCommand]
+    private void PinCurrent()
+    {
+        if (ActiveTab?.CurrentPath is { Length: > 0 } path) _ = Sidebar.PinAsync(path);
+    }
+
+    // ---- operations ----------------------------------------------------
 
     private void OnOperationStarted(object? sender, IOperationHandle handle)
     {
@@ -114,68 +313,78 @@ public sealed partial class ShellViewModel : ObservableObject
         _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB",
     };
 
-    public ObservableCollection<PaneViewModel> Tabs { get; } = new();
+    // ---- session -------------------------------------------------------
 
-    [ObservableProperty] private PaneViewModel? _activeTab;
-
-    /// <summary>
-    /// Supplies current window geometry at save time. The window owns its own
-    /// size and position; this view model only asks for them.
-    /// </summary>
-    public Func<WindowSession>? GeometryProvider { get; set; }
-
-    /// <summary>
-    /// Open the persisted session, or a single home tab if there isn't one.
-    /// Idempotent — restoring is a once-per-process operation and must not
-    /// depend on nobody calling it twice.
-    /// </summary>
     public void Start(SessionState? state)
     {
         if (_started) return;
         _started = true;
 
-        if (state?.Windows.FirstOrDefault() is { } w)
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var window = state?.Windows.FirstOrDefault();
+
+        if (window is not null)
         {
-            Sidebar.ActivePanel = w.ActiveSidebarPanel;
-            Sidebar.Width = w.SidebarWidth;
-            Sidebar.Rail = w.Rail;
+            Sidebar.ActivePanel = window.ActiveSidebarPanel;
+            Sidebar.Width = window.SidebarWidth;
+            Sidebar.Rail = window.Rail;
+            SplitRatio = window.SplitRatio;
         }
 
         _ = Sidebar.InitializeAsync();
 
-        var tabs = state?.Windows.FirstOrDefault()?.Panes.FirstOrDefault()?.Tabs;
-
-        if (tabs is null || tabs.Count == 0)
-        {
-            AddTab(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-            return;
-        }
+        var panes = window?.Panes;
 
         _restoring = true;
         try
         {
-            foreach (var tab in tabs)
+            if (panes is null || panes.Count == 0 || panes[0].Tabs.Count == 0)
             {
-                var pane = NewPane();
-                pane.RestoreFrom(tab);
-                Tabs.Add(pane);
+                Left.AddTab(home);
+            }
+            else
+            {
+                Restore(Left, panes[0]);
+
+                if (panes.Count > 1 && panes[1].Tabs.Count > 0)
+                {
+                    var right = CreateGroup();
+                    Restore(right, panes[1]);
+                    Right = right;
+                }
+                else
+                {
+                    // Split was closed at save time; keep what it was showing
+                    // so reopening after a restart lands back in place.
+                    _rememberedRight = window?.RememberedRightPane;
+                }
             }
 
-            var index = state!.Windows[0].Panes[0].ActiveTabIndex;
-            ActiveTab = Tabs[Math.Clamp(index, 0, Tabs.Count - 1)];
+            var activeIndex = window?.ActivePaneIndex ?? 0;
+            ActiveGroup = activeIndex == 1 && Right is not null ? Right : Left;
         }
         finally
         {
             _restoring = false;
         }
 
-        // The active tab was assigned while suppressed, so it never loaded.
-        ActiveTab?.RefreshIfUnloaded();
+        // Assigned while suppressed, so it never triggered its own load.
+        ActiveGroup.ActiveTab?.RefreshIfUnloaded();
+    }
+
+    private static void Restore(PaneGroupViewModel group, PaneState state)
+    {
+        foreach (var tab in state.Tabs) group.AddRestoredTab(tab);
+        group.ActiveTab = group.Tabs[Math.Clamp(state.ActiveTabIndex, 0, group.Tabs.Count - 1)];
     }
 
     public SessionState ToSessionState()
     {
         var geometry = GeometryProvider?.Invoke() ?? new WindowSession();
+
+        var panes = Right is null
+            ? new List<PaneState> { Left.ToPaneState() }
+            : [Left.ToPaneState(), Right.ToPaneState()];
 
         return new SessionState
         {
@@ -187,48 +396,27 @@ public sealed partial class ShellViewModel : ObservableObject
                     ActiveSidebarPanel = Sidebar.ActivePanel,
                     SidebarWidth = Sidebar.Width,
                     Rail = Sidebar.Rail,
-                    Panes =
-                    [
-                        new PaneState
-                        {
-                            Tabs = Tabs.Select(t => t.ToTabState()).ToList(),
-                            ActiveTabIndex = ActiveTab is null
-                                ? 0
-                                : Math.Max(0, Tabs.IndexOf(ActiveTab)),
-                        }
-                    ],
+                    SplitRatio = SplitRatio,
+                    RememberedRightPane = Right is null ? _rememberedRight : null,
+                    Panes = panes,
+                    ActivePaneIndex = ReferenceEquals(ActiveGroup, Right) ? 1 : 0,
                 }
             ],
         };
     }
 
-    /// <summary>Window moved or resized — geometry is part of the session too.</summary>
     public void NotifyWindowChanged() => MarkDirty();
 
     private void MarkDirty()
     {
-        if (_restoring || _store is null) return;
+        // Nothing before Start() is worth saving, and property setters fire
+        // during construction while Sidebar and the groups are still null.
+        if (!_started || _restoring || _store is null) return;
         _store.NotifyChanged(ToSessionState());
-    }
-
-    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        foreach (var pane in e.NewItems?.OfType<PaneViewModel>() ?? [])
-        {
-            pane.PropertyChanged -= OnPaneChanged;
-            pane.PropertyChanged += OnPaneChanged;
-        }
-
-        foreach (var pane in e.OldItems?.OfType<PaneViewModel>() ?? [])
-            pane.PropertyChanged -= OnPaneChanged;
-
-        MarkDirty();
     }
 
     private void OnPaneChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Only state worth persisting triggers a write. PathText, Status and
-        // IsLoading change constantly and mean nothing across restarts.
         switch (e.PropertyName)
         {
             case nameof(PaneViewModel.CurrentPath):
@@ -238,79 +426,5 @@ public sealed partial class ShellViewModel : ObservableObject
                 MarkDirty();
                 break;
         }
-    }
-
-    partial void OnActiveTabChanged(PaneViewModel? oldValue, PaneViewModel? newValue)
-    {
-        if (oldValue is not null) oldValue.IsActive = false;
-        if (newValue is not null) newValue.IsActive = true;
-        MarkDirty();
-    }
-
-    public PaneViewModel AddTab(string path)
-    {
-        var pane = NewPane();
-        Tabs.Add(pane);
-        ActiveTab = pane;
-        _ = pane.NavigateAsync(path);
-        return pane;
-    }
-
-    [RelayCommand]
-    private void CancelOperation() => ActiveOperation?.Cancel();
-
-    [RelayCommand]
-    private void NewTab()
-        => AddTab(ActiveTab?.CurrentPath
-                  ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-
-    /// <summary>Opening a selected directory in a new tab, rather than a clone.</summary>
-    [RelayCommand]
-    private void OpenInNewTab(FileEntry entry)
-    {
-        if (entry.IsDirectory) AddTab(entry.FullPath);
-    }
-
-    [RelayCommand]
-    private void CloseTab(PaneViewModel? pane)
-    {
-        pane ??= ActiveTab;
-        if (pane is null) return;
-
-        // Never leave zero tabs — an empty window with no way back is a dead end.
-        if (Tabs.Count == 1) return;
-
-        var index = Tabs.IndexOf(pane);
-        var wasActive = ActiveTab == pane;
-
-        Tabs.Remove(pane);
-        pane.Dispose();
-
-        if (wasActive || ActiveTab is null)
-            ActiveTab = Tabs[Math.Clamp(index, 0, Tabs.Count - 1)];
-    }
-
-    [RelayCommand]
-    private void SelectTab(PaneViewModel? pane)
-    {
-        if (pane is not null) ActiveTab = pane;
-    }
-
-    [RelayCommand]
-    private void NextTab() => Cycle(1);
-
-    [RelayCommand]
-    private void PreviousTab() => Cycle(-1);
-
-    private void Cycle(int delta)
-    {
-        if (Tabs.Count < 2 || ActiveTab is null) return;
-        var i = (Tabs.IndexOf(ActiveTab) + delta + Tabs.Count) % Tabs.Count;
-        ActiveTab = Tabs[i];
-    }
-
-    public void SelectTabByIndex(int index)
-    {
-        if (index >= 0 && index < Tabs.Count) ActiveTab = Tabs[index];
     }
 }

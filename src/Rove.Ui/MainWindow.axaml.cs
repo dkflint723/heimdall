@@ -56,18 +56,26 @@ public partial class MainWindow : Window
         AddHandler(DoubleTappedEvent, OnDoubleTapped, RoutingStrategies.Bubble);
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble);
 
+        // Clicking anywhere in a side makes it the active one. Tunnelling so it
+        // runs before the ListBox handles the press for selection — otherwise
+        // the first click on an inactive side only moves focus.
+        AddHandler(PointerPressedEvent, OnPointerPressedAnywhere, RoutingStrategies.Tunnel);
+
+        // Dragging the splitter writes straight to the ColumnDefinitions, so
+        // the ratio is read back out afterwards — otherwise the persisted
+        // SplitRatio would never reflect where the divider actually sits.
+        SplitHandle.DragCompleted += (_, _) => CaptureSplitRatio();
+
         Closing += OnClosing;
         Resized += (_, _) => _shell.NotifyWindowChanged();
         PositionChanged += (_, _) => _shell.NotifyWindowChanged();
 
         _shell.Start(state);
 
-        foreach (var pane in _shell.Tabs) WirePane(pane);
-
         // Build stamp. When a symptom and the code disagree, this is the one
         // line that says whether the running binary contains the fix.
         Console.Error.WriteLine(
-            $"[rove] build {BuildStamp()}  clipboard=yes  panes={_shell.Tabs.Count}");
+            $"[rove] build {BuildStamp()}  clipboard=yes  split={_shell.IsSplit}");
     }
 
     private static string BuildStamp()
@@ -85,6 +93,35 @@ public partial class MainWindow : Window
         {
             return "unknown";
         }
+    }
+
+    /// <summary>
+    /// Walks up from whatever was clicked to find which pane group owns it.
+    /// The two sides are the same template, so there is no named control to
+    /// compare against — the DataContext is the only distinguishing thing.
+    /// </summary>
+    private void OnPointerPressedAnywhere(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        for (var control = e.Source as Control; control is not null;
+             control = control.Parent as Control)
+        {
+            if (control.DataContext is PaneGroupViewModel group)
+            {
+                _shell.ActivateGroup(group);
+                return;
+            }
+        }
+    }
+
+    private void CaptureSplitRatio()
+    {
+        if (!_shell.IsSplit) return;
+
+        var left = SplitGrid.ColumnDefinitions[0].ActualWidth;
+        var right = SplitGrid.ColumnDefinitions[2].ActualWidth;
+        var total = left + right;
+
+        if (total > 1) _shell.SplitRatio = Math.Clamp(left / total, 0.1, 0.9);
     }
 
     // ---- geometry ------------------------------------------------------
@@ -306,6 +343,15 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             _shell.SelectTabByIndex(e.Key - Key.D1);
+            return;
+        }
+
+        // Tab moves between sides rather than traversing focus, matching
+        // Dolphin. Only when split, so it keeps its normal meaning otherwise.
+        if (e.Key == Key.Tab && _shell.IsSplit && e.KeyModifiers == KeyModifiers.None)
+        {
+            e.Handled = true;
+            _shell.FocusOtherPaneCommand.Execute(null);
             return;
         }
 
