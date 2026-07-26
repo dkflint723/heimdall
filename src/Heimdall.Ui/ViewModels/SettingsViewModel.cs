@@ -191,12 +191,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         // causes — the font is not installed, or Avalonia's font manager does
         // not enumerate what fontconfig knows about — and the count alone
         // separates them. Compare with: fc-list : family | sort -u | wc -l
+        // Prefixed "fontlist", not "font": ThemeApplier already logs
+        // "[heimdall] font: configured=… applied=…" and one grep matched both,
+        // which sent a diagnostic session off in the wrong direction. Two
+        // different facts get two different prefixes.
         Console.Error.WriteLine(
-            $"[heimdall] fonts: {names.Count - 1} families enumerated");
+            $"[heimdall] fontlist: {names.Count - 1} families enumerated");
 
         if (Environment.GetEnvironmentVariable("HEIMDALL_FONT_DEBUG") == "1")
             foreach (var name in names.Skip(1))
-                Console.Error.WriteLine($"[heimdall] font: {name}");
+                Console.Error.WriteLine($"[heimdall] fontlist: {name}");
 
         return names;
     }

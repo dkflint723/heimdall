@@ -76,6 +76,14 @@ public partial class MainWindow : Window
 
         AppSettings.Apply(_settings);
 
+        // Logged at startup, not when the settings dialog opens. The count only
+        // appeared on opening the dialog, which made "no line printed" mean two
+        // different things and cost a diagnostic round trip. Compare with:
+        //   fc-list : family | tr ',' '\n' | sort -u | wc -l
+        Console.Error.WriteLine(
+            $"[heimdall] fontlist: {Avalonia.Media.FontManager.Current.SystemFonts.Count} "
+            + "families visible to Avalonia");
+
         // Applied before anything else paints, and re-applied whenever Plasma's
         // scheme changes, so the window follows the desktop live.
         _theme = platform.Theme;
