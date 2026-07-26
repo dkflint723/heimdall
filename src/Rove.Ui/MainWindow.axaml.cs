@@ -60,7 +60,8 @@ public partial class MainWindow : Window
 
         _shell = new ShellViewModel(
             platform.FileSystem, platform.Operations, _store,
-            platform.Places, platform.Launcher, clipboard, platform.Search)
+            platform.Places, platform.Launcher, clipboard, platform.Search,
+            platform.Scripts)
         {
             GeometryProvider = CaptureGeometry,
         };
@@ -71,6 +72,8 @@ public partial class MainWindow : Window
 
         PathBox.KeyDown += OnPathBoxKeyDown;
         PromptInput.KeyDown += OnPromptKeyDown;
+        PromptConfirm.Click += (_, _) => ConfirmPrompt();
+        PromptCancel.Click += (_, _) => ClosePrompt();
 
         // Handled at the window because the list lives inside a DataTemplate,
         // so there is no named control to attach to.
@@ -505,11 +508,42 @@ public partial class MainWindow : Window
         PromptLabel.Text = "rename to";
         PromptInput.Text = entry.Name;
         PromptInput.IsVisible = true;
+        PromptConfirm.Content = "rename";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
         PromptHint.Text = "enter to confirm · esc to cancel";
         PromptBar.IsVisible = true;
 
         PromptInput.Focus();
         PromptInput.SelectAll();
+    }
+
+    /// <summary>
+    /// The single place a confirmed prompt is acted on, so the button and the
+    /// keyboard cannot drift apart.
+    /// </summary>
+    private void ConfirmPrompt()
+    {
+        var mode = _prompt;
+        var target = _shell.ActiveTab;
+
+        // Read before closing: the action must not depend on UI state that the
+        // closing itself tears down.
+        var name = PromptInput?.Text ?? "";
+        var entry = _renameTarget;
+
+        ClosePrompt();
+
+        switch (mode)
+        {
+            case PromptMode.ConfirmDelete:
+                target?.DeleteSelectedCommand.Execute(null);
+                break;
+
+            case PromptMode.Rename when !string.IsNullOrWhiteSpace(name) && name != entry.Name:
+                _ = target?.RenameAsync(entry, name);
+                break;
+        }
     }
 
     private void AskConfirmDelete()
@@ -527,16 +561,25 @@ public partial class MainWindow : Window
 
         PromptLabel.Text = $"permanently delete {count} item(s)? this cannot be undone";
         PromptInput.IsVisible = false;
-        PromptHint.Text = "enter to delete · esc to cancel";
+        PromptConfirm.Content = "delete permanently";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "esc to cancel";
         PromptBar.IsVisible = true;
-        PromptBar.Focus();
+
+        // Focus the button, not the bar: a focused Button takes Enter and Space
+        // itself, which is a route nothing else can swallow.
+        PromptConfirm.Focus();
     }
 
     private void ClosePrompt()
     {
         _prompt = PromptMode.None;
+
         if (PromptBar is not null) PromptBar.IsVisible = false;
         if (PromptInput is not null) PromptInput.IsVisible = false;
+        if (PromptConfirm is not null) PromptConfirm.IsVisible = false;
+        if (PromptCancel is not null) PromptCancel.IsVisible = false;
     }
 
     private void OnPromptKeyDown(object? sender, KeyEventArgs e)
@@ -547,10 +590,7 @@ public partial class MainWindow : Window
         {
             case Key.Enter:
                 e.Handled = true;
-                var name = PromptInput?.Text ?? "";
-                ClosePrompt();
-                if (!string.IsNullOrWhiteSpace(name) && name != _renameTarget.Name)
-                    _ = _shell.ActiveTab?.RenameAsync(_renameTarget, name);
+                ConfirmPrompt();
                 break;
 
             case Key.Escape:
@@ -599,8 +639,7 @@ public partial class MainWindow : Window
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
-                ClosePrompt();
-                _shell.ActiveTab?.DeleteSelectedCommand.Execute(null);
+                ConfirmPrompt();
             }
             else if (e.Key == Key.Escape)
             {

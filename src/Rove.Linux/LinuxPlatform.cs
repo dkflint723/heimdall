@@ -34,4 +34,6 @@ public sealed class LinuxPlatform : IPlatform
     // The same object serves both — reading and writing permissions share the
     // mode-bit mapping, and splitting them would duplicate it.
     public IAccessEditor? AccessEditor => _properties;
+
+    public IScriptRunner Scripts { get; } = new LinuxScriptRunner();
 }

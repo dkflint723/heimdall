@@ -35,6 +35,14 @@ public interface IOperationHandle
     /// prevent.
     /// </summary>
     event EventHandler<OperationProgress>? Progressed;
+
+    /// <summary>
+    /// Why the operation failed, when State is Failed. Operations swallow their
+    /// exceptions so one bad file cannot tear down the app — but swallowing
+    /// them without surfacing this makes a refused delete indistinguishable
+    /// from nothing happening at all.
+    /// </summary>
+    Exception? Error { get; }
 }
 
 /// <summary>

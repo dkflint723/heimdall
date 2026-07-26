@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Rove.Core;
 using Rove.Core.FileSystem;
 using Rove.Core.Places;
 using Rove.Core.Search;
@@ -20,6 +21,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IFileOperations? _ops;
     private readonly IApplicationLauncher? _launcher;
     private readonly IClipboardService? _clipboard;
+    private readonly IScriptRunner? _scripts;
     private readonly ISessionStore? _store;
     private bool _restoring;
     private bool _started;
@@ -37,8 +39,10 @@ public sealed partial class ShellViewModel : ObservableObject
         IPlacesProvider? places = null,
         IApplicationLauncher? launcher = null,
         IClipboardService? clipboard = null,
-        ISearchProvider? search = null)
+        ISearchProvider? search = null,
+        IScriptRunner? scripts = null)
     {
+        _scripts = scripts;
         _fs = fs;
         _ops = ops;
         _store = store;
@@ -165,7 +169,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private PaneViewModel NewPane()
     {
-        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard);
+        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts);
         pane.OperationStarted += OnOperationStarted;
         pane.PropertyChanged += OnPaneChanged;
         PaneCreated?.Invoke(this, pane);
@@ -347,8 +351,16 @@ public sealed partial class ShellViewModel : ObservableObject
         _ = handle.Completion.ContinueWith(_ =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                OperationStatus = "";
-                ActiveOperation = null;
+                // A failure stays on screen; only success clears silently.
+                if (handle.State == OperationState.Failed && handle.Error is { } error)
+                {
+                    OperationStatus = $"failed: {error.Message}";
+                }
+                else
+                {
+                    OperationStatus = "";
+                    ActiveOperation = null;
+                }
             }), TaskScheduler.Default);
     }
 

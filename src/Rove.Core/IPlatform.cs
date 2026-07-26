@@ -28,4 +28,6 @@ public interface IPlatform
 
     /// <summary>Null where the platform exposes nothing editable.</summary>
     IAccessEditor? AccessEditor { get; }
+
+    IScriptRunner Scripts { get; }
 }

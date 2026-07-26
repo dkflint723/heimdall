@@ -3,6 +3,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
+using Rove.Core;
 using Rove.Core.FileSystem;
 using Rove.Core.Session;
 
@@ -24,6 +25,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     private readonly IFileOperations? _ops;
     private readonly IApplicationLauncher? _launcher;
     private readonly IClipboardService? _clipboard;
+    private readonly IScriptRunner? _scripts;
     private readonly List<FileEntry> _all = new();
     private CancellationTokenSource? _filterDebounce;
     private IDisposable? _watcher;
@@ -45,12 +47,61 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         IFileSystemProvider fs,
         IFileOperations? ops = null,
         IApplicationLauncher? launcher = null,
-        IClipboardService? clipboard = null)
+        IClipboardService? clipboard = null,
+        IScriptRunner? scripts = null)
     {
         _fs = fs;
         _ops = ops;
         _launcher = launcher;
         _clipboard = clipboard;
+        _scripts = scripts;
+
+        RefreshScripts();
+    }
+
+    // ---- user scripts --------------------------------------------------
+
+    public ObservableCollection<ScriptCommand> Scripts { get; } = new();
+
+    public bool HasScripts => Scripts.Count > 0;
+
+    [RelayCommand]
+    public void RefreshScripts()
+    {
+        Scripts.Clear();
+        if (_scripts is null) return;
+
+        foreach (var script in _scripts.Discover()) Scripts.Add(script);
+        OnPropertyChanged(nameof(HasScripts));
+    }
+
+    [RelayCommand]
+    public void OpenScriptsFolder()
+    {
+        if (_scripts is not null) _launcher?.Open(_scripts.ScriptsDirectory);
+    }
+
+    [RelayCommand]
+    public async Task RunScriptAsync(ScriptCommand? script)
+    {
+        if (_scripts is null || script is null) return;
+
+        Status = $"running {script.Name}…";
+
+        try
+        {
+            var output = await _scripts
+                .RunAsync(script, CurrentPath, SelectionPaths(), CancellationToken.None)
+                .ConfigureAwait(false);
+
+            // The watcher picks up whatever the script changed on disk, so the
+            // listing does not need refreshing here.
+            await Dispatcher.UIThread.InvokeAsync(() => Status = output);
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = $"{script.Name}: {ex.Message}");
+        }
     }
 
     public BulkObservableCollection<FileEntry> Entries { get; } = new();

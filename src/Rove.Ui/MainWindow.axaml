@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fs="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
         xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
+        xmlns:core="clr-namespace:Rove.Core;assembly=Rove.Core"
         xmlns:th="clr-namespace:Rove.Ui.Thumbnails"
         x:Class="Rove.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
@@ -127,6 +128,24 @@
               <Separator/>
               <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
               <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
+              <Separator/>
+              <MenuItem Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"
+                        IsVisible="{Binding ActiveTab.HasScripts}">
+                <MenuItem.ItemTemplate>
+                  <DataTemplate x:DataType="core:ScriptCommand">
+                    <TextBlock Text="{Binding Name}"/>
+                  </DataTemplate>
+                </MenuItem.ItemTemplate>
+                <MenuItem.Styles>
+                  <Style Selector="MenuItem > MenuItem" x:DataType="core:ScriptCommand">
+                    <Setter Property="Command"
+                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.RunScriptCommand}"/>
+                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                  </Style>
+                </MenuItem.Styles>
+              </MenuItem>
+              <MenuItem Header="Scripts folder…"
+                        Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
               <Separator/>
               <MenuItem Header="Properties"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"/>
@@ -434,6 +453,14 @@
         <TextBlock x:Name="PromptLabel" FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"/>
         <TextBox x:Name="PromptInput" Width="320" FontFamily="monospace"
                  FontSize="{DynamicResource FontSizeBase}" IsVisible="False"/>
+        <!-- Real buttons, not just a keystroke. A destructive confirmation
+             needs a clickable affordance, and a focused Button answers Enter
+             through the control system rather than through a hand-rolled key
+             handler that can be intercepted anywhere along the route. -->
+        <Button x:Name="PromptConfirm" IsVisible="False" Padding="12,3"
+                FontSize="{DynamicResource FontSizeSmall}"/>
+        <Button x:Name="PromptCancel" Content="cancel" IsVisible="False" Padding="12,3"
+                FontSize="{DynamicResource FontSizeSmall}"/>
         <TextBlock x:Name="PromptHint" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.5" VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
