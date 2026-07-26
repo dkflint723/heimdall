@@ -187,6 +187,17 @@ public sealed partial class SettingsViewModel : ObservableObject
             && !names.Contains(configured, StringComparer.OrdinalIgnoreCase))
             names.Insert(1, configured);
 
+        // Traced because "my font is not in the list" has two very different
+        // causes — the font is not installed, or Avalonia's font manager does
+        // not enumerate what fontconfig knows about — and the count alone
+        // separates them. Compare with: fc-list : family | sort -u | wc -l
+        Console.Error.WriteLine(
+            $"[heimdall] fonts: {names.Count - 1} families enumerated");
+
+        if (Environment.GetEnvironmentVariable("HEIMDALL_FONT_DEBUG") == "1")
+            foreach (var name in names.Skip(1))
+                Console.Error.WriteLine($"[heimdall] font: {name}");
+
         return names;
     }
     [ObservableProperty] private bool _absoluteDates;
