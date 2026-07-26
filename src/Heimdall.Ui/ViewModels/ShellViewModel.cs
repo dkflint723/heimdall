@@ -637,6 +637,36 @@ public sealed partial class ShellViewModel : ObservableObject
     [RelayCommand]
     private void ShowProperties() => PropertiesRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>
+    /// Status bar visibility, straight off the preferences. Re-raised rather
+    /// than stored, so there is one source of truth and no copy to fall out of
+    /// step with the file.
+    /// </summary>
+    public bool ShowStatusBar => Settings.AppSettings.Current.General.ShowStatusBar;
+
+    public bool ShowFreeSpace => Settings.AppSettings.Current.General.ShowFreeSpace;
+
+    /// <summary>
+    /// Called when preferences change. Most settings are read at the moment
+    /// they matter and so need nothing; sorting is the exception, because a
+    /// listing already on screen was ordered under the old rule.
+    /// </summary>
+    public void OnSettingsChanged()
+    {
+        OnPropertyChanged(nameof(ShowStatusBar));
+        OnPropertyChanged(nameof(ShowFreeSpace));
+
+        // Left and Right, not a Groups collection — this view model has no such
+        // thing, and inventing one for a loop would be the tail wagging the dog.
+        foreach (var group in new[] { Left, Right })
+        {
+            if (group is null) continue;
+
+            foreach (var tab in group.Tabs)
+                tab.RefreshCommand.Execute(null);
+        }
+    }
+
     public event EventHandler? SettingsRequested;
 
     [RelayCommand]
@@ -748,7 +778,13 @@ public sealed partial class ShellViewModel : ObservableObject
             // survives is predictable rather than depending on focus.
             var closing = Right;
 
-            _rememberedRight = closing.ToPaneState();
+            // Heimdall's default keeps what the closing side was showing, so
+            // reopening the split lands back in place — closing a split should
+            // not be a quiet way to lose a location. Dolphin discards it, and
+            // people used to that can have it.
+            _rememberedRight = Settings.AppSettings.Current.General.ClosingSplitDiscardsOtherPane
+                ? null
+                : closing.ToPaneState();
 
             Right = null;
             ActiveGroup = Left;

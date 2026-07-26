@@ -1221,9 +1221,11 @@
 
 
     <Border DockPanel.Dock="Bottom" Padding="8,4" Background="{DynamicResource ChromeBrush}"
+            IsVisible="{Binding ShowStatusBar}"
             BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EdgeHighlight}">
       <DockPanel>
         <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveTab.FreeSpace}"
+                   IsVisible="{Binding ShowFreeSpace}"
                    FontSize="{DynamicResource FontSizeSmall}"
                    Foreground="{DynamicResource ViewDimText}"/>
         <TextBlock Text="{Binding ActiveSummary}" Margin="0,0,14,0"

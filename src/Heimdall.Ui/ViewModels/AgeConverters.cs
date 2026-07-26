@@ -66,8 +66,13 @@ public static class AgeConverters
     /// to something already stated rather than the only way to learn it.
     /// </summary>
     public static readonly IValueConverter Description =
-        new FuncValueConverter<DateTimeOffset, string>(modified =>
+        new FuncValueConverter<DateTimeOffset, string?>(modified =>
         {
+            // Gated here rather than in markup: a null Tip shows no tooltip, so
+            // the preference costs one line and no binding gymnastics. Read live,
+            // so turning it off takes effect on the next hover.
+            if (!Settings.AppSettings.Current.General.ShowTooltips) return null;
+
             var age = DateTimeOffset.Now - modified;
 
             return age switch

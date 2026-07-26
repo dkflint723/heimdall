@@ -23,6 +23,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         _original = current;
 
         var startup = current.Startup;
+        var general = current.General;
+
+        _naturalSorting = general.NaturalSorting;
+        _caseSensitiveSorting = general.CaseSensitiveSorting;
+        _showTooltips = general.ShowTooltips;
+        _tabSwitchesSplitPanes = general.TabSwitchesSplitPanes;
+        _closingSplitDiscardsOtherPane = general.ClosingSplitDiscardsOtherPane;
+        _showStatusBar = general.ShowStatusBar;
+        _showFreeSpace = general.ShowFreeSpace;
 
         _restoreLastSession = startup.ShowOnStartup == StartupLocation.RestoreSession;
         _startInHome = startup.ShowOnStartup == StartupLocation.HomeFolder;
@@ -47,6 +56,32 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _showFilterBar;
     [ObservableProperty] private bool _locationBarEditable;
     [ObservableProperty] private bool _showFullPathInTitleBar;
+
+    // ---- General ----------------------------------------------------------
+
+    [ObservableProperty] private bool _naturalSorting;
+    [ObservableProperty] private bool _caseSensitiveSorting;
+    [ObservableProperty] private bool _showTooltips;
+    [ObservableProperty] private bool _tabSwitchesSplitPanes;
+    [ObservableProperty] private bool _closingSplitDiscardsOtherPane;
+    [ObservableProperty] private bool _showStatusBar;
+    [ObservableProperty] private bool _showFreeSpace;
+
+    /// <summary>
+    /// Natural order compares case-insensitively by construction, so the case
+    /// choice only means anything with it off. Disabled rather than hidden, so
+    /// the relationship between the two is visible instead of mysterious.
+    /// </summary>
+    public bool CanSetCaseSensitivity => !NaturalSorting;
+
+    partial void OnNaturalSortingChanged(bool value)
+        => OnPropertyChanged(nameof(CanSetCaseSensitivity));
+
+    /// <summary>Free space sits inside the status bar, so it goes with it.</summary>
+    public bool CanSetFreeSpace => ShowStatusBar;
+
+    partial void OnShowStatusBarChanged(bool value)
+        => OnPropertyChanged(nameof(CanSetFreeSpace));
 
     /// <summary>Set when the dialog was dismissed with Save.</summary>
     public bool Saved { get; private set; }
@@ -75,6 +110,17 @@ public sealed partial class SettingsViewModel : ObservableObject
         // by a dialog that never showed them.
         Result = _original with
         {
+            General = _original.General with
+            {
+                NaturalSorting = NaturalSorting,
+                CaseSensitiveSorting = CaseSensitiveSorting,
+                ShowTooltips = ShowTooltips,
+                TabSwitchesSplitPanes = TabSwitchesSplitPanes,
+                ClosingSplitDiscardsOtherPane = ClosingSplitDiscardsOtherPane,
+                ShowStatusBar = ShowStatusBar,
+                ShowFreeSpace = ShowFreeSpace,
+            },
+
             Startup = _original.Startup with
             {
                 ShowOnStartup = location,

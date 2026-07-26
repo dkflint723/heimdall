@@ -391,6 +391,11 @@ public partial class MainWindow : Window
             AppSettings.Apply(model.Result);
             _settingsStore.Save(model.Result);
 
+            // Most settings are read at the moment they matter. Sorting and the
+            // status bar are not — a listing already on screen was ordered under
+            // the old rule, and a visibility binding needs telling.
+            _shell.OnSettingsChanged();
+
             Title = model.Result.Startup.ShowFullPathInTitleBar
                     && _shell.ActiveTab is { } pane
                 ? $"{pane.CurrentPath} — Heimdall"
@@ -1076,6 +1081,7 @@ public partial class MainWindow : Window
         // Dolphin. Only when split, so it keeps its normal meaning otherwise —
         // and never while typing, or it would jump panes mid-edit.
         if (e.Key == Key.Tab && _shell.IsSplit && e.KeyModifiers == KeyModifiers.None
+            && AppSettings.Current.General.TabSwitchesSplitPanes
             && FocusManager?.GetFocusedElement() is not TextBox)
         {
             e.Handled = true;

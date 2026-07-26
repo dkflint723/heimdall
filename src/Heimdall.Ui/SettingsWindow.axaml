@@ -24,6 +24,84 @@
          restructured, and each arrives with the plumbing that makes its
          controls do something. -->
     <TabControl>
+
+      <!-- General comes first, as it does in Dolphin. Its Previews and
+           Confirmations tabs are not here yet: they arrive with the plumbing
+           that makes them do something. -->
+      <TabItem Header="General">
+        <StackPanel Spacing="14" Margin="0,12,0,0">
+
+          <TextBlock Text="Sorting"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding NaturalSorting}">
+              <StackPanel>
+                <TextBlock Text="Natural sorting"/>
+                <TextBlock Text="file2 before file10, rather than file1, file10, file2."
+                           FontSize="{DynamicResource FontSizeTiny}"
+                           Foreground="{DynamicResource ViewDimText}"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </CheckBox>
+
+            <CheckBox Content="Case sensitive"
+                      Margin="24,0,0,0"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsEnabled="{Binding CanSetCaseSensitivity}"
+                      IsChecked="{Binding CaseSensitiveSorting}"/>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <TextBlock Text="Behaviour"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox Content="Show tooltips on rows"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ShowTooltips}"/>
+
+            <CheckBox Content="Tab switches between split panes"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding TabSwitchesSplitPanes}"/>
+
+            <CheckBox FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ClosingSplitDiscardsOtherPane}">
+              <StackPanel>
+                <TextBlock Text="Closing the split discards the other pane"/>
+                <TextBlock Text="Off, Heimdall remembers what it was showing so reopening lands back in place."
+                           FontSize="{DynamicResource FontSizeTiny}"
+                           Foreground="{DynamicResource ViewDimText}"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </CheckBox>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+          <TextBlock Text="Status bar"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="8">
+            <CheckBox Content="Show the status bar"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding ShowStatusBar}"/>
+
+            <CheckBox Content="Show free space"
+                      Margin="24,0,0,0"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsEnabled="{Binding CanSetFreeSpace}"
+                      IsChecked="{Binding ShowFreeSpace}"/>
+          </StackPanel>
+
+        </StackPanel>
+      </TabItem>
+
       <TabItem Header="Startup">
         <StackPanel Spacing="14" Margin="0,12,0,0">
 

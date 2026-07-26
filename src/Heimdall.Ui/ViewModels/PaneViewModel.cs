@@ -1826,9 +1826,19 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         };
 
         // Natural order, so file2 comes before file10. Ordinal comparison is
-        // right for bytes and wrong for names people chose.
+        // right for bytes and wrong for names people chose — but it is now a
+        // preference, because Dolphin makes it one and some people genuinely
+        // want the alphabetical order their shell gives them.
         if (result == 0)
-            result = NaturalOrder.Compare(a.Name, b.Name);
+        {
+            var general = Settings.AppSettings.Current.General;
+
+            result = general.NaturalSorting
+                ? NaturalOrder.Compare(a.Name, b.Name)
+                : string.Compare(a.Name, b.Name, general.CaseSensitiveSorting
+                    ? StringComparison.Ordinal
+                    : StringComparison.OrdinalIgnoreCase);
+        }
 
         return SortDescending ? -result : result;
     }
