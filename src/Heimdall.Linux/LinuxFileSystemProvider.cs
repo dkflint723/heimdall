@@ -1,8 +1,8 @@
 using System.IO.Enumeration;
 using System.Runtime.CompilerServices;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Linux implementation. The whole point of this class is the transform in

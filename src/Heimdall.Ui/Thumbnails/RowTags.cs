@@ -2,10 +2,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Rove.Core;
-using Rove.Core.FileSystem;
+using Heimdall.Core;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.Thumbnails;
+namespace Heimdall.Ui.Thumbnails;
 
 /// <summary>One tag as the row draws it: a name, and a colour derived from it.</summary>
 public sealed record TagChip(string Name, IBrush Colour);
@@ -85,7 +85,7 @@ public static class RowTags
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] tags failed: {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] tags failed: {ex.Message}");
         }
     }
 }

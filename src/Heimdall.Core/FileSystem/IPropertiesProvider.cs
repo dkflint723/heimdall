@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 /// <summary>One labelled fact about a file. Platform extras arrive as these
 /// rather than as typed fields, so Core does not grow a permissions model that

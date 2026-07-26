@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Rove.Core;
-using Rove.Core.FileSystem;
+using Heimdall.Core;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// Batch rename. The preview is the plan — what the list shows is exactly what

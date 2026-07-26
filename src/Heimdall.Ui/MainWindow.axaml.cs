@@ -7,16 +7,16 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using Rove.Core.FileSystem;
-using Rove.Core;
-using Rove.Core.Places;
-using Rove.Core.Search;
-using Rove.Core.Session;
-using Rove.Linux;
-using Rove.Ui.Session;
-using Rove.Ui.ViewModels;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core;
+using Heimdall.Core.Places;
+using Heimdall.Core.Search;
+using Heimdall.Core.Session;
+using Heimdall.Linux;
+using Heimdall.Ui.Session;
+using Heimdall.Ui.ViewModels;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 public partial class MainWindow : Window
 {
@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        AppIcon.Apply(this);
 
         // The one and only place a platform type is named, and the one guard
         // the analyser needs — the platform assemblies are annotated
@@ -53,7 +54,7 @@ public partial class MainWindow : Window
         if (platform.Icons is { } icons)
         {
             var probe = icons.Resolve(["inode-directory", "folder"], 32);
-            Console.Error.WriteLine($"[rove] folder icon resolved to: {probe ?? "NOTHING"}");
+            Console.Error.WriteLine($"[heimdall] folder icon resolved to: {probe ?? "NOTHING"}");
         }
 
         // Applied before anything else paints, and re-applied whenever Plasma's
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
         _shell.UseRemotes(platform.Remotes);
         _shell.UseDiscovery(platform.Discovery);
+        _shell.UseProperties(platform.Properties);
 
         _shell.ConnectionInfoRequested += (_, info) =>
             new ConnectionWindow(info).ShowDialog(this);
@@ -124,7 +126,7 @@ public partial class MainWindow : Window
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[rove] clipboard: {ex.Message}");
+                Console.Error.WriteLine($"[heimdall] clipboard: {ex.Message}");
             }
         };
 
@@ -165,6 +167,15 @@ public partial class MainWindow : Window
         // SplitRatio would never reflect where the divider actually sits.
         SplitHandle.DragCompleted += (_, _) => CaptureSplitRatio();
 
+        // A folder named on the command line, and any handed over by a later
+        // launch. Without this the window ignored the path it was asked for,
+        // which as a default file manager is the whole job.
+        if (Program.Instance is { } instance)
+            instance.PathsReceived += (_, paths) => OpenPaths(paths, activate: true);
+
+        if (Program.StartupPaths.Length > 0)
+            Dispatcher.UIThread.Post(() => OpenPaths(Program.StartupPaths, activate: false));
+
         Closing += OnClosing;
         Resized += (_, _) => _shell.NotifyWindowChanged();
         PositionChanged += (_, _) => _shell.NotifyWindowChanged();
@@ -180,7 +191,7 @@ public partial class MainWindow : Window
         // Build stamp. When a symptom and the code disagree, this is the one
         // line that says whether the running binary contains the fix.
         Console.Error.WriteLine(
-            $"[rove] build {BuildStamp()}  clipboard=yes  split={_shell.IsSplit}");
+            $"[heimdall] build {BuildStamp()}  clipboard=yes  split={_shell.IsSplit}");
     }
 
     private static string BuildStamp()
@@ -189,7 +200,7 @@ public partial class MainWindow : Window
         {
             // AppContext.BaseDirectory rather than Assembly.Location, which is
             // empty in a single-file or AOT publish.
-            var dll = Path.Combine(AppContext.BaseDirectory, "Rove.Ui.dll");
+            var dll = Path.Combine(AppContext.BaseDirectory, "Heimdall.Ui.dll");
             return File.Exists(dll)
                 ? File.GetLastWriteTime(dll).ToString("HH:mm:ss")
                 : "unknown";
@@ -297,8 +308,8 @@ public partial class MainWindow : Window
     {
         if (_shell.ActiveTab is not { } pane) return;
 
-        var entries = pane.SelectedEntries.Count > 0
-            ? pane.SelectedEntries.ToList()
+        var entries = pane.Selection.Count > 0
+            ? pane.Selection.ToList()
             : pane.SelectedEntry is { } one ? [one]
             : new List<FileEntry>();
 
@@ -322,8 +333,8 @@ public partial class MainWindow : Window
     {
         if (_shell.ActiveTab is not { } pane) return;
 
-        var paths = pane.SelectedEntries.Count > 0
-            ? pane.SelectedEntries.Select(x => x.FullPath).ToList()
+        var paths = pane.Selection.Count > 0
+            ? pane.Selection.Select(x => x.FullPath).ToList()
             : pane.SelectedEntry is { } one ? [one.FullPath]
             : new List<string> { pane.CurrentPath };
 
@@ -359,7 +370,7 @@ public partial class MainWindow : Window
     private PointerPressedEventArgs? _dragTrigger;
 
     /// <summary>
-    /// True while a drag that started inside Rove is in flight. Dragging within
+    /// True while a drag that started inside Heimdall is in flight. Dragging within
     /// a file manager conventionally means move; dragging in from another
     /// application means copy. Ctrl and Shift override either way.
     /// </summary>
@@ -453,8 +464,8 @@ public partial class MainWindow : Window
 
     private async Task BeginDragAsync(PaneViewModel pane, PointerPressedEventArgs trigger)
     {
-        var paths = pane.SelectedEntries.Count > 0
-            ? pane.SelectedEntries.Select(x => x.FullPath).ToList()
+        var paths = pane.Selection.Count > 0
+            ? pane.Selection.Select(x => x.FullPath).ToList()
             : pane.SelectedEntry is { } one ? [one.FullPath] : [];
 
         if (paths.Count == 0) return;
@@ -487,7 +498,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] drag failed: {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] drag failed: {ex.Message}");
         }
         finally
         {
@@ -621,6 +632,33 @@ public partial class MainWindow : Window
         };
     }
 
+    /// <summary>
+    /// Opens folders in tabs. Files resolve to the folder holding them, because
+    /// "open containing folder" is the request the desktop actually sends.
+    /// </summary>
+    private void OpenPaths(IReadOnlyList<string> paths, bool activate)
+    {
+        foreach (var raw in paths)
+        {
+            var path = raw;
+
+            if (File.Exists(path) && Path.GetDirectoryName(path) is { Length: > 0 } parent)
+                path = parent;
+
+            if (!Directory.Exists(path)) continue;
+
+            _shell.OpenInNewTab(path);
+        }
+
+        if (!activate) return;
+
+        // Raise the existing window: the user asked to see a folder, and
+        // silently loading it behind whatever they were doing is not that.
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+
+        Activate();
+    }
+
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         if (_closeApproved) return;
@@ -641,7 +679,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] session flush failed: {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] session flush failed: {ex.Message}");
         }
 
         _closeApproved = true;
@@ -769,7 +807,7 @@ public partial class MainWindow : Window
         _prompt = PromptMode.NewTag;
 
         var count = _shell.ActiveTab is { } t
-            ? (t.SelectedEntries.Count > 0 ? t.SelectedEntries.Count : t.SelectedEntry is null ? 0 : 1)
+            ? (t.Selection.Count > 0 ? t.Selection.Count : t.SelectedEntry is null ? 0 : 1)
             : 0;
 
         PromptLabel.Text = $"tag {count} selected item(s)";
@@ -789,8 +827,8 @@ public partial class MainWindow : Window
         if (PromptBar is null) return;
         if (_shell.ActiveTab is not { } pane) return;
 
-        var count = pane.SelectedEntries.Count > 0
-            ? pane.SelectedEntries.Count
+        var count = pane.Selection.Count > 0
+            ? pane.Selection.Count
             : pane.SelectedEntry is null ? 0 : 1;
 
         if (count == 0) return;

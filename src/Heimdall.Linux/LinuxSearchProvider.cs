@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.IO.Enumeration;
 using System.Runtime.CompilerServices;
-using Rove.Core.FileSystem;
-using Rove.Core.Search;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core.Search;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Baloo when it's indexing, a recursive walk when it isn't.

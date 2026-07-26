@@ -1,10 +1,10 @@
-using Rove.Core;
-using Rove.Core.FileSystem;
-using Rove.Core.Sharing;
-using Rove.Core.Places;
-using Rove.Core.Search;
+using Heimdall.Core;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core.Sharing;
+using Heimdall.Core.Places;
+using Heimdall.Core.Search;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// The Linux composition root. Everything OS-specific is built here, so the UI

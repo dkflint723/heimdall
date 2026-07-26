@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 /// <summary>
 /// Tab-completion for a typed path.

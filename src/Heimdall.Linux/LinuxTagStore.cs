@@ -2,9 +2,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Rove.Core;
+using Heimdall.Core;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 [JsonSerializable(typeof(List<string>))]
 [JsonSourceGenerationOptions(WriteIndented = true)]

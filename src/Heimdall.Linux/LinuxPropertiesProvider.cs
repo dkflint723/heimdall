@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.IO.Enumeration;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 public sealed class LinuxPropertiesProvider : IPropertiesProvider, IAccessEditor
 {

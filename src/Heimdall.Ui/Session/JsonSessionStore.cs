@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Avalonia.Threading;
-using Rove.Core.Session;
+using Heimdall.Core.Session;
 
-namespace Rove.Ui.Session;
+namespace Heimdall.Ui.Session;
 
 /// <summary>
 /// Crash-safe session storage. Three rules, each of which exists because
@@ -39,23 +39,36 @@ public sealed class JsonSessionStore : ISessionStore, IAsyncDisposable
         _timer.Tick += OnTick;
     }
 
-    /// <summary>~/.local/state/rove on Linux, %LOCALAPPDATA%\rove on Windows.</summary>
+    /// <summary>~/.local/state/heimdall on Linux, %LOCALAPPDATA%\heimdall on Windows.</summary>
     public static string DefaultDirectory()
+    {
+        var directory = Path.Combine(StateRoot(), "heimdall");
+
+        // The app was called Heimdall until it was renamed. Adopt the old state
+        // rather than starting empty: losing every tab, pinned place and window
+        // position to a rename would be a poor trade for a new name.
+        Heimdall.Core.PreviousName.Adopt(directory, Path.Combine(StateRoot(), "rove"));
+
+        return directory;
+    }
+
+    private static string StateRoot()
     {
         if (OperatingSystem.IsLinux())
         {
             var stateHome = Environment.GetEnvironmentVariable("XDG_STATE_HOME");
+
             if (string.IsNullOrWhiteSpace(stateHome))
                 stateHome = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".local", "state");
-            return Path.Combine(stateHome, "rove");
+
+            return stateHome;
         }
 
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "rove");
+        return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     }
+
 
     /// <summary>
     /// Synchronous by design. The window needs its geometry before it is shown,
@@ -104,7 +117,7 @@ public sealed class JsonSessionStore : ISessionStore, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] session write failed: {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] session write failed: {ex.Message}");
         }
     }
 

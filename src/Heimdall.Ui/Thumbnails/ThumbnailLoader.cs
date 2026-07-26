@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using Avalonia.Media.Imaging;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.Thumbnails;
+namespace Heimdall.Ui.Thumbnails;
 
 /// <summary>
 /// Decodes thumbnails and keeps a bounded in-memory cache of them.

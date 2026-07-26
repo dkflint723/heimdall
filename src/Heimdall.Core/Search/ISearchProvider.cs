@@ -1,6 +1,6 @@
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Core.Search;
+namespace Heimdall.Core.Search;
 
 public sealed record SearchQuery
 {

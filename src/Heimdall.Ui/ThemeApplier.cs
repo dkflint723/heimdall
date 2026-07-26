@@ -1,9 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Rove.Core;
+using Heimdall.Core;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 /// <summary>
 /// Turns a desktop palette into Avalonia resources.

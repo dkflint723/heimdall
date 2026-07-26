@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Threading;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// The tree panel. Children load on expand, never eagerly — walking a whole

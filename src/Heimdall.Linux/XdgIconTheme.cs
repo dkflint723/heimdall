@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// The freedesktop icon theme specification, as far as a file manager needs it.
@@ -56,7 +56,7 @@ public sealed class XdgIconTheme : IIconThemeProvider
         if (!_searchOrder.Contains("hicolor")) _searchOrder.Add("hicolor");
 
         Console.Error.WriteLine(
-            $"[rove] icon theme '{ThemeName}', chain: {string.Join(" > ", _searchOrder)}");
+            $"[heimdall] icon theme '{ThemeName}', chain: {string.Join(" > ", _searchOrder)}");
     }
 
     public string ThemeName { get; private set; } = "hicolor";

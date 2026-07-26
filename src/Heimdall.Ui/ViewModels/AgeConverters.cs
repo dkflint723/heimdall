@@ -1,7 +1,7 @@
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// Shades the modified column by how long ago a file changed, so what moved

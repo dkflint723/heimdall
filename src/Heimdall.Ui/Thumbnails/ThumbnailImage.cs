@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 
-namespace Rove.Ui.Thumbnails;
+namespace Heimdall.Ui.Thumbnails;
 
 /// <summary>
 /// Attached property that loads a thumbnail into an Image asynchronously.
@@ -91,7 +91,7 @@ public static class ThumbnailImage
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] thumbnail failed: {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] thumbnail failed: {ex.Message}");
         }
     }
 }

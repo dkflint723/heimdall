@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// Choosing a folder to serve, when you did not get here by right-clicking one.

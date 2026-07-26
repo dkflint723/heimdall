@@ -1,6 +1,6 @@
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Templates from the user's XDG templates directory — the same folder Dolphin

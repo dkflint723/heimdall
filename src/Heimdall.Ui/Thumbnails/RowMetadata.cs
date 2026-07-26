@@ -1,9 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.Thumbnails;
+namespace Heimdall.Ui.Thumbnails;
 
 /// <summary>
 /// Fills a TextBlock with a file's inline metadata, asynchronously.
@@ -87,7 +87,7 @@ public static class RowMetadata
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] metadata failed: {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] metadata failed: {ex.Message}");
         }
     }
 

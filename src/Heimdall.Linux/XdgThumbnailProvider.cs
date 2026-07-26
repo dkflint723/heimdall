@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// The freedesktop thumbnail spec — the same cache Dolphin has been filling for

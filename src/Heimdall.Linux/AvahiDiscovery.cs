@@ -1,14 +1,14 @@
 using System.Diagnostics;
-using Rove.Core.Places;
+using Heimdall.Core.Places;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Browses the LAN by asking avahi, the mDNS responder already running on the
 /// machine.
 ///
 /// copyparty announces itself over mDNS when started with <c>-z</c> (which is
-/// how Rove starts its own shares), so a copyparty on any machine here shows up
+/// how Heimdall starts its own shares), so a copyparty on any machine here shows up
 /// without configuration. The same query finds WebDAV, SMB and SFTP from
 /// anything else on the network — NAS boxes, other desktops — because they all
 /// use the same announcements.

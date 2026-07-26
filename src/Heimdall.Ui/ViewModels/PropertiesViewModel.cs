@@ -2,9 +2,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>A single access flag, made two-way bindable for a checkbox.</summary>
 public sealed partial class AccessToggleViewModel : ObservableObject

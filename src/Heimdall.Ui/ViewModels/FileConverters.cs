@@ -1,7 +1,7 @@
 using Avalonia.Data.Converters;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// Presentation of the raw values in <see cref="FileEntry"/>.

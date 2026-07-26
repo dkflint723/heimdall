@@ -1,6 +1,7 @@
+using Heimdall.Core.FileSystem;
 using System.Text.Json.Serialization;
 
-namespace Rove.Core.Session;
+namespace Heimdall.Core.Session;
 
 public enum SortField { Name, Size, Modified, Kind }
 
@@ -9,7 +10,11 @@ public enum SortField { Name, Size, Modified, Kind }
 /// member: it is a navigation strip that sits above a layout, so it can be on
 /// or off for either of these rather than being a third mutually exclusive mode.
 /// </summary>
-public enum ViewMode { Details, Grid }
+/// <summary>
+/// Appending only: these persist as numbers, so reordering would silently
+/// reinterpret every saved session.
+/// </summary>
+public enum ViewMode { Details, Grid, Compact }
 
 /// <summary>Ctrl+B cycles full → rail only → hidden.</summary>
 public enum RailState { Full, RailOnly, Hidden }
@@ -39,6 +44,9 @@ public sealed record TabState
     public double FontScale { get; init; } = 1.0;
     public double IconScale { get; init; } = 1.0;
 
+    /// <summary>Grouping is a view setting, so it belongs to the tab.</summary>
+    public GroupMode GroupBy { get; init; } = GroupMode.None;
+
     /// <summary>
     /// Back/forward stacks, oldest first. Nobody restores navigation history —
     /// which is exactly why having it is noticeable.
@@ -51,6 +59,10 @@ public sealed record PaneState
 {
     public IReadOnlyList<TabState> Tabs { get; init; } = [];
     public int ActiveTabIndex { get; init; }
+
+    /// <summary>The details panel belongs to the split side, not the window.</summary>
+    public bool IsInfoVisible { get; init; }
+    public double InfoWidth { get; init; } = 280;
 }
 
 /// <summary>
@@ -70,6 +82,10 @@ public sealed record WindowSession
     public int ActivePaneIndex { get; init; }
     public double SplitRatio { get; init; } = 0.5;
 
+    /// <summary>The details panel: a window setting, like the split.</summary>
+    public bool IsInfoVisible { get; init; }
+    public double InfoWidth { get; init; } = 280;
+
     /// <summary>Multiplies the whole type scale. Persisted because it is an
     /// accessibility setting, not a transient view state.</summary>
     /// <summary>
@@ -79,6 +95,9 @@ public sealed record WindowSession
     /// </summary>
     public double FontScale { get; init; } = 1.0;
     public double IconScale { get; init; } = 1.0;
+
+    /// <summary>Grouping is a view setting, so it belongs to the tab.</summary>
+    public GroupMode GroupBy { get; init; } = GroupMode.None;
 
     /// <summary>
     /// The right side as it was when the split was last closed. Reopening the
@@ -109,7 +128,7 @@ public sealed record SessionState
     /// An unrecognised version is ignored rather than migrated or thrown on —
     /// a session file must never prevent startup.
     /// </summary>
-    public const int CurrentVersion = 9;
+    public const int CurrentVersion = 12;
 
     public int Version { get; init; } = CurrentVersion;
     public IReadOnlyList<WindowSession> Windows { get; init; } = [];

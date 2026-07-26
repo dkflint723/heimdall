@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 public sealed record FileTemplate(string Name, string Path);
 

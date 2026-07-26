@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 /// <summary>
 /// Resolves a freedesktop icon name to a file on disk, following the desktop's

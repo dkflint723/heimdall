@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 public enum ConflictResolution { Overwrite, Skip, KeepBoth, Cancel }
 

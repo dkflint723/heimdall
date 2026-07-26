@@ -5,9 +5,9 @@ using System.Xml.Linq;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.Thumbnails;
+namespace Heimdall.Ui.Thumbnails;
 
 /// <summary>
 /// Turns a themed icon file into something drawable.
@@ -107,7 +107,7 @@ public static class IconLoader
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] icon load failed: {Path.GetFileName(file)} — {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] icon load failed: {Path.GetFileName(file)} — {ex.Message}");
         }
 
         Drawn[file] = image;
@@ -123,7 +123,7 @@ public static class IconLoader
         {
             if (!root.Descendants().Any(e => e.Name.LocalName == name)) continue;
 
-            Console.Error.WriteLine($"[rove] icon declined ({name}): {Path.GetFileName(file)}");
+            Console.Error.WriteLine($"[heimdall] icon declined ({name}): {Path.GetFileName(file)}");
             return null;
         }
 
@@ -146,14 +146,14 @@ public static class IconLoader
         if (Diagnose)
         {
             Console.Error.WriteLine(
-                $"[rove] icon {Path.GetFileName(file)}: viewBox {bounds}, ink {ink}");
+                $"[heimdall] icon {Path.GetFileName(file)}: viewBox {bounds}, ink {ink}");
 
             foreach (var child in group.Children)
             {
                 if (child is not GeometryDrawing shape) continue;
 
                 Console.Error.WriteLine(
-                    $"[rove]   shape {shape.Geometry?.Bounds} " +
+                    $"[heimdall]   shape {shape.Geometry?.Bounds} " +
                     $"brush={Describe(shape.Brush)} pen={Describe(shape.Pen?.Brush)}");
             }
         }
@@ -163,9 +163,9 @@ public static class IconLoader
         return new DrawingImage { Drawing = group };
     }
 
-    /// <summary>Set ROVE_ICON_DEBUG=1 to dump per-shape bounds and paint.</summary>
+    /// <summary>Set HEIMDALL_ICON_DEBUG=1 to dump per-shape bounds and paint.</summary>
     private static readonly bool Diagnose =
-        Environment.GetEnvironmentVariable("ROVE_ICON_DEBUG") == "1";
+        Environment.GetEnvironmentVariable("HEIMDALL_ICON_DEBUG") == "1";
 
     private static string Describe(IBrush? brush) => brush switch
     {

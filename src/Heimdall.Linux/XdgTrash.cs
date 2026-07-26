@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// The freedesktop.org trash specification, which is what makes deleted files

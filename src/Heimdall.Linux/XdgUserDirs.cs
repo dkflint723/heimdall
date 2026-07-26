@@ -1,4 +1,4 @@
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Reads <c>user-dirs.dirs</c>, which records where the user actually keeps

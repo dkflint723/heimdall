@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Inline metadata. Image dimensions are read from the file header rather than

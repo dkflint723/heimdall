@@ -2,9 +2,9 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
-using Rove.Ui.ViewModels;
+using Heimdall.Ui.ViewModels;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 /// <summary>
 /// Per-pane type and icon scale.
@@ -59,6 +59,10 @@ public static class PaneScale
         yield return ("TileWidth", Math.Round(tile + 24, 1));
         yield return ("TileHeight", Math.Round(tile + body * 2.9, 1));
         yield return ("RailWidth", Math.Round(44 * fontScale, 1));
+
+        // Compact columns are sized by the text they hold, not by the icons —
+        // the mode exists to fit names on screen.
+        yield return ("CompactWidth", Math.Round(210 * fontScale, 1));
 
         // Three rows of chain, preserved at any combination of the two scales.
         yield return ("ColumnStripHeight", Math.Round(rowHeight * 3 + 6, 1));

@@ -1,4 +1,4 @@
-namespace Rove.Core;
+namespace Heimdall.Core;
 
 public sealed record ScriptCommand(string Name, string Path);
 

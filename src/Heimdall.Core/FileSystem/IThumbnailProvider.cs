@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 /// <summary>
 /// Finds an image to represent a file. Deliberately returns a *path* rather

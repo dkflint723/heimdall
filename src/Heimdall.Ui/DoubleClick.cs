@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 /// <summary>
 /// Runs a command on double-click.

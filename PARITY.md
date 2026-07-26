@@ -12,7 +12,7 @@ Status as of the Linux v1 build.
 
 ## Already at parity
 
-| Dolphin | Rove |
+| Dolphin | Heimdall |
 |---|---|
 | Tabs | ✅ per side, persisted |
 | Split view | ✅ F3, each side independent |
@@ -99,7 +99,7 @@ list column, priority-based column dropping, file-age shading.
     That gets SMB and SFTP — the two actually named — for a fraction of the
     cost, at the price of depending on a mount helper being installed.
 
-    **The same principle applies to the outbound direction.** Rove now drives
+    **The same principle applies to the outbound direction.** Heimdall now drives
     [copyparty](https://github.com/9001/copyparty) as a subprocess to serve a
     folder over HTTP/WebDAV — see "sharing" below. Writing a server with
     resumable uploads, dedup and a browser UI is a project in its own right and
@@ -127,7 +127,7 @@ list column, priority-based column dropping, file-age shading.
 ## Sharing (done)
 
 Right-click a folder → **Share over network**, read-only or with uploads
-allowed. Rove launches copyparty scoped to that folder on a free port and shows
+allowed. Heimdall launches copyparty scoped to that folder on a free port and shows
 the address; active shares appear in the sidebar with copy and stop buttons, and
 everything is torn down when the window closes.
 

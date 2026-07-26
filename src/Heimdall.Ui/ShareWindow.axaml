@@ -1,8 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
+        xmlns:vm="clr-namespace:Heimdall.Ui.ViewModels"
         xmlns:sys="using:System"
-        x:Class="Rove.Ui.ShareWindow"
+        x:Class="Heimdall.Ui.ShareWindow"
         x:DataType="vm:ShareRequestViewModel"
         Title="Share a folder"
         Background="{DynamicResource AppBackground}"
@@ -24,7 +24,7 @@
                FontSize="{DynamicResource FontSizeSmall}"/>
     </DockPanel>
 
-    <!-- Browsing done with Rove's own listing rather than the platform picker,
+    <!-- Browsing done with Heimdall's own listing rather than the platform picker,
          which deadlocks when opened from a modal window on Linux. Type a path
          or walk to it; both end up in the same box. -->
     <Border Height="190" BorderThickness="1"

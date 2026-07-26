@@ -1,13 +1,14 @@
 using Avalonia.Controls;
-using Rove.Ui.ViewModels;
+using Heimdall.Ui.ViewModels;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 public partial class PropertiesWindow : Window
 {
     public PropertiesWindow()
     {
         InitializeComponent();
+        AppIcon.Apply(this);
     }
 
     public PropertiesWindow(PropertiesViewModel model) : this()

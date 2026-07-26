@@ -1,15 +1,15 @@
 using System.Diagnostics;
-using Rove.Core.Places;
+using Heimdall.Core.Places;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Reads gvfs and kio-fuse mount points straight off the filesystem.
 ///
 /// Both projects exist to make remote locations look like directories, which is
-/// exactly what a file manager wants — so the whole of Rove's network support
+/// exactly what a file manager wants — so the whole of Heimdall's network support
 /// is a directory listing plus a name parser. Anything the desktop can mount,
-/// Rove can browse, including protocols that did not exist when this was
+/// Heimdall can browse, including protocols that did not exist when this was
 /// written.
 /// </summary>
 public sealed partial class LinuxRemoteMounts : IRemoteMounts

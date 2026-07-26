@@ -1,10 +1,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
-using Rove.Core.FileSystem;
-using Rove.Core.Search;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core.Search;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// The search panel. Results live in the sidebar rather than a modal dialog, so

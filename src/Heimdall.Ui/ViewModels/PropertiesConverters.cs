@@ -1,6 +1,6 @@
 using Avalonia.Data.Converters;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 public static class PropertiesConverters
 {

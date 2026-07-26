@@ -1,7 +1,7 @@
 using System.Globalization;
-using Rove.Core;
+using Heimdall.Core;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Reads the Plasma colour scheme and UI font out of <c>kdeglobals</c>.

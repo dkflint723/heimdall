@@ -1,13 +1,14 @@
 using Avalonia.Controls;
-using Rove.Ui.ViewModels;
+using Heimdall.Ui.ViewModels;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 public partial class ShareWindow : Window
 {
     public ShareWindow()
     {
         InitializeComponent();
+        AppIcon.Apply(this);
     }
 
     public ShareWindow(ShareRequestViewModel model) : this()
@@ -27,7 +28,7 @@ public partial class ShareWindow : Window
         // No platform folder picker here. Avalonia's is documented to fail or
         // hang when opened from a window shown with ShowDialog on Linux
         // (AvaloniaUI/Avalonia#10998, #6589), and this window is exactly that.
-        // The dialog browses using Rove's own directory listing instead, which
+        // The dialog browses using Heimdall's own directory listing instead, which
         // is the one thing a file manager is guaranteed to be good at.
     }
 }

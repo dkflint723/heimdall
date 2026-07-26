@@ -1,4 +1,4 @@
-namespace Rove.Core.Places;
+namespace Heimdall.Core.Places;
 
 /// <summary>A remote location that the desktop has made reachable as a path.</summary>
 public sealed record RemoteMount
@@ -24,7 +24,7 @@ public sealed record RemoteMount
 /// Finds remote locations the desktop has already mounted, and asks it to mount
 /// new ones.
 ///
-/// Rove does not speak SMB, SFTP or MTP itself. KIO and gvfs already do, and
+/// Heimdall does not speak SMB, SFTP or MTP itself. KIO and gvfs already do, and
 /// both expose their mounts as ordinary paths — kio-fuse under
 /// /run/user/$UID/kio-fuse-*, gvfs under /run/user/$UID/gvfs. Consuming those
 /// means every protocol the desktop supports works here for the cost of reading

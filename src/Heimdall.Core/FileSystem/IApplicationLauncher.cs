@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 /// <summary>One application that can open a given file.</summary>
 public sealed record LaunchOption(string Name, string Id, string? Icon = null);

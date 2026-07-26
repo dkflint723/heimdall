@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
-using Rove.Core.Places;
+using Heimdall.Core.Places;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 public sealed record PinnedPlace(string Path, string Label);
 

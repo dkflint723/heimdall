@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -16,6 +16,12 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <!-- Embedded so the icon travels inside the single AOT binary rather than
+       sitting beside it as a file that can go missing. -->
+  <ItemGroup>
+    <AvaloniaResource Include="heimdall.png" />
   </ItemGroup>
 
   <ItemGroup>

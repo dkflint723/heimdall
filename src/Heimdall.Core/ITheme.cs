@@ -1,4 +1,4 @@
-namespace Rove.Core;
+namespace Heimdall.Core;
 
 /// <summary>
 /// Named colour roles the UI paints with. Roles rather than literal colours so

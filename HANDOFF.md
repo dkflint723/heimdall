@@ -1,4 +1,4 @@
-# Rove — handoff
+# Heimdall — handoff
 
 A file manager for Fedora KDE and Windows, built to be daily-driven instead of
 Dolphin and Explorer. This document is what you read to pick the project up
@@ -37,37 +37,37 @@ weakening anything.
 ## 2. Build and run
 
 ```bash
-cd ~/dev/rove
-dotnet build && dotnet run --project src/Rove.Ui
+cd ~/dev/heimdall
+dotnet build && dotnet run --project src/Heimdall.Ui
 
 # Release, ahead-of-time, fully trimmed — the shape that actually ships
-dotnet publish src/Rove.Ui -r linux-x64 -c Release /p:PublishAot=true
+dotnet publish src/Heimdall.Ui -r linux-x64 -c Release /p:PublishAot=true
 ```
 
 Fedora's own .NET 10 SDK, Avalonia 12.1. `Directory.Build.props` enables the
 trim and AOT analysers in every project, so trim-hostile code fails the build
 rather than surfacing months later in a published binary.
 
-Diagnostics are on stderr and prefixed `[rove]`:
+Diagnostics are on stderr and prefixed `[heimdall]`:
 
 ```bash
-dotnet run --project src/Rove.Ui 2>&1 | grep -a rove
-ROVE_ICON_DEBUG=1 dotnet run --project src/Rove.Ui 2>&1 | grep -a icon
+dotnet run --project src/Heimdall.Ui 2>&1 | grep -a heimdall
+ROVE_ICON_DEBUG=1 dotnet run --project src/Heimdall.Ui 2>&1 | grep -a icon
 ```
 
-State lives in `~/.local/state/rove/` — `session.json` (+ `.bak`),
+State lives in `~/.local/state/heimdall/` — `session.json` (+ `.bak`),
 `places.json`, `tags.json`, `instance.lock`. Scripts live in
-`$XDG_DATA_HOME/rove/scripts`.
+`$XDG_DATA_HOME/heimdall/scripts`.
 
 ---
 
 ## 3. Architecture
 
 ```
-Rove.Core     platform-agnostic. Never references InteropServices.
-Rove.Linux    [assembly: SupportedOSPlatform("linux")]
-Rove.Ui       Avalonia. Depends on Core; names a platform type in ONE place.
-Rove.Windows  not started
+Heimdall.Core     platform-agnostic. Never references InteropServices.
+Heimdall.Linux    [assembly: SupportedOSPlatform("linux")]
+Heimdall.Ui       Avalonia. Depends on Core; names a platform type in ONE place.
+Heimdall.Windows  not started
 ```
 
 **The platform seam is a single object.** `IPlatform` in Core bundles every
@@ -76,11 +76,11 @@ thumbnails, metadata, properties, access editor, scripts, tags, theme, icons.
 `LinuxPlatform` is the Linux composition root. `MainWindow` constructs it inside
 one `OperatingSystem.IsLinux()` check and never mentions a platform type again.
 
-For the Windows port: add `WindowsPlatform`, make the `Rove.Windows`
+For the Windows port: add `WindowsPlatform`, make the `Heimdall.Windows`
 ProjectReference conditional, and put `#if` around that single construction. The
 UI needs no other change.
 
-`Rove.Linux` is annotated Linux-only at assembly level rather than by target
+`Heimdall.Linux` is annotated Linux-only at assembly level rather than by target
 framework — **there is no `net10.0-linux` TFM**; .NET only defines OS-specific
 frameworks for windows, android, ios, macos, maccatalyst, tvos and browser. The
 annotation removes every per-call platform guard inside the project and pushes
@@ -228,7 +228,7 @@ is where you find out which of those shapes were really about Linux.
 - **Ship a full `src` snapshot, not incremental patches.** Partial archives
   repeatedly failed to land — files listed by `tar` yet unchanged on disk. This
   silently reverted a working fix once and caused several rounds of chasing a
-  bug that was already fixed. Commit first, `pkill -f Rove.Ui`, extract, then
+  bug that was already fixed. Commit first, `pkill -f Heimdall.Ui`, extract, then
   `git status --short` to see what actually changed.
 - **Verify before building.** `grep -c` for a symbol you just added is faster
   than a build cycle and catches a file that did not land.
@@ -238,4 +238,4 @@ is where you find out which of those shapes were really about Linux.
   incorrect, add the trace first.
 - **Prefer the desktop's own data over private equivalents.** XDG trash, the
   freedesktop thumbnail cache, `user.xdg.tags`, `kdeglobals`, shared-mime-info,
-  the icon theme spec. Everything Rove writes, the rest of the desktop can read.
+  the icon theme spec. Everything Heimdall writes, the rest of the desktop can read.

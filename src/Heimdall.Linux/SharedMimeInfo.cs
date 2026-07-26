@@ -1,4 +1,4 @@
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Reads the shared-mime-info glob database directly.

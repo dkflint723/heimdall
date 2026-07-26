@@ -3,14 +3,14 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 public enum ClipboardAction { Copy, Cut }
 
 public sealed record ClipboardPayload(ClipboardAction Action, IReadOnlyList<string> Paths);
 
 /// <summary>
-/// File clipboard using the freedesktop conventions, so copy in Rove and paste
+/// File clipboard using the freedesktop conventions, so copy in Heimdall and paste
 /// in Dolphin works — and the other way round.
 ///
 /// The file list itself goes through Avalonia's universal DataFormat.File,
@@ -78,7 +78,7 @@ public static class FileClipboard
         await clipboard.SetDataAsync(data).ConfigureAwait(false);
 
         // On X11 values are provided lazily, so without this the payload would
-        // be unavailable the moment Rove exits.
+        // be unavailable the moment Heimdall exits.
         await clipboard.FlushAsync().ConfigureAwait(false);
     }
 

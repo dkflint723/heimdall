@@ -1,4 +1,4 @@
-namespace Rove.Core.Sharing;
+namespace Heimdall.Core.Sharing;
 
 /// <summary>A folder currently being served, and where to reach it.</summary>
 public sealed record ShareSession
@@ -19,10 +19,10 @@ public sealed record ShareSession
 /// <summary>
 /// Serves a local folder over the network.
 ///
-/// Rove does not implement this itself — it drives an existing server
+/// Heimdall does not implement this itself — it drives an existing server
 /// (copyparty). Writing an HTTP/WebDAV server with resumable uploads, dedup and
 /// a browser UI is a project in its own right, and a good one already exists
-/// under a permissive licence. This interface is the seam that lets Rove use it
+/// under a permissive licence. This interface is the seam that lets Heimdall use it
 /// without depending on its internals.
 ///
 /// Platform-specific because *locating and launching* a server differs by OS,

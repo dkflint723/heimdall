@@ -1,4 +1,4 @@
-namespace Rove.Core.Places;
+namespace Heimdall.Core.Places;
 
 /// <summary>A service announcing itself on the local network.</summary>
 public sealed record DiscoveredService
@@ -37,9 +37,9 @@ public sealed record DiscoveredService
 /// <summary>
 /// Finds file services announcing themselves on the LAN.
 ///
-/// Rove implements neither mDNS nor SSDP — the desktop already runs a responder
+/// Heimdall implements neither mDNS nor SSDP — the desktop already runs a responder
 /// (avahi on Linux) that has been listening since boot, and it knows about
-/// services that appeared before Rove started. Asking it is both less code and
+/// services that appeared before Heimdall started. Asking it is both less code and
 /// more correct than starting our own listener and waiting.
 /// </summary>
 public interface INetworkDiscovery

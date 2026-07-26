@@ -1,15 +1,15 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:fs="clr-namespace:Rove.Core.FileSystem;assembly=Rove.Core"
-        xmlns:vm="clr-namespace:Rove.Ui.ViewModels"
-        xmlns:core="clr-namespace:Rove.Core;assembly=Rove.Core"
-        xmlns:th="clr-namespace:Rove.Ui.Thumbnails"
-        xmlns:local="clr-namespace:Rove.Ui"
-        xmlns:sh="clr-namespace:Rove.Core.Sharing;assembly=Rove.Core"
-        xmlns:pl="clr-namespace:Rove.Core.Places;assembly=Rove.Core"
-        x:Class="Rove.Ui.MainWindow"
+        xmlns:fs="clr-namespace:Heimdall.Core.FileSystem;assembly=Heimdall.Core"
+        xmlns:vm="clr-namespace:Heimdall.Ui.ViewModels"
+        xmlns:core="clr-namespace:Heimdall.Core;assembly=Heimdall.Core"
+        xmlns:th="clr-namespace:Heimdall.Ui.Thumbnails"
+        xmlns:local="clr-namespace:Heimdall.Ui"
+        xmlns:sh="clr-namespace:Heimdall.Core.Sharing;assembly=Heimdall.Core"
+        xmlns:pl="clr-namespace:Heimdall.Core.Places;assembly=Heimdall.Core"
+        x:Class="Heimdall.Ui.MainWindow"
         x:DataType="vm:ShellViewModel"
-        Title="rove"
+        Title="Heimdall"
         Background="{DynamicResource AppBackground}"
         Foreground="{DynamicResource ViewText}"
         FontFamily="{DynamicResource AppFontFamily}"
@@ -41,6 +41,72 @@
          PaneViewModel was built to own its own path, history and selection. -->
     <DataTemplate x:Key="PaneGroupTemplate" x:DataType="vm:PaneGroupViewModel">
       <DockPanel>
+      <!-- One panel per split side. Docked inside the group so it describes
+           THIS side's selection — a single window-level panel kept swapping
+           content as focus moved between halves, which defeats the point of
+           comparing two folders side by side. -->
+      <Border DockPanel.Dock="Right" IsVisible="{Binding IsInfoVisible}"
+              Width="{Binding InfoWidth}"
+              Background="{DynamicResource PanelBackground}"
+              BorderThickness="1,0,0,0" BorderBrush="{DynamicResource EdgeShadow}">
+        <ScrollViewer>
+          <StackPanel Margin="14" Spacing="10">
+
+            <Border Height="200" CornerRadius="6"
+                    Background="{DynamicResource ViewBackground}"
+                    IsVisible="{Binding Info.HasSelection}">
+              <Panel>
+                <Image th:ThumbnailImage.Path="{Binding Info.PreviewPath}"
+                       th:ThumbnailImage.Size="512"
+                       IsVisible="{Binding !Info.IsFolder}"
+                       Stretch="Uniform" Margin="8"/>
+                <TextBlock Text="&#x1F4C1;" FontSize="64"
+                           IsVisible="{Binding Info.IsFolder}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource ViewDimText}"/>
+              </Panel>
+            </Border>
+
+            <TextBlock Text="{Binding Info.Name}" TextWrapping="Wrap"
+                       FontSize="{DynamicResource FontSizeBase}" FontWeight="SemiBold"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding Info.Kind}"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         Foreground="{DynamicResource ViewDimText}"
+                         TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding Info.Summary}"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         Foreground="{DynamicResource ViewDimText}"/>
+            </StackPanel>
+
+            <Border Height="1" Background="{DynamicResource SeparatorColour}"
+                    IsVisible="{Binding Info.HasSelection}"/>
+
+            <ItemsControl ItemsSource="{Binding Info.Rows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="fs:PropertyRow">
+                  <Grid ColumnDefinitions="Auto,*" Margin="0,2">
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" Width="96"
+                               FontSize="{DynamicResource FontSizeSmall}"
+                               Foreground="{DynamicResource ViewDimText}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <SelectableTextBlock Grid.Column="1" Text="{Binding Value}"
+                                         FontSize="{DynamicResource FontSizeSmall}"
+                                         TextWrapping="Wrap"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <GridSplitter DockPanel.Dock="Right" Width="4" ResizeDirection="Columns"
+                    IsVisible="{Binding IsInfoVisible}"
+                    Background="{DynamicResource BorderColour}"/>
+
 
         <!-- The accent rides the top of the ACTIVE side's tab bar. With two
              identical listings side by side, which one takes the next keystroke
@@ -63,6 +129,26 @@
                        Command="{Binding ActiveTab.ShowAsGridCommand}"
                        ToolTip.Tip="grid">
             <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
+                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
+          </RadioButton>
+          <!-- Per side, sitting with the layout buttons because it is the same
+               kind of choice: how THIS half is displayed. -->
+          <ToggleButton DockPanel.Dock="Right" Margin="0,0,8,4"
+                        VerticalAlignment="Center" Padding="7,3"
+                        IsChecked="{Binding IsInfoVisible}"
+                        ToolTip.Tip="details panel for this side  (f11)">
+            <Path Data="M0,0 H12 V12 H0 Z M8,0 V12"
+                  Stroke="{DynamicResource ViewText}" StrokeThickness="1.4"
+                  Fill="Transparent" Width="12" Height="12" Stretch="Uniform"/>
+          </ToggleButton>
+
+          <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,2,4"
+                       VerticalAlignment="Center" Padding="7,3"
+                       IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
+                       Command="{Binding ActiveTab.ShowAsCompactCommand}"
+                       ToolTip.Tip="compact">
+            <!-- Two short columns: the shape of the layout itself. -->
+            <Path Data="M0,0 H5 V2 H0 Z M0,4 H5 V6 H0 Z M0,8 H5 V10 H0 Z M7,0 H12 V2 H7 Z M7,4 H12 V6 H7 Z M7,8 H12 V10 H7 Z"
                   Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
           </RadioButton>
           <RadioButton DockPanel.Dock="Right" GroupName="quicklayout" Margin="0,0,2,4"
@@ -89,12 +175,19 @@
                                  FontSize="{DynamicResource FontSizeSmall}"
                                  IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
                                  Command="{Binding ActiveTab.ShowAsDetailsCommand}"/>
-                    <RadioButton Content="Grid" GroupName="layout"
+                    <RadioButton Content="Compact" GroupName="layout"
+                               FontSize="{DynamicResource FontSizeSmall}"
+                               IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
+                               Command="{Binding ActiveTab.ShowAsCompactCommand}"/>
+                  <RadioButton Content="Grid" GroupName="layout"
                                  FontSize="{DynamicResource FontSizeSmall}"
                                  IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
                                  Command="{Binding ActiveTab.ShowAsGridCommand}"/>
                   </UniformGrid>
 
+                  <CheckBox Content="Details panel  (f11)"
+                            FontSize="{DynamicResource FontSizeSmall}"
+                            IsChecked="{Binding IsInfoVisible}"/>
                   <CheckBox Content="Path columns above list"
                             FontSize="{DynamicResource FontSizeSmall}"
                             IsChecked="{Binding ActiveTab.ShowColumnStrip}"/>
@@ -386,6 +479,38 @@
               <MenuItem Header="Cut"   Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
               <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"/>
               <Separator/>
+              <!-- Destinations are the Places the user already keeps, so pinning
+                   a folder makes it a transfer target for free. -->
+              <MenuItem Header="Copy to"
+                        ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
+                <MenuItem.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PlaceItemViewModel">
+                    <TextBlock Text="{Binding Label}"/>
+                  </DataTemplate>
+                </MenuItem.ItemTemplate>
+                <MenuItem.Styles>
+                  <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
+                    <Setter Property="Command"
+                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopySelectionToCommand}"/>
+                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                  </Style>
+                </MenuItem.Styles>
+              </MenuItem>
+              <MenuItem Header="Move to"
+                        ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
+                <MenuItem.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PlaceItemViewModel">
+                    <TextBlock Text="{Binding Label}"/>
+                  </DataTemplate>
+                </MenuItem.ItemTemplate>
+                <MenuItem.Styles>
+                  <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
+                    <Setter Property="Command"
+                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveSelectionToCommand}"/>
+                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                  </Style>
+                </MenuItem.Styles>
+              </MenuItem>
               <MenuItem Header="Copy to other pane"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyToOtherPaneCommand}"
                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
@@ -425,6 +550,24 @@
                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanInstallSharing}"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).InstallSharingCommand}"/>
               <Separator/>
+              <MenuItem Header="Group by">
+                <MenuItem Header="None" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsUngrouped, Mode=OneWay}"
+                          Command="{Binding ActiveTab.GroupByNoneCommand}"/>
+                <Separator/>
+                <MenuItem Header="Name" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsGroupedByName, Mode=OneWay}"
+                          Command="{Binding ActiveTab.GroupByNameCommand}"/>
+                <MenuItem Header="Size" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsGroupedBySize, Mode=OneWay}"
+                          Command="{Binding ActiveTab.GroupBySizeCommand}"/>
+                <MenuItem Header="Modified" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsGroupedByModified, Mode=OneWay}"
+                          Command="{Binding ActiveTab.GroupByModifiedCommand}"/>
+                <MenuItem Header="Type" ToggleType="Radio"
+                          IsChecked="{Binding ActiveTab.IsGroupedByKind, Mode=OneWay}"
+                          Command="{Binding ActiveTab.GroupByKindCommand}"/>
+              </MenuItem>
               <MenuItem Header="Sort by">
                 <MenuItem Header="Name" ToggleType="Radio"
                           IsChecked="{Binding ActiveTab.IsSortedByName, Mode=OneWay}"
@@ -662,7 +805,7 @@
               <Panel>
               <ListBox ItemsSource="{Binding Entries}"
                        SelectedItem="{Binding SelectedEntry}"
-                       SelectedItems="{Binding SelectedEntries}"
+                       SelectedItems="{Binding DetailsSelection}"
                        DragDrop.AllowDrop="True"
                        SizeChanged="OnListSizeChanged"
                        IsVisible="{Binding IsDetailsView}" SelectionMode="Multiple" Background="Transparent" Padding="0">
@@ -703,6 +846,17 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="fs:FileEntry">
+                    <StackPanel>
+                      <!-- Group header, shown only on the first row of each run.
+                           Part of the row rather than a separate list item, so
+                           Entries stays a flat list of FileEntry and selection,
+                           virtualization and the three layouts all keep working. -->
+                      <ContentControl th:RowGroup.Entry="{Binding}"
+                                      IsVisible="False"
+                                      Margin="12,8,8,2"
+                                      FontSize="{DynamicResource FontSizeSmall}"
+                                      FontWeight="SemiBold"
+                                      Foreground="{DynamicResource ViewDimText}"/>
                     <Panel>
                       <!-- Selection marker drawn by us rather than by the control theme.
                            A 3px bar plus a fill means selection reads by position as well
@@ -792,6 +946,71 @@
                                    VerticalAlignment="Center"/>
                       </Grid>
                     </Panel>
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+
+              <!-- Compact layout: names only, flowing DOWN and wrapping into
+                   columns, which is why the ScrollViewer scrolls horizontally.
+                   A third ListBox for the same reason as the second — the
+                   panel and the item template change together, and three lists
+                   binding one selection are simpler than one that rewrites
+                   itself twice. -->
+              <ListBox ItemsSource="{Binding Entries}"
+                       SelectedItem="{Binding SelectedEntry}"
+                       SelectedItems="{Binding CompactSelection}"
+                       IsVisible="{Binding IsCompactView}"
+                       DragDrop.AllowDrop="True"
+                       SelectionMode="Multiple" Background="Transparent" Padding="4"
+                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                       ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                <ListBox.Styles>
+                  <Style Selector="ListBoxItem">
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="MinHeight" Value="0"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                    <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                    <Setter Property="Background" Value="Transparent"/>
+                  </Style>
+                  <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
+                    <Setter Property="Background" Value="Transparent"/>
+                  </Style>
+                </ListBox.Styles>
+                <ListBox.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <!-- Vertical wrap is what makes it columns rather than rows.
+                         Not virtualized: WrapPanel has no virtualizing form, and
+                         this mode exists for folders you want to see at once. -->
+                    <WrapPanel Orientation="Vertical"/>
+                  </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="fs:FileEntry">
+                    <Panel Width="{DynamicResource CompactWidth}"
+                           Height="{DynamicResource RowHeight}">
+                      <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
+                              Margin="1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                      <!-- Same edge bar as the details rows: selection must read
+                           by position as well as by colour. -->
+                      <Border Width="3" HorizontalAlignment="Left" Margin="1"
+                              Background="{DynamicResource AccentColour}"
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                      <StackPanel Orientation="Horizontal" Spacing="6"
+                                  VerticalAlignment="Center" Margin="8,0,6,0">
+                        <Panel Width="{DynamicResource IconSize}"
+                               Height="{DynamicResource IconSize}">
+                          <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="24"
+                                 Stretch="Uniform"/>
+                        </Panel>
+                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                   FontSize="{DynamicResource FontSizeBase}"
+                                   TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
+                    </Panel>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
@@ -801,7 +1020,7 @@
                    selection are simpler than one list rewriting itself. -->
               <ListBox ItemsSource="{Binding Entries}"
                        SelectedItem="{Binding SelectedEntry}"
-                       SelectedItems="{Binding SelectedEntries}"
+                       SelectedItems="{Binding GridSelection}"
                        IsVisible="{Binding IsGridView}"
                        DragDrop.AllowDrop="True"
                        SelectionMode="Multiple" Background="Transparent" Padding="6">
@@ -916,6 +1135,7 @@
     <KeyBinding Gesture="F5"             Command="{Binding ActiveTab.RefreshCommand}"/>
     <KeyBinding Gesture="F2"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
     <KeyBinding Gesture="Shift+F2"       Command="{Binding BatchRenameCommand}"/>
+    <KeyBinding Gesture="F11"            Command="{Binding ToggleInfoCommand}"/>
     <KeyBinding Gesture="F3"             Command="{Binding ToggleSplitCommand}"/>
     <KeyBinding Gesture="F8"             Command="{Binding ActiveTab.ToggleViewCommand}"/>
     <KeyBinding Gesture="Space"          Command="{Binding ActiveTab.TogglePreviewCommand}"/>
@@ -1110,8 +1330,8 @@
                    it is the least reached for of the four. -->
               <StackPanel Margin="0,10,0,0">
                 <!-- Servers announcing themselves on the LAN. copyparty does
-                     this when started with -z, which is how Rove starts its own
-                     shares — so two machines running Rove find each other with
+                     this when started with -z, which is how Heimdall starts its own
+                     shares — so two machines running Heimdall find each other with
                      no configuration, and so does any NAS on the network. -->
                 <StackPanel Margin="0,4,0,8">
                   <DockPanel Margin="12,0,8,2">
@@ -1172,7 +1392,7 @@
 
                 <!-- Remote mounts. Whatever the desktop has connected shows up
                      here as an ordinary path, so every protocol KIO or gvfs
-                     supports works without Rove knowing any of them. -->
+                     supports works without Heimdall knowing any of them. -->
                 <StackPanel IsVisible="{Binding Sidebar.HasRemotes}" Margin="0,4,0,8">
                   <DockPanel Margin="12,0,8,2">
                     <Button DockPanel.Dock="Right" Content="+" Padding="4,0"

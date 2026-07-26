@@ -4,11 +4,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
-using Rove.Core;
-using Rove.Core.FileSystem;
-using Rove.Core.Session;
+using Heimdall.Core;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core.Session;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>One clickable ancestor in the breadcrumb bar.</summary>
 public sealed record PathSegment(string Name, string FullPath, ICommand Open, bool IsLast);
@@ -61,6 +61,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         ITagStore? tags = null,
         ITemplateProvider? templates = null)
     {
+        WatchSelections();
+
         _tags = tags;
         _templates = templates;
         _fs = fs;
@@ -207,11 +209,81 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public BulkObservableCollection<FileEntry> Entries { get; } = new();
 
     /// <summary>
-    /// Bound to the list's SelectedItems. Operations act on this, not on
-    /// SelectedEntry — deleting one of five selected files would be a nasty
-    /// surprise.
+    /// One selection collection PER LAYOUT, and the reason is not cosmetic.
+    ///
+    /// Details, grid and compact are three separate ListBoxes that all stay
+    /// alive when hidden. Pointing their SelectedItems at a single shared
+    /// collection made each one write its own idea of the selection into it, so
+    /// clicking one row produced a union of whatever the other two still held —
+    /// three different files selected from one click. Deduplicating does not
+    /// help, because the entries genuinely differ.
+    ///
+    /// Separate collections mean a hidden list can only ever disturb its own.
     /// </summary>
-    public ObservableCollection<FileEntry> SelectedEntries { get; } = new();
+    public ObservableCollection<FileEntry> DetailsSelection { get; } = new();
+    public ObservableCollection<FileEntry> GridSelection { get; } = new();
+    public ObservableCollection<FileEntry> CompactSelection { get; } = new();
+
+    /// <summary>
+    /// Subscribes to all three, not just the active one — a hidden list can
+    /// still be told to sync, and the active one changes as the layout does.
+    /// Without this nothing recomputed the selection count, which is why the
+    /// status bar reported only the item total.
+    /// </summary>
+    private void WatchSelections()
+    {
+        DetailsSelection.CollectionChanged += (_, _) => NotifySelectionChanged();
+        GridSelection.CollectionChanged += (_, _) => NotifySelectionChanged();
+        CompactSelection.CollectionChanged += (_, _) => NotifySelectionChanged();
+    }
+
+    private void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(Selection));
+        OnPropertyChanged(nameof(Summary));
+    }
+
+    /// <summary>The collection belonging to the layout currently on screen.</summary>
+    public ObservableCollection<FileEntry> SelectedEntries => View switch
+    {
+        ViewMode.Grid => GridSelection,
+        ViewMode.Compact => CompactSelection,
+        _ => DetailsSelection,
+    };
+
+    /// <summary>What everything else should read. Never the raw collections.</summary>
+    public IReadOnlyList<FileEntry> Selection => SelectedEntries.ToList();
+
+    /// <summary>
+    /// Carries the selection to the layout being switched to, so changing view
+    /// does not silently drop what you had chosen.
+    /// </summary>
+    private void CarrySelection(ViewMode from, ViewMode to)
+    {
+        if (from == to) return;
+
+        var source = from switch
+        {
+            ViewMode.Grid => GridSelection,
+            ViewMode.Compact => CompactSelection,
+            _ => DetailsSelection,
+        };
+
+        var target = to switch
+        {
+            ViewMode.Grid => GridSelection,
+            ViewMode.Compact => CompactSelection,
+            _ => DetailsSelection,
+        };
+
+        var carried = source.ToList();
+
+        target.Clear();
+        foreach (var entry in carried) target.Add(entry);
+
+        OnPropertyChanged(nameof(SelectedEntries));
+        OnPropertyChanged(nameof(Summary));
+    }
 
     /// <summary>Applications offered by the "open with" submenu.</summary>
     public ObservableCollection<LaunchOption> OpenWithOptions { get; } = new();
@@ -500,7 +572,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         long total = 0;
         var files = 0;
 
-        foreach (var entry in SelectedEntries)
+        foreach (var entry in Selection)
         {
             if (entry.IsDirectory) continue;
             total += entry.Length;
@@ -510,9 +582,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         return files == 0 ? "" : $" ({Bytes(total)})";
     }
 
-    public string Summary => SelectedEntries.Count > 1
-        ? $"{Entries.Count:N0} items · {SelectedEntries.Count:N0} selected{SelectionSize()}"
-        : $"{Entries.Count:N0} items";
+    public string Summary => Selection.Count switch
+    {
+        0 => $"{Entries.Count:N0} items",
+        1 => $"{Entries.Count:N0} items · 1 selected{SelectionSize()}",
+        var n => $"{Entries.Count:N0} items · {n:N0} selected{SelectionSize()}",
+    };
 
     private void NotifyListingState()
     {
@@ -523,6 +598,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     public bool IsDetailsView => View == ViewMode.Details;
     public bool IsGridView => View == ViewMode.Grid;
+    public bool IsCompactView => View == ViewMode.Compact;
 
     /// <summary>The chain is orthogonal to the layout — it can sit above either.</summary>
     [ObservableProperty] private bool _showColumnStrip;
@@ -543,6 +619,15 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     public void ShowAsGrid() => View = ViewMode.Grid;
+
+    /// <summary>
+    /// Dolphin's third mode: names only, flowing down and wrapping into
+    /// columns. The point is density — it fits several times as many entries on
+    /// screen as either other layout, which is what you want when you are
+    /// looking for a name rather than inspecting files.
+    /// </summary>
+    [RelayCommand]
+    public void ShowAsCompact() => View = ViewMode.Compact;
 
     private MillerViewModel? _miller;
 
@@ -571,17 +656,25 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         miller.EntryChanged += (_, entry) =>
         {
             SelectedEntry = entry;
-            SelectedEntries.Clear();
-            if (entry is { } value) SelectedEntries.Add(value);
+            var active = SelectedEntries;
+
+            active.Clear();
+            if (entry is { } value) active.Add(value);
         };
 
         return miller;
     }
 
-    partial void OnViewChanged(ViewMode value)
+    partial void OnViewChanged(ViewMode oldValue, ViewMode newValue)
     {
+        // Move the selection across before anything reads it, so switching
+        // layout keeps what you had chosen.
+        CarrySelection(oldValue, newValue);
+
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsGridView));
+        OnPropertyChanged(nameof(IsCompactView));
+        OnPropertyChanged(nameof(SelectedEntries));
     }
 
     [RelayCommand]
@@ -638,9 +731,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         return Task.CompletedTask;
     }
 
-    private IReadOnlyList<string> SelectionPaths()
-        => SelectedEntries.Count > 0
-            ? SelectedEntries.Select(e => e.FullPath).ToList()
+    /// <summary>Paths of the selection, falling back to the focused row.</summary>
+    public IReadOnlyList<string> SelectionPaths()
+        => Selection.Count > 0
+            ? Selection.Select(e => e.FullPath).ToList()
             : SelectedEntry is { } one ? [one.FullPath] : [];
 
     private void Track(IOperationHandle handle)
@@ -902,6 +996,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             ShowHidden = tab.ShowHidden;
             View = tab.View;
             ShowColumnStrip = tab.ShowColumnStrip;
+            GroupBy = tab.GroupBy;
 
             // Guarded: a session written before these existed deserialises as
             // 0, which would restore an invisible pane.
@@ -943,6 +1038,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         ShowHidden = ShowHidden,
         View = View,
         ShowColumnStrip = ShowColumnStrip,
+        GroupBy = GroupBy,
         FontScale = FontScale,
         IconScale = IconScale,
         // Stacks serialise oldest-first so RestoreFrom can push in order.
@@ -1286,13 +1382,22 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             ? _all
             : _all.Where(e => e.Name.Contains(FilterText, StringComparison.OrdinalIgnoreCase)).ToList();
 
+        _groupNow = DateTimeOffset.Now;
+
         var sorted = filtered.ToList();
         sorted.Sort(Compare);
+
+        // Before the swap, so a row realized by ReplaceAll already has its
+        // header available rather than reading a stale map.
+        RecomputeGroups(sorted);
+
         Entries.ReplaceAll(sorted);
 
+        // Only when filtering. The plain count lives in Summary, and setting
+        // both made the status bar print "36 items   36 items".
         Status = filtered.Count == _all.Count
-            ? $"{_all.Count:N0} items"
-            : $"{filtered.Count:N0} of {_all.Count:N0} items";
+            ? ""
+            : $"filtered to {filtered.Count:N0} of {_all.Count:N0}";
     }
 
     partial void OnSortDescendingChanged(bool value)
@@ -1537,9 +1642,83 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         if (Entries.Count == 0) return;
 
+        _groupNow = DateTimeOffset.Now;
+
         var items = _all.Count > 0 ? _all.ToList() : Entries.ToList();
         items.Sort(Compare);
+
+        RecomputeGroups(items);
         Entries.ReplaceAll(items);
+    }
+
+    // ---- grouping ---------------------------------------------------------
+
+    [ObservableProperty] private GroupMode _groupBy = GroupMode.None;
+
+    public bool IsGroupedByName => GroupBy == GroupMode.Name;
+    public bool IsGroupedBySize => GroupBy == GroupMode.Size;
+    public bool IsGroupedByModified => GroupBy == GroupMode.Modified;
+    public bool IsGroupedByKind => GroupBy == GroupMode.Kind;
+    public bool IsUngrouped => GroupBy == GroupMode.None;
+
+    [RelayCommand] private void GroupByNone() => GroupBy = GroupMode.None;
+    [RelayCommand] private void GroupByName() => GroupBy = GroupMode.Name;
+    [RelayCommand] private void GroupBySize() => GroupBy = GroupMode.Size;
+    [RelayCommand] private void GroupByModified() => GroupBy = GroupMode.Modified;
+    [RelayCommand] private void GroupByKind() => GroupBy = GroupMode.Kind;
+
+    partial void OnGroupByChanged(GroupMode value)
+    {
+        OnPropertyChanged(nameof(IsUngrouped));
+        OnPropertyChanged(nameof(IsGroupedByName));
+        OnPropertyChanged(nameof(IsGroupedBySize));
+        OnPropertyChanged(nameof(IsGroupedByModified));
+        OnPropertyChanged(nameof(IsGroupedByKind));
+
+        if (!_suppressReload) ApplyFilter();
+    }
+
+    /// <summary>
+    /// The header a row should carry, or null. Computed once per rebuild rather
+    /// than per row: a row cannot see its predecessor, and asking each one to
+    /// work it out would be O(n) lookups on every realization.
+    /// </summary>
+    private readonly Dictionary<string, string> _groupHeaders = new(StringComparer.Ordinal);
+
+    // Captured once per sort: asking for the time inside a comparison would
+    // make the ordering depend on when each comparison happened.
+    private DateTimeOffset _groupNow = DateTimeOffset.Now;
+
+    public string? HeaderFor(string fullPath)
+        => _groupHeaders.TryGetValue(fullPath, out var label) ? label : null;
+
+    /// <summary>Raised when headers change, so realized rows re-read them.</summary>
+    public event EventHandler? GroupingChanged;
+
+    private void RecomputeGroups(List<FileEntry> ordered)
+    {
+        _groupHeaders.Clear();
+
+        if (GroupBy != GroupMode.None)
+        {
+            string? previous = null;
+
+            foreach (var entry in ordered)
+            {
+                var label = Grouping.Label(entry, GroupBy, _groupNow);
+
+                // Only the first row of a run carries the header; the rest are
+                // plain, which is what makes it read as a group rather than a
+                // repeated label.
+                if (label != previous)
+                {
+                    _groupHeaders[entry.FullPath] = label;
+                    previous = label;
+                }
+            }
+        }
+
+        GroupingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private int Compare(FileEntry a, FileEntry b)
@@ -1548,6 +1727,14 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // and users notice immediately when it's missing.
         if (a.IsDirectory != b.IsDirectory)
             return a.IsDirectory ? -1 : 1;
+
+        // The group is a PRIMARY key. Without this, grouping by size while
+        // sorted by name interleaves the bands and every group holds one file.
+        if (GroupBy != GroupMode.None)
+        {
+            var group = Grouping.CompareGroups(a, b, GroupBy, _groupNow);
+            if (group != 0) return group;
+        }
 
         // Span comparison rather than Extension.ToString(): sorting 200k entries
         // by kind would otherwise allocate a string per comparison, millions of

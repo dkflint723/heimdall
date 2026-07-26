@@ -1,4 +1,4 @@
-namespace Rove.Core;
+namespace Heimdall.Core;
 
 /// <summary>
 /// Compares names the way a person reads them, so <c>file2</c> sorts before

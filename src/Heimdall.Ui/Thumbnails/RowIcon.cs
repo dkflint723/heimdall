@@ -2,9 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Ui.Thumbnails;
+namespace Heimdall.Ui.Thumbnails;
 
 /// <summary>
 /// Fills an Image with the desktop's themed icon for a file. Same viewport-driven
@@ -81,7 +81,7 @@ public static class RowIcon
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[rove] icon failed: {ex.Message}");
+            Console.Error.WriteLine($"[heimdall] icon failed: {ex.Message}");
         }
     }
 }

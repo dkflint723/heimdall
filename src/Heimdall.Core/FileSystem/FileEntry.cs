@@ -1,4 +1,4 @@
-namespace Rove.Core.FileSystem;
+namespace Heimdall.Core.FileSystem;
 
 /// <summary>
 /// Cross-platform entry flags. Deliberately not System.IO.FileAttributes, which

@@ -2,13 +2,13 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
-using Rove.Core;
-using Rove.Core.FileSystem;
-using Rove.Core.Places;
-using Rove.Core.Search;
-using Rove.Core.Session;
+using Heimdall.Core;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core.Places;
+using Heimdall.Core.Search;
+using Heimdall.Core.Session;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// Rail plus switchable panel — VS Code's activity bar. The rail decides what

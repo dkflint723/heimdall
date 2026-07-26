@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 public sealed class LinuxLauncher : IApplicationLauncher
 {

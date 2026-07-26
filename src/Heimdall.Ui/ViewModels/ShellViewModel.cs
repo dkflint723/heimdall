@@ -4,14 +4,14 @@ using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Threading;
-using Rove.Core;
-using Rove.Core.FileSystem;
-using Rove.Core.Sharing;
-using Rove.Core.Places;
-using Rove.Core.Search;
-using Rove.Core.Session;
+using Heimdall.Core;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core.Sharing;
+using Heimdall.Core.Places;
+using Heimdall.Core.Search;
+using Heimdall.Core.Session;
 
-namespace Rove.Ui.ViewModels;
+namespace Heimdall.Ui.ViewModels;
 
 /// <summary>
 /// Owns one or two pane groups. Deliberately thin — it decides which side is
@@ -566,6 +566,23 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The view owns the clipboard, so commands just ask.</summary>
     public event EventHandler<string>? CopyTextRequested;
 
+    /// <summary>
+    /// F11 toggles the panel on the side that has focus, so the shortcut and
+    /// the per-side buttons do the same thing to the same place.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleInfo() => ActiveGroup?.ToggleInfoCommand.Execute(null);
+
+    /// <summary>Hands the provider to both sides; each builds its own panel.</summary>
+    public void UseProperties(IPropertiesProvider? properties)
+    {
+        Left?.UseProperties(properties);
+        Right?.UseProperties(properties);
+        _properties = properties;
+    }
+
+    private IPropertiesProvider? _properties;
+
     public bool IsSplit => Right is not null;
 
     // Hiding a control does not give its column back — an invisible pane in a
@@ -630,6 +647,10 @@ public sealed partial class ShellViewModel : ObservableObject
     private PaneGroupViewModel CreateGroup()
     {
         var group = new PaneGroupViewModel(NewPane);
+
+        // A split created later must get the provider too, or its panel would
+        // silently have nothing to show.
+        group.UseProperties(_properties);
         group.PropertyChanged += OnGroupChanged;
         return group;
     }
@@ -660,6 +681,7 @@ public sealed partial class ShellViewModel : ObservableObject
             OnPropertyChanged(nameof(ActiveTab));
             OnPropertyChanged(nameof(ActiveStatus));
             OnPropertyChanged(nameof(ActiveSummary));
+
         }
 
         MarkDirty();
@@ -673,6 +695,8 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ActiveTab));
         OnPropertyChanged(nameof(ActiveStatus));
         OnPropertyChanged(nameof(OtherGroup));
+
+
         MarkDirty();
     }
 
@@ -740,15 +764,75 @@ public sealed partial class ShellViewModel : ObservableObject
     [RelayCommand]
     public void MoveToOtherPane() => TransferToOther(move: true);
 
+    /// <summary>
+    /// Somewhere to send files that is not the other pane. Built from the same
+    /// Places the sidebar shows, so the destinations offered are the ones the
+    /// user already keeps — no separate list to maintain, and pinning a folder
+    /// makes it a transfer target for free.
+    /// </summary>
+    public IReadOnlyList<PlaceItemViewModel> TransferTargets =>
+        Sidebar.Groups
+            .SelectMany(g => g.Places)
+
+            // An unmounted volume or unreachable share would look like a valid
+            // destination and fail on use.
+            .Where(p => p.IsAvailable && !string.IsNullOrEmpty(p.Path))
+
+            // Sending a folder into itself is the one destination that is never
+            // meaningful.
+            .Where(p => !string.Equals(p.Path.TrimEnd('/'),
+                                       ActiveTab?.CurrentPath.TrimEnd('/'),
+                                       StringComparison.Ordinal))
+            .ToList();
+
+    private void NotifyTransferTargets() => OnPropertyChanged(nameof(TransferTargets));
+
+    [RelayCommand]
+    private void CopySelectionTo(PlaceItemViewModel? place) => TransferTo(place, move: false);
+
+    [RelayCommand]
+    private void MoveSelectionTo(PlaceItemViewModel? place) => TransferTo(place, move: true);
+
+    private void TransferTo(PlaceItemViewModel? place, bool move)
+    {
+        if (place is null || ActiveTab is not { } source) return;
+
+        var paths = SelectionOf(source);
+        if (paths.Count == 0) { source.Status = "nothing selected"; return; }
+
+        if (!Directory.Exists(place.Path))
+        {
+            source.Status = $"{place.Label} is not reachable";
+            return;
+        }
+
+        // Routed through a pane already showing the destination when there is
+        // one, so its listing refreshes itself; otherwise through the same
+        // helper, which keeps the conflict policy in exactly one place.
+        var open = new[] { Left, Right }
+            .Where(g => g is not null)
+            .SelectMany(g => g!.Tabs)
+            .FirstOrDefault(t => string.Equals(t.CurrentPath.TrimEnd('/'),
+                                               place.Path.TrimEnd('/'),
+                                               StringComparison.Ordinal));
+
+        if (open is not null) open.PasteInto(paths, move);
+        else source.PasteIntoFolder(place.Path, paths, move);
+
+        source.Status = move
+            ? $"moving {paths.Count} item(s) to {place.Label}"
+            : $"copying {paths.Count} item(s) to {place.Label}";
+    }
+
+    private static List<string> SelectionOf(PaneViewModel pane)
+        => pane.SelectionPaths().ToList();
+
     private void TransferToOther(bool move)
     {
         if (_ops is null || OtherGroup?.ActiveTab is not { } target) return;
         if (ActiveTab is not { } source) return;
 
-        var paths = source.SelectedEntries.Count > 0
-            ? source.SelectedEntries.Select(e => e.FullPath).ToList()
-            : source.SelectedEntry is { } one ? [one.FullPath] : [];
-
+        var paths = SelectionOf(source);
         if (paths.Count == 0) return;
 
         target.PasteInto(paths, move);
@@ -765,6 +849,30 @@ public sealed partial class ShellViewModel : ObservableObject
     private void OpenInNewTab(FileEntry entry)
     {
         if (entry.IsDirectory) ActiveGroup.AddTab(entry.FullPath);
+    }
+
+    /// <summary>
+    /// Opens a folder by path — used when the desktop hands one over, either on
+    /// the command line or from a later launch forwarded to this instance.
+    ///
+    /// Reuses the current tab when it is already showing that folder, so
+    /// repeatedly opening the same place from elsewhere does not stack up
+    /// identical tabs.
+    /// </summary>
+    public void OpenInNewTab(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var existing = ActiveGroup.Tabs.FirstOrDefault(
+            t => string.Equals(t.CurrentPath, path, StringComparison.Ordinal));
+
+        if (existing is not null)
+        {
+            ActiveGroup.ActiveTab = existing;
+            return;
+        }
+
+        ActiveGroup.AddTab(path);
     }
 
     [RelayCommand]
@@ -915,6 +1023,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private static void Restore(PaneGroupViewModel group, PaneState state)
     {
+        group.RestoreFrom(state);
+
         foreach (var tab in state.Tabs) group.AddRestoredTab(tab);
         group.ActiveTab = group.Tabs[Math.Clamp(state.ActiveTabIndex, 0, group.Tabs.Count - 1)];
     }
@@ -963,6 +1073,12 @@ public sealed partial class ShellViewModel : ObservableObject
         switch (e.PropertyName)
         {
             case nameof(PaneViewModel.CurrentPath):
+                // The destination list excludes the folder you are already in,
+                // so it changes whenever the pane navigates.
+                NotifyTransferTargets();
+                MarkDirty();
+                break;
+
             case nameof(PaneViewModel.Sort):
             case nameof(PaneViewModel.SortDescending):
             case nameof(PaneViewModel.ShowHidden):
@@ -974,8 +1090,10 @@ public sealed partial class ShellViewModel : ObservableObject
                 OnPropertyChanged(nameof(ActiveStatus));
                 break;
 
+
             case nameof(PaneViewModel.Summary):
                 OnPropertyChanged(nameof(ActiveSummary));
+
                 break;
         }
     }

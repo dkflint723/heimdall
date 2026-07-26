@@ -2,7 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 /// <summary>
 /// Clipboard access as an injectable service.

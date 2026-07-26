@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Text;
-using Rove.Core;
+using Heimdall.Core;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 public sealed class LinuxScriptRunner : IScriptRunner
 {
@@ -14,7 +14,12 @@ public sealed class LinuxScriptRunner : IScriptRunner
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".local", "share");
 
-        ScriptsDirectory = Path.Combine(dataHome, "rove", "scripts");
+        ScriptsDirectory = Path.Combine(dataHome, "heimdall", "scripts");
+
+        // Carried over from the old name, once, so scripts written before the
+        // rename keep working without being moved by hand.
+        Heimdall.Core.PreviousName.Adopt(
+            Path.Combine(dataHome, "heimdall"), Path.Combine(dataHome, "rove"));
         EnsureDirectory();
     }
 
@@ -34,14 +39,14 @@ public sealed class LinuxScriptRunner : IScriptRunner
 
             File.WriteAllText(Path.Combine(ScriptsDirectory, "README"),
                 """
-                Any executable file in this folder appears in Rove's context menu.
+                Any executable file in this folder appears in Heimdall's context menu.
 
                 It is run with the selected paths as arguments, and with the
                 folder you are looking at as its working directory. Anything it
                 prints is shown in the status bar.
 
-                  ROVE_CWD          the folder being listed
-                  ROVE_SELECTED     number of selected items
+                  HEIMDALL_CWD       the folder being listed
+                  HEIMDALL_SELECTED  number of selected items
 
                 Make a script executable with: chmod +x <file>
                 The menu entry is the filename, underscores shown as spaces.
@@ -107,6 +112,11 @@ public sealed class LinuxScriptRunner : IScriptRunner
 
         foreach (var path in paths) info.ArgumentList.Add(path);
 
+        info.Environment["HEIMDALL_CWD"] = workingDirectory;
+        info.Environment["HEIMDALL_SELECTED"] = paths.Count.ToString();
+
+        // The old names are still set. Scripts are the user's own code living
+        // outside this repo, and a rename here should not silently break them.
         info.Environment["ROVE_CWD"] = workingDirectory;
         info.Environment["ROVE_SELECTED"] = paths.Count.ToString();
 

@@ -5,7 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 
-namespace Rove.Ui;
+namespace Heimdall.Ui;
 
 /// <summary>
 /// Focuses a control when it becomes visible.

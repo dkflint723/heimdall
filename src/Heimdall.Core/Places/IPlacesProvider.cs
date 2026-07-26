@@ -1,4 +1,4 @@
-namespace Rove.Core.Places;
+namespace Heimdall.Core.Places;
 
 public enum PlaceKind { UserFolder, Bookmark, Device, RemovableDevice, Network, Virtual }
 

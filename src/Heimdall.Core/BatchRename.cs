@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Core;
+namespace Heimdall.Core;
 
 public enum RenameMode
 {

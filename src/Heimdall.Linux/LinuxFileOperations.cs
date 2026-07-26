@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Copy, move, trash, delete and rename for Linux.

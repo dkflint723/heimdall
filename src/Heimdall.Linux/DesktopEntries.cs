@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using Rove.Core.FileSystem;
+using Heimdall.Core.FileSystem;
 
-namespace Rove.Linux;
+namespace Heimdall.Linux;
 
 /// <summary>
 /// Reads the freedesktop desktop-entry database to answer "what can open this?".
