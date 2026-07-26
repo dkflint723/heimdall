@@ -86,6 +86,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _sortDescending;
     [ObservableProperty] private ViewMode _view = ViewMode.Details;
 
+    /// <summary>Highlights the pane a drop would land in.</summary>
+    [ObservableProperty] private bool _isDropTarget;
+
     // ---- preview -------------------------------------------------------
 
     [ObservableProperty] private bool _isPreviewVisible;
@@ -416,6 +419,19 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             if (!Directory.Exists(candidate) && !File.Exists(candidate)) return candidate;
         }
         return path + " " + Guid.NewGuid().ToString("N")[..6];
+    }
+
+    /// <summary>Copy or move into a specific folder — used when a drop lands on
+    /// a folder row rather than on the listing's background.</summary>
+    public void PasteIntoFolder(string destination, IReadOnlyList<string> paths, bool move)
+    {
+        if (_ops is null || paths.Count == 0) return;
+
+        var handle = move
+            ? _ops.Move(paths, destination, _ => ValueTask.FromResult(ConflictResolution.KeepBoth))
+            : _ops.Copy(paths, destination, _ => ValueTask.FromResult(ConflictResolution.KeepBoth));
+
+        Track(handle);
     }
 
     /// <summary>Runs a copy or move into this directory, from the view's paste.</summary>

@@ -141,7 +141,7 @@
               <!-- Every pane's view stays alive, toggled by IsVisible rather
                    than swapped through a ContentControl, so switching tabs
                    never resets scroll position. -->
-              <Panel IsVisible="{Binding IsActive}">
+              <Panel IsVisible="{Binding IsActive}" DragDrop.AllowDrop="True">
 
               <DockPanel>
 
@@ -232,6 +232,7 @@
               <ListBox ItemsSource="{Binding Entries}"
                        SelectedItem="{Binding SelectedEntry}"
                        SelectedItems="{Binding SelectedEntries}"
+                       DragDrop.AllowDrop="True"
                        SelectionMode="Multiple" Background="Transparent" Padding="0">
                 <ListBox.Styles>
                   <Style Selector="ListBoxItem">
@@ -276,6 +277,11 @@
               </ListBox>
 
               </DockPanel>
+
+              <!-- Drop target outline. Hit-testing is off so it never eats the
+                   drag events it is drawn in response to. -->
+              <Border IsVisible="{Binding IsDropTarget}" IsHitTestVisible="False"
+                      BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}"/>
 
               <!-- Preview sits over the listing rather than beside it: at this
                    width a side panel would squeeze the list to nothing, and

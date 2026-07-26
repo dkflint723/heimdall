@@ -3,7 +3,9 @@ using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Rove.Core.FileSystem;
 using Rove.Core.Places;
@@ -67,6 +69,12 @@ public partial class MainWindow : Window
         // runs before the ListBox handles the press for selection — otherwise
         // the first click on an inactive side only moves focus.
         AddHandler(PointerPressedEvent, OnPointerPressedAnywhere, RoutingStrategies.Tunnel);
+        AddHandler(PointerMovedEvent, OnPointerMovedAnywhere, RoutingStrategies.Tunnel);
+
+        AddHandler(DragDrop.DragEnterEvent, OnDragOver);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
+        AddHandler(DragDrop.DropEvent, OnDrop);
 
         // Dragging the splitter writes straight to the ColumnDefinitions, so
         // the ratio is read back out afterwards — otherwise the persisted
@@ -112,13 +120,21 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnPointerPressedAnywhere(object? sender, Avalonia.Input.PointerPressedEventArgs e)
     {
+        // Recorded here so a drag can start on the first move past the
+        // threshold rather than on the press itself.
+        _dragOrigin = e.GetPosition(this);
+        _dragSource = e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
+            ? PaneAt(e.Source)
+            : null;
+        _dragTrigger = _dragSource is null ? null : e;
+
         for (var control = e.Source as Control; control is not null;
              control = control.Parent as Control)
         {
             if (control.DataContext is PaneGroupViewModel group)
             {
                 _shell.ActivateGroup(group);
-                return;
+                break;
             }
         }
     }
@@ -158,6 +174,206 @@ public partial class MainWindow : Window
     {
         foreach (var (key, value) in BaseMetrics)
             Resources[key] = Math.Round(value * scale, 1);
+    }
+
+    // ---- drag and drop -------------------------------------------------
+
+    private Point _dragOrigin;
+    private PaneViewModel? _dragSource;
+    private bool _dragging;
+
+    // DoDragDropAsync wants the press that began the gesture, not the move that
+    // crossed the threshold, so the original args are kept.
+    private PointerPressedEventArgs? _dragTrigger;
+
+    /// <summary>
+    /// True while a drag that started inside Rove is in flight. Dragging within
+    /// a file manager conventionally means move; dragging in from another
+    /// application means copy. Ctrl and Shift override either way.
+    /// </summary>
+    private bool _internalDrag;
+
+    /// <summary>Walks up from whatever was hit to the pane that owns it.</summary>
+    private static PaneViewModel? PaneAt(object? source)
+    {
+        for (var control = source as Control; control is not null;
+             control = control.Parent as Control)
+        {
+            if (control.DataContext is PaneViewModel pane) return pane;
+        }
+
+        return null;
+    }
+
+    /// <summary>The folder row under the pointer, if the drop should go into it
+    /// rather than into the directory being listed.</summary>
+    private static string? FolderRowAt(object? source)
+    {
+        for (var control = source as Control; control is not null;
+             control = control.Parent as Control)
+        {
+            if (control.DataContext is FileEntry { IsDirectory: true } entry)
+                return entry.FullPath;
+        }
+
+        return null;
+    }
+
+    private void OnPointerMovedAnywhere(object? sender, PointerEventArgs e)
+    {
+        if (_dragging || _dragSource is null) return;
+
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            _dragSource = null;
+            return;
+        }
+
+        // A threshold, or every click on a row would begin a drag and the list
+        // would become impossible to select in.
+        var position = e.GetPosition(this);
+        if (Math.Abs(position.X - _dragOrigin.X) < 6 &&
+            Math.Abs(position.Y - _dragOrigin.Y) < 6) return;
+
+        if (_dragTrigger is not null) _ = BeginDragAsync(_dragSource, _dragTrigger);
+    }
+
+    private async Task BeginDragAsync(PaneViewModel pane, PointerPressedEventArgs trigger)
+    {
+        var paths = pane.SelectedEntries.Count > 0
+            ? pane.SelectedEntries.Select(x => x.FullPath).ToList()
+            : pane.SelectedEntry is { } one ? [one.FullPath] : [];
+
+        if (paths.Count == 0) return;
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+
+        _dragging = true;
+        _internalDrag = true;
+
+        try
+        {
+            // DataFormat.File is what other applications actually read; Avalonia
+            // serialises it to text/uri-list on X11, the same route the
+            // clipboard takes.
+            var data = new DataTransfer();
+
+            foreach (var path in paths)
+            {
+                IStorageItem? item = Directory.Exists(path)
+                    ? await storage.TryGetFolderFromPathAsync(path)
+                    : await storage.TryGetFileFromPathAsync(path);
+
+                if (item is not null) data.Add(DataTransferItem.CreateFile(item));
+            }
+
+            if (data.Items.Count == 0) return;
+
+            // Not disposed — the drag system takes ownership.
+            await DragDrop.DoDragDropAsync(
+                trigger, data, DragDropEffects.Copy | DragDropEffects.Move);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[rove] drag failed: {ex.Message}");
+        }
+        finally
+        {
+            _dragging = false;
+            _internalDrag = false;
+            _dragSource = null;
+            _dragTrigger = null;
+        }
+    }
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        e.Handled = true;
+
+        if (!e.DataTransfer.Formats.Contains(DataFormat.File) || PaneAt(e.Source) is not { } pane)
+        {
+            e.DragEffects = DragDropEffects.None;
+            HighlightDropTarget(null);
+            return;
+        }
+
+        var destination = FolderRowAt(e.Source) ?? pane.CurrentPath;
+
+        // Refuse a drop that would achieve nothing, so the cursor says so
+        // before the click rather than a duplicate appearing after it.
+        if (Meaningful(e.DataTransfer, destination).Count == 0)
+        {
+            e.DragEffects = DragDropEffects.None;
+            HighlightDropTarget(null);
+            return;
+        }
+
+        e.DragEffects = EffectFor(e.KeyModifiers);
+        HighlightDropTarget(pane);
+    }
+
+    /// <summary>
+    /// The dragged paths that would actually go somewhere. A file dropped into
+    /// the folder it already lives in is a no-op, whether copying or moving —
+    /// the previous guard only applied to copies, so a move produced "name (1)".
+    /// </summary>
+    private static List<string> Meaningful(IDataTransfer data, string destination)
+    {
+        var paths = (data.TryGetFiles() ?? [])
+            .Select(f => f.TryGetLocalPath())
+            .OfType<string>()
+            .ToList();
+
+        paths.RemoveAll(p =>
+            p == destination ||
+            string.Equals(Path.GetDirectoryName(p), destination, StringComparison.Ordinal));
+
+        return paths;
+    }
+
+    private DragDropEffects EffectFor(KeyModifiers modifiers)
+    {
+        // Explicit modifiers win; otherwise moving within the app and copying
+        // from outside it is what every desktop file manager does.
+        if (modifiers.HasFlag(KeyModifiers.Control)) return DragDropEffects.Copy;
+        if (modifiers.HasFlag(KeyModifiers.Shift)) return DragDropEffects.Move;
+
+        return _internalDrag ? DragDropEffects.Move : DragDropEffects.Copy;
+    }
+
+    private void OnDragLeave(object? sender, DragEventArgs e) => HighlightDropTarget(null);
+
+    private void HighlightDropTarget(PaneViewModel? pane)
+    {
+        foreach (var group in new[] { _shell.Left, _shell.Right })
+        {
+            if (group is null) continue;
+            foreach (var tab in group.Tabs) tab.IsDropTarget = ReferenceEquals(tab, pane);
+        }
+    }
+
+    private void OnDrop(object? sender, DragEventArgs e)
+    {
+        HighlightDropTarget(null);
+
+        if (PaneAt(e.Source) is not { } pane) return;
+        if (!e.DataTransfer.Formats.Contains(DataFormat.File)) return;
+
+        // Dropping onto a folder row means into that folder, not into the
+        // directory being listed — that is what the pointer was over.
+        var target = FolderRowAt(e.Source);
+        var destination = target ?? pane.CurrentPath;
+
+        var paths = Meaningful(e.DataTransfer, destination);
+        if (paths.Count == 0) return;
+
+        var move = EffectFor(e.KeyModifiers) == DragDropEffects.Move;
+
+        if (target is not null)
+            pane.PasteIntoFolder(target, paths, move);
+        else
+            pane.PasteInto(paths, move);
+
+        e.Handled = true;
     }
 
     // ---- geometry ------------------------------------------------------
