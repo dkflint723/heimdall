@@ -12,7 +12,11 @@
   <!-- AOT compatibility is checked at build time in every project, so a
        trim-hostile dependency shows up as a warning now rather than as a
        runtime failure in a published build months from now. -->
+  <!-- Avalonia 12 defaults this to true, but AOT *requires* compiled bindings —
+       reflection bindings may not resolve without the full runtime — so it is
+       stated rather than inherited. A framework default is not a decision. -->
   <PropertyGroup>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>

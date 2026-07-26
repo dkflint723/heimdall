@@ -191,6 +191,11 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The view owns window creation, so the command just asks.</summary>
     public event EventHandler? PropertiesRequested;
 
+    public event EventHandler? BatchRenameRequested;
+
+    [RelayCommand]
+    private void BatchRename() => BatchRenameRequested?.Invoke(this, EventArgs.Empty);
+
     [RelayCommand]
     private void ShowProperties() => PropertiesRequested?.Invoke(this, EventArgs.Empty);
 

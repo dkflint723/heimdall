@@ -197,6 +197,10 @@ public sealed partial class MillerViewModel : ObservableObject
             Columns.Add(next);
             _ = next.LoadAsync();
 
+            // A new column at the end of a deep chain is off-screen; the view
+            // watches this to bring it into view.
+            Focused = next;
+
             DirectoryChanged?.Invoke(this, directory.FullPath);
         }
         else
@@ -217,6 +221,33 @@ public sealed partial class MillerViewModel : ObservableObject
             Columns.RemoveAt(Columns.Count - 1);
         }
     }
+
+    /// <summary>
+    /// Left and right move between columns, which is the whole keyboard idiom
+    /// for this view — without it the chain can only be driven by mouse.
+    /// Returns the column that should take focus, or null at either end.
+    /// </summary>
+    public MillerColumnViewModel? Step(MillerColumnViewModel from, int delta)
+    {
+        var index = Columns.IndexOf(from);
+        if (index < 0) return null;
+
+        var target = index + delta;
+        if (target < 0 || target >= Columns.Count) return null;
+
+        var column = Columns[target];
+
+        // Moving right into a column with nothing chosen yet lands on its first
+        // entry, so the chain keeps extending rather than stalling.
+        if (delta > 0 && column.SelectedEntry is null && column.Entries.Count > 0)
+            column.SelectedEntry = column.Entries[0];
+
+        Focused = column;
+        return column;
+    }
+
+    /// <summary>The column the keyboard is driving; the view scrolls it in.</summary>
+    [ObservableProperty] private MillerColumnViewModel? _focused;
 
     public void Clear()
     {

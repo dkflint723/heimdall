@@ -103,6 +103,7 @@ public partial class MainWindow : Window
         };
         _shell.PaneCreated += (_, pane) => WirePane(pane);
         _shell.PropertiesRequested += (_, _) => ShowProperties();
+        _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
         _shell.ScaleApplier = ApplyScales;
         DataContext = _shell;
 
@@ -262,6 +263,32 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Modal, unlike properties: a rename changes the very listing behind it,
+    /// so letting the window sit open over a view that is mutating underneath
+    /// would show a plan built from names that no longer exist.
+    /// </summary>
+    private void ShowBatchRename()
+    {
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var entries = pane.SelectedEntries.Count > 0
+            ? pane.SelectedEntries.ToList()
+            : pane.SelectedEntry is { } one ? [one]
+            : new List<FileEntry>();
+
+        if (entries.Count == 0)
+        {
+            pane.Status = "select something to rename first";
+            return;
+        }
+
+        var model = new BatchRenameViewModel(entries,
+            (entry, name) => pane.RenameAsync(entry, name));
+
+        new BatchRenameWindow(model).ShowDialog(this);
+    }
+
+    /// <summary>
     /// Non-modal on purpose: you frequently want to compare two files, and a
     /// modal dialog makes that impossible without closing it first.
     /// </summary>
@@ -294,8 +321,15 @@ public partial class MainWindow : Window
     private PaneViewModel? _dragSource;
     private bool _dragging;
 
-    // DoDragDropAsync wants the press that began the gesture, not the move that
-    // crossed the threshold, so the original args are kept.
+    // The press that began the gesture, held until the move threshold is
+    // crossed.
+    //
+    // This looks like retaining event args past their handler, and it is — but
+    // DragDrop.DoDragDropAsync takes PointerPressedEventArgs specifically, not
+    // the PointerEventArgs the move handler receives, so a drag cannot be
+    // started from the move without it. Starting from the press instead would
+    // mean no movement threshold, and every click on a row would begin a drag.
+    // The alternative is worse than the constraint.
     private PointerPressedEventArgs? _dragTrigger;
 
     /// <summary>
@@ -338,6 +372,7 @@ public partial class MainWindow : Window
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             _dragSource = null;
+            _dragTrigger = null;
             return;
         }
 
@@ -746,6 +781,24 @@ public partial class MainWindow : Window
             e.Handled = true;
             _shell.SelectTabByIndex(e.Key - Key.D1);
             return;
+        }
+
+        // Left/Right walk the Miller chain when it is showing and the listing
+        // does not own the keystroke. Without this the strip is mouse-only,
+        // which is the opposite of the point of a column view.
+        if (_shell.ActiveTab is { ShowColumnStrip: true } chained
+            && e.KeyModifiers == KeyModifiers.None
+            && e.Key is Key.Left or Key.Right
+            && FocusManager?.GetFocusedElement() is not TextBox)
+        {
+            var current = chained.Miller.Focused ?? chained.Miller.Columns.LastOrDefault();
+
+            if (current is not null
+                && chained.Miller.Step(current, e.Key == Key.Right ? 1 : -1) is not null)
+            {
+                e.Handled = true;
+                return;
+            }
         }
 
         // Tab moves between sides rather than traversing focus, matching

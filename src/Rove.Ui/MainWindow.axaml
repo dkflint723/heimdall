@@ -330,6 +330,8 @@
                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
               <Separator/>
               <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"/>
+              <MenuItem Header="Rename in bulk…"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"/>
               <MenuItem Header="Move to trash" Command="{Binding ActiveTab.TrashSelectedCommand}"/>
               <Separator/>
               <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
@@ -401,8 +403,11 @@
                       Height="{DynamicResource ColumnStripHeight}"
                       BorderThickness="0,0,0,0.5" BorderBrush="{DynamicResource SeparatorColour}"
                       IsVisible="{Binding ShowColumnStrip}">
+              <!-- A deep chain scrolls off to the right; the newest column has
+                   to be brought into view or descending appears to do nothing. -->
               <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                            VerticalScrollBarVisibility="Disabled">
+                            VerticalScrollBarVisibility="Disabled"
+                            local:ScrollIntoView.Target="{Binding Miller.Focused}">
                 <ItemsControl ItemsSource="{Binding Miller.Columns}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -778,6 +783,7 @@
     <KeyBinding Gesture="Alt+Up"         Command="{Binding ActiveTab.GoUpCommand}"/>
     <KeyBinding Gesture="F5"             Command="{Binding ActiveTab.RefreshCommand}"/>
     <KeyBinding Gesture="F2"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
+    <KeyBinding Gesture="Shift+F2"       Command="{Binding BatchRenameCommand}"/>
     <KeyBinding Gesture="F3"             Command="{Binding ToggleSplitCommand}"/>
     <KeyBinding Gesture="F8"             Command="{Binding ActiveTab.ToggleViewCommand}"/>
     <KeyBinding Gesture="Space"          Command="{Binding ActiveTab.TogglePreviewCommand}"/>
