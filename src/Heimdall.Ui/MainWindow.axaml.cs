@@ -668,18 +668,32 @@ public partial class MainWindow : Window
         // exit with the write still in flight.
         e.Cancel = true;
 
+        // Two independent concerns, so two try blocks. They were one, sequenced
+        // shares-first: a throw from StopAllSharesAsync then skipped the flush
+        // AND the dispose, and the single catch still printed "session flush
+        // failed" for a flush that had never been attempted.
+        //
+        // Session goes first now. It is the one whose loss the user would
+        // actually notice, and it cannot fail because of a subprocess.
         try
         {
-            // Servers we started are ours to stop; a share outliving the window
-            // would keep a folder on the network with nothing showing it.
-            await _shell.StopAllSharesAsync();
-
             await _store.FlushAsync(CancellationToken.None);
             await _store.DisposeAsync();
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[heimdall] session flush failed: {ex.Message}");
+        }
+
+        try
+        {
+            // Servers we started are ours to stop; a share outliving the window
+            // would keep a folder on the network with nothing showing it.
+            await _shell.StopAllSharesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[heimdall] stopping shares failed: {ex.Message}");
         }
 
         _closeApproved = true;

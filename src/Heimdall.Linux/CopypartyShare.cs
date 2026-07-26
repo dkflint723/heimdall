@@ -121,10 +121,27 @@ public sealed class CopypartyShare : IFileSharing
             using var process = Process.Start(info);
             if (process is null) return -1;
 
-            process.StandardOutput.ReadToEnd();
-            process.StandardError.ReadToEnd();
+            // Both pipes have to drain CONCURRENTLY. Draining stdout to
+            // completion and only then stderr deadlocks the moment the child
+            // fills the stderr buffer while we are still blocked on stdout —
+            // and the WaitForExit timeout below never applies, because
+            // ReadToEnd has no timeout of its own.
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
 
-            return process.WaitForExit(10_000) ? process.ExitCode : -1;
+            if (!process.WaitForExit(10_000))
+            {
+                // Was returning -1 and walking away, leaving the child running.
+                // Capture below already killed on timeout; same situation, so
+                // same behaviour.
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return -1;
+            }
+
+            // Exit closes the pipes, so these are already completing.
+            Task.WaitAll(new Task[] { stdout, stderr }, 5_000);
+
+            return process.ExitCode;
         }
         catch
         {
@@ -221,8 +238,19 @@ public sealed class CopypartyShare : IFileSharing
             using var process = Process.Start(info);
             if (process is null) return (-1, "");
 
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
+            // ct was accepted and then never used, so cancelling an install did
+            // nothing at all. Killing the tree is the only thing that actually
+            // stops a pip download part-way.
+            using var cancellation = ct.Register(() =>
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+            });
+
+            // Concurrently, not one after the other — see Run. This is the path
+            // with real exposure: pip is verbose on both streams, which is why
+            // the timeout below is 300 seconds in the first place.
+            var stdout = process.StandardOutput.ReadToEndAsync(ct);
+            var stderr = process.StandardError.ReadToEndAsync(ct);
 
             // Generous: a cold pip install of a package this size can take a
             // while on a slow connection.
@@ -232,7 +260,11 @@ public sealed class CopypartyShare : IFileSharing
                 return (-1, "timed out");
             }
 
-            return (process.ExitCode, stdout + stderr);
+            var output = Task.WaitAll(new Task[] { stdout, stderr }, 5_000)
+                ? stdout.Result + stderr.Result
+                : "";
+
+            return (process.ExitCode, output);
         }
         catch (Exception ex)
         {

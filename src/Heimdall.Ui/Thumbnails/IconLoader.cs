@@ -23,6 +23,12 @@ public static class IconLoader
 {
     private const int MaxResolved = 4000;
 
+    // Drawn holds a rendered drawable per icon FILE, so it is bounded in
+    // practice by how many distinct icons a theme resolves to — but nothing
+    // enforced that, while its sibling Resolved was capped. Same treatment for
+    // both rather than one bounded cache and one that is merely finite.
+    private const int MaxDrawn = 2000;
+
     private static readonly ConcurrentDictionary<string, string?> Resolved = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, IImage?> Drawn = new(StringComparer.Ordinal);
 
@@ -109,6 +115,8 @@ public static class IconLoader
         {
             Console.Error.WriteLine($"[heimdall] icon load failed: {Path.GetFileName(file)} — {ex.Message}");
         }
+
+        if (Drawn.Count > MaxDrawn) Drawn.Clear();
 
         Drawn[file] = image;
         return image;

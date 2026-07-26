@@ -70,6 +70,15 @@ public sealed class LinuxSearchProvider : ISearchProvider
 
         var count = 0;
 
+        // Two ways out of the loop below leave the child alive otherwise:
+        // cancellation, and hitting MaxResults and breaking. Disposing a Process
+        // closes our handle, not the process — so baloosearch would keep walking
+        // the index for a query nobody is listening to any more.
+        using var cancellation = ct.Register(() =>
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+        });
+
         using (process)
         using (var reader = process.StandardOutput)
         {
@@ -91,6 +100,14 @@ public sealed class LinuxSearchProvider : ISearchProvider
                     count++;
                     yield return entry;
                 }
+            }
+
+            // The MaxResults break above is not a cancellation, so the
+            // registration never fires for it. Same outcome wanted either way:
+            // nobody is reading, so nothing should still be searching.
+            if (!process.HasExited)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
             }
         }
     }

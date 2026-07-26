@@ -203,12 +203,22 @@ public sealed partial class LinuxRemoteMounts : IRemoteMounts
             using var process = Process.Start(info);
             if (process is null) return -1;
 
-            process.StandardOutput.ReadToEnd();
-            process.StandardError.ReadToEnd();
+            // Concurrently — sequential drains deadlock if the child fills the
+            // stream we are not reading yet, and the timeout below never runs.
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
 
             // Short: gio cannot prompt for a password without a terminal, so if
             // it needs one it fails fast rather than hanging.
-            return process.WaitForExit(20_000) ? process.ExitCode : -1;
+            if (!process.WaitForExit(20_000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return -1;
+            }
+
+            Task.WaitAll(new Task[] { stdout, stderr }, 5_000);
+
+            return process.ExitCode;
         }
         catch
         {

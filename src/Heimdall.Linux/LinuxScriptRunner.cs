@@ -123,6 +123,14 @@ public sealed class LinuxScriptRunner : IScriptRunner
         using var process = Process.Start(info)
             ?? throw new InvalidOperationException($"Could not start {script.Name}.");
 
+        // Disposing a Process does not stop the child. Without this, cancelling
+        // left the user's script running with nothing showing it and no way to
+        // reach it from the application.
+        using var cancellation = ct.Register(() =>
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+        });
+
         var stdout = process.StandardOutput.ReadToEndAsync(ct);
         var stderr = process.StandardError.ReadToEndAsync(ct);
 

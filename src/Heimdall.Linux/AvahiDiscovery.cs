@@ -107,8 +107,11 @@ public sealed class AvahiDiscovery : INetworkDiscovery
             using var process = Process.Start(info);
             if (process is null) return [];
 
-            var output = process.StandardOutput.ReadToEnd();
-            _ = process.StandardError.ReadToEnd();
+            // Concurrently: reading one stream to completion before touching the
+            // other deadlocks if the child fills the buffer of the one we are
+            // not reading, and ReadToEnd cannot be timed out.
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
 
             if (!process.WaitForExit(8000))
             {
@@ -116,7 +119,9 @@ public sealed class AvahiDiscovery : INetworkDiscovery
                 return [];
             }
 
-            return output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (!Task.WaitAll(new Task[] { stdout, stderr }, 5_000)) return [];
+
+            return stdout.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         }
         catch
         {

@@ -62,7 +62,10 @@
               <CheckBox IsChecked="{Binding Value}"
                         FontSize="{DynamicResource FontSizeSmall}">
                 <TextBlock>
-                  <Run Text="{Binding Group}" FontSize="10" />
+                  <!-- FontSizeTiny, not a literal: this is the owner/group/other
+                       qualifier saying which row you are toggling, and it sat at
+                       a fixed 10 while the label beside it scaled. -->
+                  <Run Text="{Binding Group}" FontSize="{DynamicResource FontSizeTiny}" />
                   <Run Text="{Binding Label}"/>
                 </TextBlock>
               </CheckBox>

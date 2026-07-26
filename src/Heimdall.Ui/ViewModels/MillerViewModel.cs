@@ -10,7 +10,7 @@ namespace Heimdall.Ui.ViewModels;
 /// PaneViewModel — no history, no watcher, no filter. A deep path can mean
 /// eight of these on screen, so they hold only what a column needs.
 /// </summary>
-public sealed partial class MillerColumnViewModel : ObservableObject
+public sealed partial class MillerColumnViewModel : ObservableObject, IDisposable
 {
     private readonly IFileSystemProvider _fs;
     private readonly Func<bool> _showHidden;

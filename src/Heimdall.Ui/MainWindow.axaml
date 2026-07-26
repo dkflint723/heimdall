@@ -60,7 +60,10 @@
                        th:ThumbnailImage.Size="512"
                        IsVisible="{Binding !Info.IsFolder}"
                        Stretch="Uniform" Margin="8"/>
-                <TextBlock Text="&#x1F4C1;" FontSize="64"
+                <!-- TileSize, because this is standing in for an icon rather
+                     than being text: it should follow the icon scale, and it was
+                     the last size in the window pinned to a literal. -->
+                <TextBlock Text="&#x1F4C1;" FontSize="{DynamicResource TileSize}"
                            IsVisible="{Binding Info.IsFolder}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Foreground="{DynamicResource ViewDimText}"/>
@@ -245,6 +248,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
+                                ToolTip.Tip="smaller text in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontSmallerCommand}"/>
                         <!-- LostFocus, not per keystroke: committing mid-type
                              would apply "1" on the way to "14". -->
@@ -259,6 +263,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
+                                ToolTip.Tip="larger text in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontLargerCommand}"/>
                       </StackPanel>
                     </Border>
@@ -277,6 +282,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
+                                ToolTip.Tip="smaller icons in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsSmallerCommand}"/>
                         <TextBox local:FocusBehavior.CommitOnEnter="True"
                                  Text="{Binding ActiveTab.IconPixels, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
@@ -289,6 +295,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
+                                ToolTip.Tip="larger icons in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsLargerCommand}"/>
                       </StackPanel>
                     </Border>
@@ -343,9 +350,20 @@
               <DataTemplate x:DataType="vm:PaneViewModel">
                 <StackPanel Orientation="Horizontal" Spacing="11">
                   <TextBlock Text="{Binding Title}" FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"/>
-                  <Button Content="&#x2715;" FontSize="9" Opacity="0.5"
+                  <!-- The only close affordance in the strip, so it does not get
+                       to be the smallest and faintest thing in the window. It
+                       pinned at font size 9, half opacity and 2px padding while
+                       the title beside it scaled — so raising the font scale made this
+                       WORSE, the title growing around a fixed target. Size now
+                       tracks the scale, and the dim comes from the colour scheme
+                       (ViewDimText) rather than a literal opacity, which put the
+                       effective contrast outside anything Plasma could set. -->
+                  <Button Content="&#x2715;"
+                          FontSize="{DynamicResource FontSizeSmall}"
+                          Foreground="{DynamicResource ViewDimText}"
                           Background="Transparent" BorderThickness="0"
-                          Padding="2" VerticalAlignment="Center"
+                          Padding="6,3" VerticalAlignment="Center"
+                          ToolTip.Tip="close tab  (ctrl+w)"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseTabCommand}"
                           CommandParameter="{Binding}"/>
                 </StackPanel>
@@ -375,14 +393,17 @@
           <DockPanel>
             <Button DockPanel.Dock="Left" Content="&#x2190;" Width="30" Margin="0,0,2,0"
                     Background="Transparent" BorderThickness="0"
+                    ToolTip.Tip="back  (alt+left)"
                     Command="{Binding ActiveTab.GoBackCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoBack}"/>
             <Button DockPanel.Dock="Left" Content="&#x2192;" Width="30" Margin="0,0,2,0"
                     Background="Transparent" BorderThickness="0"
+                    ToolTip.Tip="forward  (alt+right)"
                     Command="{Binding ActiveTab.GoForwardCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoForward}"/>
             <Button DockPanel.Dock="Left" Content="&#x2191;" Width="30" Margin="0,0,6,0"
                     Background="Transparent" BorderThickness="0"
+                    ToolTip.Tip="up one folder  (alt+up)"
                     Command="{Binding ActiveTab.GoUpCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoUp}"/>
 

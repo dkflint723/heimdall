@@ -54,14 +54,24 @@ public static class DesktopEntries
             using var process = Process.Start(info);
             if (process is null) return "";
 
-            var output = process.StandardOutput.ReadToEnd().Trim();
+            // Both pipes started before either is awaited. Draining stdout to
+            // completion and only THEN stderr does not solve the problem the
+            // comment below was written for: if the child fills stderr while we
+            // are blocked on stdout, both sides stop, and ReadToEnd cannot time
+            // out. xdg-mime writes its own complaints to stderr, so this is the
+            // stream that fills.
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
 
-            // Drained rather than ignored: a full stderr pipe would block the
-            // child rather than simply being discarded.
-            _ = process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(2000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return "";
+            }
 
-            process.WaitForExit(2000);
-            return output;
+            return Task.WaitAll(new Task[] { stdout, stderr }, 5_000)
+                ? stdout.Result.Trim()
+                : "";
         }
         catch
         {
