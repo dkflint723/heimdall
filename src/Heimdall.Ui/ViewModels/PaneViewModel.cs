@@ -808,7 +808,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // Timed because the un-virtualized layouts realize a container per
         // item, and how bad that is at a given count is the one number the
         // guard above should be set from.
-        var realizeWatch = newValue != ViewMode.Details && Entries.Count > 1000
+        // Threshold 200, not 1,000: the measured cost is ~0.4 ms/item in grid
+        // and ~0.8 in compact, so the interesting range — where realization is
+        // still tolerable — sits BELOW a thousand. A 1,000-item floor measured
+        // only the region that was already too slow.
+        var realizeWatch = newValue != ViewMode.Details && Entries.Count > 200
             ? System.Diagnostics.Stopwatch.StartNew()
             : null;
 
