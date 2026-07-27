@@ -13,7 +13,12 @@ namespace Heimdall.Ui.Thumbnails;
 /// </summary>
 public static class ThumbnailLoader
 {
-    private const int MaxCached = 600;
+    /// <summary>
+    /// Counted in path+size pairs, not files. The layouts request 64, 256 and
+    /// 512, so a folder can occupy three entries per file — 600 was only ~200
+    /// files, which is why ordinary folders hit the cap at all.
+    /// </summary>
+    private const int MaxCached = 2400;
 
     private static readonly ConcurrentDictionary<string, Bitmap> Cache = new();
     private static readonly ConcurrentQueue<string> Order = new();
@@ -109,9 +114,22 @@ public static class ThumbnailLoader
 
         // Crude FIFO rather than true LRU: tracking access order would need a
         // lock on the read path, which is the path that has to stay fast.
+        //
+        // EVICTED BITMAPS ARE **NOT** DISPOSED, and that is the whole point.
+        // This cache does not own them exclusively — every realized row holds
+        // one as its Image.Source, and all three layouts stay alive when
+        // hidden. Disposing on eviction destroyed bitmaps that were still on
+        // screen, so cycling list → grid → compact made icons vanish: the key
+        // is path|size and the layouts ask for 64, 256 and 512, so ~300 files
+        // is already at the cap and one more switch evicts something visible.
+        //
+        // Dropping the reference is enough to bound what the cache retains; the
+        // GC frees each bitmap once no row still points at it. That trades
+        // prompt native-memory release for not corrupting the display, which is
+        // the right way round.
         while (Order.Count > MaxCached && Order.TryDequeue(out var oldest))
         {
-            if (Cache.TryRemove(oldest, out var evicted)) evicted.Dispose();
+            Cache.TryRemove(oldest, out _);
         }
     }
 }
