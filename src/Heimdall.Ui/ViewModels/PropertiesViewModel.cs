@@ -110,6 +110,91 @@ public sealed partial class PropertiesViewModel : ObservableObject
     [ObservableProperty] private bool _canMeasure;
     [ObservableProperty] private bool _isMeasuring;
 
+    // ---- checksums -------------------------------------------------------
+    //
+    // A section rather than a tab: this window is a flat run of sections and
+    // adding a TabControl for one more would restructure it for no gain.
+    //
+    // Opt-in, like measuring a folder. Hashing a multi-gigabyte file is real
+    // work, and doing it automatically to every file whose properties you open
+    // would make the window slow for the common case in service of the rare one.
+
+    private CancellationTokenSource? _hashCts;
+
+    [ObservableProperty] private bool _canChecksum;
+    [ObservableProperty] private bool _isHashing;
+    [ObservableProperty] private string _hashStatus = "";
+    [ObservableProperty] private string _md5 = "";
+    [ObservableProperty] private string _sha1 = "";
+    [ObservableProperty] private string _sha256 = "";
+
+    public bool HasChecksums => Md5.Length > 0;
+
+    partial void OnMd5Changed(string value) => OnPropertyChanged(nameof(HasChecksums));
+
+    /// <summary>A real bool: binding a string's Length straight to IsVisible
+    /// does not convert under compiled bindings.</summary>
+    public bool HasHashStatus => HashStatus.Length > 0;
+
+    partial void OnHashStatusChanged(string value) => OnPropertyChanged(nameof(HasHashStatus));
+
+    /// <summary>Label doubles as the cancel affordance, as Measure does.</summary>
+    public string ChecksumButtonText => IsHashing ? "stop" : "compute";
+
+    partial void OnIsHashingChanged(bool value)
+        => OnPropertyChanged(nameof(ChecksumButtonText));
+
+    [RelayCommand]
+    private async Task ComputeChecksumsAsync()
+    {
+        if (IsHashing)
+        {
+            _hashCts?.Cancel();
+            return;
+        }
+
+        if (_paths.Count != 1 || !File.Exists(_paths[0])) return;
+
+        _hashCts?.Dispose();
+        _hashCts = new CancellationTokenSource();
+        var ct = _hashCts.Token;
+
+        IsHashing = true;
+        HashStatus = "reading…";
+        Md5 = Sha1 = Sha256 = "";
+
+        var progress = new Progress<double>(fraction =>
+            HashStatus = $"{fraction:P0}");
+
+        try
+        {
+            var result = await Checksums.ComputeAsync(_paths[0], progress, ct)
+                                        .ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Md5 = result.Md5;
+                Sha1 = result.Sha1;
+                Sha256 = result.Sha256;
+                HashStatus = "";
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => HashStatus = "cancelled");
+        }
+        catch (Exception ex)
+        {
+            // Unreadable, vanished, or a permission problem — said out loud
+            // rather than leaving three empty rows and no explanation.
+            await Dispatcher.UIThread.InvokeAsync(() => HashStatus = ex.Message);
+        }
+        finally
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => IsHashing = false);
+        }
+    }
+
     public async Task LoadAsync()
     {
         if (_paths.Count == 0) return;
@@ -132,6 +217,11 @@ public sealed partial class PropertiesViewModel : ObservableObject
             Kind = details.Kind;
             SizeText = details.IsDirectory ? "not measured" : ByteSize.Format(details.Size);
             CanMeasure = details.IsDirectory;
+
+            // Only ever for one actual file: a folder has no digest, and
+            // hashing a multi-selection would be three answers to a question
+            // nobody asked in the singular.
+            CanChecksum = !details.IsDirectory && _paths.Count == 1;
 
             var general = new List<PropertyRow>();
 
