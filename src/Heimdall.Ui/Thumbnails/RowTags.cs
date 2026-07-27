@@ -81,7 +81,7 @@ public static class RowTags
                 target.ItemsSource = tags
                     .Select(t => new TagChip(t, ColourFor(t)))
                     .ToList();
-            });
+            }, DispatcherPriority.Background);
         }
         catch (Exception ex)
         {

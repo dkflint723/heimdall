@@ -72,12 +72,23 @@ public static class RowIcon
 
             if (file is null) return;
 
+            // BACKGROUND priority, and this is the fix for a 33-second
+            // navigation. Row decoration is fire-and-forget per realized row,
+            // so cycling the three layouts over a 300-item folder queues ~900 of
+            // these — and a navigation's own dispatcher hops went to the BACK of
+            // that queue. Eight files took 33.7 s to list because the UI thread
+            // was busy painting icons for rows nobody was looking at any more.
+            //
+            // At Background these yield to navigation, which runs at Normal. The
+            // work still happens; it simply stops holding the application
+            // hostage. The row is never blank meanwhile — the drawn glyph above
+            // went up before any of this started.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 // Containers recycle while we work; only replace if this row
                 // still wants the file we resolved.
                 if (IconLoader.Load(file) is { } icon) Paint(icon);
-            });
+            }, DispatcherPriority.Background);
         }
         catch (Exception ex)
         {

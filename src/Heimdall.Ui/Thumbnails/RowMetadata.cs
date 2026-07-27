@@ -91,7 +91,7 @@ public static class RowMetadata
             {
                 var current = access ? GetAccess(target) : GetEntry(target);
                 if (current?.FullPath == value.FullPath) target.Text = described ?? "";
-            });
+            }, DispatcherPriority.Background);
         }
         catch (Exception ex)
         {
