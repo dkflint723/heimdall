@@ -59,15 +59,28 @@ public static class RowTags
 
     public static FileEntry? GetEntry(ItemsControl target) => target.GetValue(EntryProperty);
 
+    private static readonly AttachedProperty<CancellationTokenSource?> TokenProperty =
+        AvaloniaProperty.RegisterAttached<ItemsControl, CancellationTokenSource?>("Token", typeof(RowTags));
+
     private static async void OnEntryChanged(ItemsControl target, FileEntry? entry)
     {
+        if (target.GetValue(TokenProperty) is { } previous)
+        {
+            previous.Cancel();
+            previous.Dispose();
+        }
+
+        var cts = new CancellationTokenSource();
+        target.SetValue(TokenProperty, cts);
+        var token = cts.Token;
+
         try
         {
             target.ItemsSource = null;
 
             if (Store is null || entry is not { } value) return;
 
-            var tags = await Store.GetAsync(value.FullPath, CancellationToken.None)
+            var tags = await Store.GetAsync(value.FullPath, token)
                                   .ConfigureAwait(true);
 
             if (tags.Count == 0) return;
@@ -81,7 +94,11 @@ public static class RowTags
                 target.ItemsSource = tags
                     .Select(t => new TagChip(t, ColourFor(t)))
                     .ToList();
-            }, DispatcherPriority.Background);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // The row scrolled away.
         }
         catch (Exception ex)
         {

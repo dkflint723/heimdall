@@ -81,7 +81,7 @@ public static class ThumbnailImage
 
                 image.Source = bitmap;
                 image.IsVisible = bitmap is not null;
-            }, DispatcherPriority.Background);
+            });
         }
         catch (OperationCanceledException)
         {

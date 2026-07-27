@@ -19,6 +19,17 @@ public static class RowIcon
     public static readonly AttachedProperty<int> SizeProperty =
         AvaloniaProperty.RegisterAttached<Image, int>("Size", typeof(RowIcon), 24);
 
+    /// <summary>
+    /// Per-row cancellation, mirroring ThumbnailImage. The stale-check before
+    /// painting already stopped the WRONG icon appearing; this stops the work
+    /// happening at all for a row that has scrolled away. Task.Run with a token
+    /// will not interrupt a lookup already running, but it does drop one still
+    /// queued — which is the case that matters, because a fast scroll queues far
+    /// more than it starts.
+    /// </summary>
+    private static readonly AttachedProperty<CancellationTokenSource?> TokenProperty =
+        AvaloniaProperty.RegisterAttached<Image, CancellationTokenSource?>("Token", typeof(RowIcon));
+
     static RowIcon()
     {
         EntryProperty.Changed.AddClassHandler<Image>((image, e) =>
@@ -33,6 +44,20 @@ public static class RowIcon
 
     private static async void OnEntryChanged(Image image, FileEntry? entry)
     {
+        if (image.GetValue(TokenProperty) is { } previous)
+        {
+            previous.Cancel();
+            previous.Dispose();
+        }
+
+        var cts = new CancellationTokenSource();
+        image.SetValue(TokenProperty, cts);
+
+        // Captured before awaiting: a later call on this same Image disposes the
+        // source while we are suspended, and reading .Token on a disposed source
+        // throws — the token struct stays safe to query.
+        var token = cts.Token;
+
         try
         {
             image.Source = null;
@@ -67,28 +92,31 @@ public static class RowIcon
             // the theme lookup runs.
             Paint(IconLoader.Fallback(value.IsDirectory));
 
-            var file = await Task.Run(() => IconLoader.ResolveFile(value.FullPath, value.IsDirectory, size))
+            var file = await Task.Run(
+                    () => IconLoader.ResolveFile(value.FullPath, value.IsDirectory, size), token)
                                  .ConfigureAwait(true);
 
             if (file is null) return;
 
-            // BACKGROUND priority, and this is the fix for a 33-second
-            // navigation. Row decoration is fire-and-forget per realized row,
-            // so cycling the three layouts over a 300-item folder queues ~900 of
-            // these — and a navigation's own dispatcher hops went to the BACK of
-            // that queue. Eight files took 33.7 s to list because the UI thread
-            // was busy painting icons for rows nobody was looking at any more.
+            // Default priority, deliberately.
             //
-            // At Background these yield to navigation, which runs at Normal. The
-            // work still happens; it simply stops holding the application
-            // hostage. The row is never blank meanwhile — the drawn glyph above
-            // went up before any of this started.
+            // This was Background for a while, added while chasing a 44-second
+            // navigation stall on the theory that row decoration was starving
+            // the dispatcher. It was not — the cause was an xdg-mime subprocess
+            // per row exhausting the thread pool — and the timings got WORSE
+            // with it, not better. A change made for a reason that turned out to
+            // be false does not get to stay on the grounds that it is already
+            // there. Cancellation above now bounds the backlog properly.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 // Containers recycle while we work; only replace if this row
                 // still wants the file we resolved.
                 if (IconLoader.Load(file) is { } icon) Paint(icon);
-            }, DispatcherPriority.Background);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // The row scrolled away. Expected, and not worth a line.
         }
         catch (Exception ex)
         {

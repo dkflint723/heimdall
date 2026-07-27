@@ -26,6 +26,15 @@ public static class RowMetadata
         AvaloniaProperty.RegisterAttached<TextBlock, FileEntry?>("Entry", typeof(RowMetadata));
 
     /// <summary>Same mechanism, different fact: the POSIX mode string.</summary>
+    // TWO token slots, not one. EntryProperty and AccessProperty are separate
+    // attached properties and nothing stops a single TextBlock carrying both —
+    // sharing one slot would mean each silently cancelling the other.
+    private static readonly AttachedProperty<CancellationTokenSource?> TokenProperty =
+        AvaloniaProperty.RegisterAttached<TextBlock, CancellationTokenSource?>("Token", typeof(RowMetadata));
+
+    private static readonly AttachedProperty<CancellationTokenSource?> AccessTokenProperty =
+        AvaloniaProperty.RegisterAttached<TextBlock, CancellationTokenSource?>("AccessToken", typeof(RowMetadata));
+
     public static readonly AttachedProperty<FileEntry?> AccessProperty =
         AvaloniaProperty.RegisterAttached<TextBlock, FileEntry?>("Access", typeof(RowMetadata));
 
@@ -50,6 +59,18 @@ public static class RowMetadata
 
     private static async void OnEntryChanged(TextBlock target, FileEntry? entry, bool access)
     {
+        var slot = access ? AccessTokenProperty : TokenProperty;
+
+        if (target.GetValue(slot) is { } previous)
+        {
+            previous.Cancel();
+            previous.Dispose();
+        }
+
+        var cts = new CancellationTokenSource();
+        target.SetValue(slot, cts);
+        var token = cts.Token;
+
         // async void: nothing may escape, or scrolling crashes the app.
         try
         {
@@ -79,8 +100,8 @@ public static class RowMetadata
             }
 
             var described = await (access
-                    ? Provider.DescribeAccessAsync(value.FullPath, value.IsDirectory, CancellationToken.None)
-                    : Provider.DescribeAsync(value.FullPath, value.IsDirectory, CancellationToken.None))
+                    ? Provider.DescribeAccessAsync(value.FullPath, value.IsDirectory, token)
+                    : Provider.DescribeAsync(value.FullPath, value.IsDirectory, token))
                 .ConfigureAwait(true);
 
             Remember(key, described);
@@ -91,7 +112,11 @@ public static class RowMetadata
             {
                 var current = access ? GetAccess(target) : GetEntry(target);
                 if (current?.FullPath == value.FullPath) target.Text = described ?? "";
-            }, DispatcherPriority.Background);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // The row scrolled away.
         }
         catch (Exception ex)
         {
