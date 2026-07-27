@@ -837,7 +837,17 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsGridView));
         OnPropertyChanged(nameof(IsCompactView));
         OnPropertyChanged(nameof(SelectedEntries));
-    
+
+        // The whole state in one line. "Status bar says 300 items but the pane
+        // is empty" means Entries is populated and the bound layout is not —
+        // which can only be View and the entries properties disagreeing, or a
+        // ListBox still holding the empty array from when it was hidden.
+        Console.Error.WriteLine(
+            $"[heimdall] view: {oldValue}->{newValue} entries={Entries.Count:N0} "
+            + $"details={DetailsEntries.Count():N0} grid={GridEntries.Count():N0} "
+            + $"compact={CompactEntries.Count():N0} "
+            + $"remember={Settings.AppSettings.Current.General.RememberViewPerFolder}");
+
         RememberFolderView();
     }
 
