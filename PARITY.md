@@ -54,6 +54,7 @@ Settings schema v1.
 | **Network transparency** | ✅ both directions — see below |
 | **Settings dialog** | ✅ six pages — see below |
 | **Folders panel navigation** | ✅ — the tree listed and expanded but clicking did nothing until July 2026 |
+| **Type-ahead** | ✅ — listed in v1 scope, never built until July 2026; nothing handled typed characters at all |
 
 **Beyond Dolphin:** Miller column strip, per-type inline metadata, permissions as
 a list column, priority-based column dropping, file-age shading, per-pane

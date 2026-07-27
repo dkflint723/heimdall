@@ -186,6 +186,11 @@ public partial class MainWindow : Window
         AddHandler(TappedEvent, OnTapped, RoutingStrategies.Bubble);
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble);
 
+        // Type-ahead. TextInput rather than KeyDown, because it is the event
+        // that already accounts for keyboard layout, shift and dead keys — a
+        // Key enum says "D", TextInput says "d" or "D" or "é" as typed.
+        AddHandler(TextInputEvent, OnWindowTextInput, RoutingStrategies.Bubble);
+
         // Tab has to be caught on the way DOWN. Keyboard navigation claims it
         // before any bubble handler runs, so by the time the window sees it
         // focus has already left the box. Tunnel reaches the window first.
@@ -1369,6 +1374,29 @@ public partial class MainWindow : Window
             box.SelectionEnd = end;
         }, DispatcherPriority.Background);
 
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Jump-to-letter in the listing. Bubble, so any control that wants the
+    /// character has already had it.
+    /// </summary>
+    private void OnWindowTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (e.Handled || string.IsNullOrEmpty(e.Text)) return;
+
+        // Never while typing somewhere real — the filter bar, the path box and
+        // the prompt bar are all TextBoxes, and stealing their characters would
+        // be a far worse bug than not having type-ahead.
+        if (FocusManager?.GetFocusedElement() is TextBox) return;
+
+        // Control characters are not a search: Escape, Backspace and friends
+        // arrive here too and have their own meanings.
+        if (char.IsControl(e.Text[0])) return;
+
+        if (_shell.ActiveTab is not { } pane) return;
+
+        pane.TypeAhead(e.Text);
         e.Handled = true;
     }
 
