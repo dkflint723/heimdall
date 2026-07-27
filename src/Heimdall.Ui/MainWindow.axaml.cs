@@ -1225,7 +1225,6 @@ public partial class MainWindow : Window
         };
 
     private string? _lastTapPath;
-    private DateTime _lastTapAt;
 
     private string? _lastOpenPath;
     private DateTime _lastOpenAt;
@@ -1277,10 +1276,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        var now = DateTime.UtcNow;
-
-        if (_lastTapPath == entry.FullPath
-            && now - _lastTapAt <= TimeSpan.FromMilliseconds(500))
+        // [stated] the rule the user wants: clicking the same row twice opens
+        // it, full stop. NO time limit — a 500 ms window meant a first click was
+        // spent on selection and only a fast second one counted, so opening
+        // something felt like select-then-double-click.
+        //
+        // Clicking a DIFFERENT row resets, which is what keeps this from firing
+        // on anything you did not click twice in a row.
+        if (_lastTapPath == entry.FullPath)
         {
             _lastTapPath = null;
             TryOpen(entry);
@@ -1288,7 +1291,6 @@ public partial class MainWindow : Window
         }
 
         _lastTapPath = entry.FullPath;
-        _lastTapAt = now;
     }
 
     /// <summary>
