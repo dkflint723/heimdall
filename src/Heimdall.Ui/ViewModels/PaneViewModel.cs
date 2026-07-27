@@ -1628,6 +1628,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
 
+        var setupWatch = Stopwatch.StartNew();
+
         var generation = ++_generation;
 
         // Before CurrentPath moves, and guarded so the property setters this
@@ -1652,6 +1654,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _all.Clear();
         Entries.Reset();
         NotifyNavigationState();
+
+        var phaseSetup = setupWatch.ElapsedMilliseconds;
 
         var options = new ListingOptions { IncludeHidden = ShowHidden, BatchSize = 500 };
 
@@ -1701,6 +1705,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 });
             }
 
+            var enumerateMs = sw.ElapsedMilliseconds;
+
             // Sorting happens once, after enumeration, rather than per batch.
             // Entries appear in readdir order while loading and settle when the
             // listing completes — which keeps first paint at a few milliseconds.
@@ -1727,9 +1733,19 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 // Says what the listing actually produced. "No files showing"
                 // has two very different causes — nothing enumerated, or
                 // nothing rendered — and only this separates them.
+                // Split three ways, because "the load took 45 seconds" does not
+                // say WHICH part did. setup = cancel/clear/reset before any I/O;
+                // enumerate = the filesystem walk plus its dispatcher hops;
+                // finish = sort, filter and StartWatching.
+                // sw starts AFTER setup is captured, so it never contains it —
+                // the three phases add up to the total, they are not slices of
+                // one running clock.
                 Console.Error.WriteLine(
                     $"[heimdall] listing: {Entries.Count:N0} of {_all.Count:N0} "
-                    + $"in {sw.ElapsedMilliseconds} ms · {View} · {path}");
+                    + $"in {phaseSetup + sw.ElapsedMilliseconds} ms "
+                    + $"(setup {phaseSetup} · enumerate {enumerateMs} · "
+                    + $"finish {sw.ElapsedMilliseconds - enumerateMs}) "
+                    + $"· {View} · {path}");
             });
         }
         catch (OperationCanceledException)
