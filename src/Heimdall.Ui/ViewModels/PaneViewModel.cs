@@ -1740,11 +1740,22 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 // sw starts AFTER setup is captured, so it never contains it —
                 // the three phases add up to the total, they are not slices of
                 // one running clock.
+                // Memory and collection counts alongside the phases. The
+                // enumerate phase holds ~58 s for EIGHT files, which cannot be
+                // the walk — it is the dispatcher hop waiting on a UI thread
+                // blocked in one long operation. Background priority did not
+                // help, which rules out a queue of small callbacks. The times
+                // also climb run over run (33 s → 45 s → 58 s), and the one
+                // change that stopped releasing anything was dropping
+                // Dispose() from thumbnail eviction. If gen2 climbs with the
+                // stall, that is the answer.
                 Console.Error.WriteLine(
                     $"[heimdall] listing: {Entries.Count:N0} of {_all.Count:N0} "
                     + $"in {phaseSetup + sw.ElapsedMilliseconds} ms "
                     + $"(setup {phaseSetup} · enumerate {enumerateMs} · "
                     + $"finish {sw.ElapsedMilliseconds - enumerateMs}) "
+                    + $"heap {GC.GetTotalMemory(false) / (1024 * 1024)} MiB "
+                    + $"gc {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)} "
                     + $"· {View} · {path}");
             });
         }
