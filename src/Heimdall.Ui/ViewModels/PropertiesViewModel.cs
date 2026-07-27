@@ -130,7 +130,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
             Title = details.Name;
             Location = Path.GetDirectoryName(details.FullPath) ?? details.FullPath;
             Kind = details.Kind;
-            SizeText = details.IsDirectory ? "not measured" : Human(details.Size);
+            SizeText = details.IsDirectory ? "not measured" : ByteSize.Format(details.Size);
             CanMeasure = details.IsDirectory;
 
             var general = new List<PropertyRow>();
@@ -171,8 +171,8 @@ public sealed partial class PropertiesViewModel : ObservableObject
 
             // Folders are counted but not walked — measuring is opt-in here too.
             SizeText = folders > 0
-                ? $"{Human(total)} in {files} file(s), plus {folders} folder(s) unmeasured"
-                : $"{Human(total)} in {files} file(s)";
+                ? $"{ByteSize.Format(total)} in {files} file(s), plus {folders} folder(s) unmeasured"
+                : $"{ByteSize.Format(total)} in {files} file(s)";
 
             CanMeasure = folders > 0;
         });
@@ -194,7 +194,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
         IsMeasuring = true;
 
         var progress = new Progress<SizeProgress>(p =>
-            SizeText = $"{Human(p.Bytes)} · {p.Files:N0} files · {p.Folders:N0} folders…");
+            SizeText = $"{ByteSize.Format(p.Bytes)} · {p.Files:N0} files · {p.Folders:N0} folders…");
 
         try
         {
@@ -211,7 +211,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
             }
 
             await Dispatcher.UIThread.InvokeAsync(() =>
-                SizeText = $"{Human(bytes)} · {files:N0} files · {folders:N0} folders");
+                SizeText = $"{ByteSize.Format(bytes)} · {files:N0} files · {folders:N0} folders");
         }
         catch (OperationCanceledException)
         {
@@ -223,11 +223,4 @@ public sealed partial class PropertiesViewModel : ObservableObject
         }
     }
 
-    private static string Human(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024L * 1024 => $"{bytes / 1024.0:0.#} KB",
-        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB",
-    };
 }

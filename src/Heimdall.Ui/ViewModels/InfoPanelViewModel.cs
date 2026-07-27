@@ -55,7 +55,7 @@ public sealed partial class InfoPanelViewModel : ObservableObject
         PreviewPath = "";
         Name = $"{count:N0} items selected";
         Kind = "";
-        Summary = bytes > 0 ? Bytes(bytes) : "";
+        Summary = bytes > 0 ? ByteSize.Format(bytes) : "";
         Rows.Clear();
     }
 
@@ -83,7 +83,7 @@ public sealed partial class InfoPanelViewModel : ObservableObject
         Name = entry.Name;
         Kind = entry.IsDirectory ? "Folder" : "";
         PreviewPath = entry.IsDirectory ? "" : entry.FullPath;
-        Summary = entry.IsDirectory ? "" : Bytes(entry.Length);
+        Summary = entry.IsDirectory ? "" : ByteSize.Format(entry.Length);
         Rows.Clear();
 
         if (_properties is null) return;
@@ -98,7 +98,7 @@ public sealed partial class InfoPanelViewModel : ObservableObject
             if (token != _generation) return;
 
             Kind = details.Kind;
-            if (!details.IsDirectory) Summary = Bytes(details.Size);
+            if (!details.IsDirectory) Summary = ByteSize.Format(details.Size);
 
             Add("Modified", details.Modified?.LocalDateTime.ToString("dd MMM yyyy  HH:mm"));
             Add("Created", details.Created?.LocalDateTime.ToString("dd MMM yyyy  HH:mm"));
@@ -123,14 +123,4 @@ public sealed partial class InfoPanelViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(value)) Rows.Add(new PropertyRow(label, value));
     }
 
-    private static string Bytes(long bytes)
-    {
-        string[] units = ["B", "KiB", "MiB", "GiB", "TiB"];
-        double size = bytes;
-        var unit = 0;
-
-        while (size >= 1024 && unit < units.Length - 1) { size /= 1024; unit++; }
-
-        return unit == 0 ? $"{bytes:N0} B" : $"{size:0.#} {units[unit]}";
-    }
 }

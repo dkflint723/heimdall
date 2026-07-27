@@ -11,6 +11,7 @@ UserBase pages for Dolphin/File_Management, not from memory.
 keeping the same list in two documents is exactly how both went stale.
 
 Status verified against the tree, July 2026. Session schema v12.
+Settings schema v1.
 
 ---
 
@@ -51,6 +52,8 @@ Status verified against the tree, July 2026. Session schema v12.
 | **Information panel (F11)** | ✅ `InfoPanelViewModel`, **per split side** |
 | **Batch rename** | ✅ live preview, in Core, all-or-nothing |
 | **Network transparency** | ✅ both directions — see below |
+| **Settings dialog** | ✅ six pages — see below |
+| **Folders panel navigation** | ✅ — the tree listed and expanded but clicking did nothing until July 2026 |
 
 **Beyond Dolphin:** Miller column strip, per-type inline metadata, permissions as
 a list column, priority-based column dropping, file-age shading, per-pane
@@ -129,16 +132,27 @@ Dolphin handles 200k in icon view. Two ways to close it:
 or only in benchmarks? Grid and compact are picture-and-document layouts, and a
 200k-entry folder viewed as tiles may not be a real workflow.
 
-### 2. Medium — days each
+### 2. Newly identified — found while building the settings dialog
+
+Neither of these was on any list before July 2026. Both were discovered by
+asking what a Dolphin setting would actually control here and finding nothing.
+
+- **No multi-window support at all.** `App.axaml.cs` creates exactly one
+  `MainWindow`. Dolphin opens as many as you like, and "Open in new window" is a
+  standard context-menu entry. This is why that entry is absent rather than
+  merely hidden.
+- **The context menu was missing five of Dolphin's nine standard entries.**
+  Three have since been added — Open in new tab, Add to places, Copy location.
+  Two remain: Open in new window (needs the above) and View mode (lives in the
+  toolbar and view flyout here, which is arguably the better place).
+
+### 3. Medium — days each
 
 - **Per-folder view properties.** Dolphin remembers view mode, sort and zoom per
   directory (`.directory` files or a central store). Also the OneCommander
   behaviour deferred earlier. Needs a decision on where it is stored, and it
-  changes the session schema.
-- **Settings dialog.** There is a per-pane view flyout and nothing else. Dolphin
-  has startup, view modes, navigation, services, trash and general pages. This is
-  the recommended next piece of work: the application is a daily driver with no
-  way to change anything except by editing session JSON.
+  changes the session schema. **Its General → Behavior toggle is written and
+  waiting**; the setting ships with the feature.
 - **Configurable shortcuts and toolbar.** Implies a settings surface and a command
   registry, neither of which exists.
 - **Checksum tab in properties** (MD5/SHA1/SHA256). Easy computation; wants
@@ -148,7 +162,7 @@ or only in benchmarks? Grid and compact are picture-and-document layouts, and a
   caching. Rows already support per-entry async decoration.
 - **Selection mode.** Dolphin's touch-friendly checkbox selection.
 
-### 3. Large — need a decision first
+### 4. Large — need a decision first
 
 - **Terminal panel** (F4 docked Konsole). Dolphin embeds Konsole via KParts, which
   has no equivalent here. Doing it properly means running a PTY and writing a
@@ -157,6 +171,29 @@ or only in benchmarks? Grid and compact are picture-and-document layouts, and a
 - **Archive browsing as folders.** Dolphin enters `.zip` and `.tar.gz` as if they
   were directories. Archives were built once and dropped at the author's request;
   this would revive that decision in a different form. Do not start it unbidden.
+
+---
+
+## Settings dialog (done)
+
+Six pages against Dolphin's seven: **General** (Behaviour, Previews,
+Confirmations, Status bar), **Startup**, **View modes**, **Navigation**,
+**Context menu**, **Trash**. `settings.json` lives beside `session.json` and is
+read *first*, because the startup setting decides whether the session is
+consulted at all.
+
+**Dropped from Dolphin's set, with reasons:** *User Feedback* is KDE telemetry
+and this application sends nothing anywhere; *Open archives as folder* would
+reopen the archives decision by the back door; *service menus* are replaced by
+the scripts menu; *Show zoom slider* has no slider to toggle.
+
+**The governing rule is that a setting ships WITH its feature, never before it.**
+A dialog full of toggles that do nothing is worse than no dialog. Written into
+the model but deliberately not shown until their feature exists: per-folder view
+style, expandable folders, selection markers, VCS decorations, spring-loaded
+folders, previews inside folder icons, folder size by contents, inline-vs-dialog
+rename, the executable-open choice, full path in the location bar, and opening
+external folders in tabs.
 
 ---
 
@@ -173,15 +210,18 @@ or only in benchmarks? Grid and compact are picture-and-document layouts, and a
 
 ## Proposed order
 
-1. **Settings dialog.** The largest gap between what the application can do and
-   what its user can reach.
-2. **Per-folder view properties.** Shares the session-schema change with anything
-   else that persists per-directory state, so it belongs near the settings work.
-3. **Decide the tile-layout virtualization question** — after establishing whether
-   the 5,000 guard bites in practice.
+1. ~~Settings dialog.~~ **Done, July 2026.**
+2. **Decide the tile-layout virtualization question** — the only remaining place
+   this application refuses something Dolphin does, and therefore the only real
+   violation of the 100% parity goal. Worth first establishing whether the 5,000
+   guard bites in daily use or only in benchmarks.
+3. **Per-folder view properties.** Shares a session-schema change with anything
+   else persisting per-directory state, and its settings toggle is already
+   written and waiting.
 4. Checksums, then version control decorations, then selection mode and
    configurable shortcuts.
-5. Terminal panel last, or never.
+5. Multi-window, which also unlocks the last context-menu entry.
+6. Terminal panel last, or never.
 
 The Windows port sits outside this order and was deferred explicitly. It is not a
 parity item; it is the point at which twenty single-implementation interfaces get

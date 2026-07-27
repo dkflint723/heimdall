@@ -138,6 +138,20 @@ collection re-checks a generation counter *inside* the dispatcher block. An
 icon scales. Row height is `max(body × 2.1, thumb + 8)` — it cannot be a free
 setting, because a row must fit the taller of its label and its icon.
 
+**Preferences are a separate store, read first.** `settings.json` sits beside
+`session.json` in `~/.local/state/heimdall/`, with its own source-generated
+context and version. The session records *where you were*; settings record *what
+you always want*, and they collide — "restore my last folders" and "always start
+in Home" are both startup settings and one has to win. So the constructor order
+is **settings → theme → session**, and that ordering is load-bearing rather than
+tidy: `ThemeApplier` reads `AppSettings.Current` to decide whether a configured
+font beats Plasma's, so loading settings after it meant the font setting did
+nothing at all, even across a restart.
+
+**A setting that lands in a theme resource needs `ThemeApplier` re-run on save.**
+The resource is the only thing the markup reads, and Apply had exactly two call
+sites — startup and a Plasma scheme change — so saving changed nothing.
+
 **Prefer the desktop's own data over private equivalents.** XDG trash, the
 freedesktop thumbnail cache, `user.xdg.tags`, `kdeglobals`, shared-mime-info, the
 icon theme spec, gvfs and kio-fuse mount points. Everything Heimdall writes, the
@@ -251,6 +265,42 @@ silently omits files is dangerous. This is a real parity gap tracked in
   anyway.
 - **TreeDataGrid is rejected** — it needs an Avalonia Accelerate licence and was
   the wrong control regardless. `ListBox` + `TreeView`.
+- **`TextBox.Watermark` is obsolete in Avalonia 12** — use `PlaceholderText`.
+  More useful than the rename: **`TreatWarningsAsErrors` does not catch Avalonia
+  XAML compiler warnings** (`AVLN####`). They compile straight through and appear
+  only in the build log, so read the log rather than the exit code.
+- **`DynamicResource` assigns without converting.** Every metric in
+  `PaneScale.Compute` is a `double`; a resource read back into an `int` property
+  such as `MaxLines` fails at runtime, not at compile time. That is why the
+  icon-view text settings are not wired.
+- **Grep where an attached property is actually attached before assuming what it
+  governs.** `DoubleClick.Command` sounds like the open-a-file path and is used
+  on exactly one control — the path bar's edit layer. Opening files is a
+  window-level handler.
+- **One formatter per fact.** Six private byte formatters had accumulated and
+  they disagreed: 500 bytes read as "500 B" in properties and "0.5 KB" in the
+  sidebar, and only the Size column used binary unit names for 1024-based maths.
+  `Core.FileSystem.ByteSize` is now the only one.
+
+### Async and the dispatcher
+
+- **A `_generation` counter is worthless unless it is COMPARED.**
+  `LoadListingAsync` incremented one and never read it in any of its four
+  dispatcher blocks. Cancelling a token does **not** unqueue a
+  `Dispatcher.UIThread.InvokeAsync` callback already in flight, so a superseded
+  enumeration appended into a list the newer navigation had just cleared — and
+  worse, its completion block would point the file watcher at the old path and
+  clear `IsLoading` for a live navigation. When a file declares `_generation`,
+  grep that it is compared, not just incremented.
+- **The useful audit question is not "is this block guarded" but "what does it
+  mutate".** Fourteen unguarded blocks that only write `Status` are fine —
+  guarding them would suppress genuine error messages. The check that matters:
+  no dispatcher block touching `Entries`, `_all`, the watcher or `IsLoaded` may
+  be unguarded.
+- **Navigating to the folder you are already in is a no-op.** It used to reload,
+  and because entries paint in readdir order and sort only when enumeration
+  finishes, the rebuild flashed the same files in filesystem order before they
+  settled. Refreshing on purpose is F5's job.
 
 ### Platform and process
 

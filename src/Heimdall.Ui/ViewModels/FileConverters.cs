@@ -23,13 +23,10 @@ public static class FileConverters
             if (entry.FullPath is null) return "";
             if (entry.IsDirectory) return "—";
 
-            return entry.Length switch
-            {
-                < 1024 => $"{entry.Length} B",
-                < 1024L * 1024 => $"{entry.Length / 1024.0:0.#} KiB",
-                < 1024L * 1024 * 1024 => $"{entry.Length / (1024.0 * 1024):0.#} MiB",
-                _ => $"{entry.Length / (1024.0 * 1024 * 1024):0.##} GiB",
-            };
+            // The sixth and last copy of this. It was the only one already
+            // using binary unit names, which is why the Size column and the
+            // status bar beside it disagreed about the same file.
+            return ByteSize.Format(entry.Length);
         });
 
     /// <summary>

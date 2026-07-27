@@ -364,7 +364,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             text = await Task.Run(() =>
             {
                 var drive = new DriveInfo(path);
-                return $"{Bytes(drive.AvailableFreeSpace)} free";
+                return $"{ByteSize.Format(drive.AvailableFreeSpace)} free";
             }).ConfigureAwait(false);
         }
         catch
@@ -378,13 +378,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         await Dispatcher.UIThread.InvokeAsync(() => FreeSpace = text);
     }
 
-    private static string Bytes(long value) => value switch
-    {
-        < 1024 => $"{value} B",
-        < 1024L * 1024 => $"{value / 1024.0:0.#} KB",
-        < 1024L * 1024 * 1024 => $"{value / (1024.0 * 1024):0.#} MB",
-        _ => $"{value / (1024.0 * 1024 * 1024):0.#} GB",
-    };
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isLoaded;
@@ -626,7 +619,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             files++;
         }
 
-        return files == 0 ? "" : $" ({Bytes(total)})";
+        return files == 0 ? "" : $" ({ByteSize.Format(total)})";
     }
 
     public string Summary => Selection.Count switch

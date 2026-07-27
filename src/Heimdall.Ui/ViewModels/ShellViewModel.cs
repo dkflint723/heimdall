@@ -1045,7 +1045,7 @@ public sealed partial class ShellViewModel : ObservableObject
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 OperationStatus = p.ItemsTotal <= 1 && p.BytesTotal == 0
                     ? p.CurrentItem ?? ""
-                    : $"{p.ItemsDone}/{p.ItemsTotal}  {Format(p.BytesDone)}/{Format(p.BytesTotal)}  {p.CurrentItem}");
+                    : $"{p.ItemsDone}/{p.ItemsTotal}  {ByteSize.Format(p.BytesDone)}/{ByteSize.Format(p.BytesTotal)}  {p.CurrentItem}");
 
         _ = handle.Completion.ContinueWith(_ =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -1062,20 +1062,6 @@ public sealed partial class ShellViewModel : ObservableObject
                 }
             }), TaskScheduler.Default);
     }
-
-    /// <summary>
-    /// Public because MainWindow needs it for the trash sweep message. Note
-    /// there are four near-identical copies of this in the view models
-    /// (InfoPanel.Bytes, Properties.Human, Sidebar.Human, this one) — worth
-    /// collapsing into one place, but not while doing something else.
-    /// </summary>
-    public static string Format(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
-        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB",
-    };
 
     // ---- session -------------------------------------------------------
 

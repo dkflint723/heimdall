@@ -206,13 +206,7 @@ public sealed class PlaceItemViewModel(Place place)
         : 0;
 
     public string CapacityText => place.CapacityBytes is > 0 && place.FreeBytes is { } free
-        ? $"{Human(free)} free"
+        ? $"{ByteSize.Format(free)} free"
         : "";
 
-    private static string Human(long bytes) => bytes switch
-    {
-        < 1024L * 1024 => $"{bytes / 1024.0:0.#} KB",
-        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):0.#} GB",
-    };
 }

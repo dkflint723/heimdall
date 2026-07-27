@@ -937,7 +937,7 @@ public partial class MainWindow : Window
             // nobody watching is exactly the thing that should not be silent.
             if (result.Removed > 0)
             {
-                var freed = ShellViewModel.Format(result.BytesFreed);
+                var freed = ByteSize.Format(result.BytesFreed);
 
                 Console.Error.WriteLine(
                     $"[heimdall] trash: removed {result.Removed} item(s), freed {freed}"
