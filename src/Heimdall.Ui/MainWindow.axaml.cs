@@ -1227,21 +1227,43 @@ public partial class MainWindow : Window
     private string? _lastTapPath;
     private DateTime _lastTapAt;
 
+    private string? _lastOpenPath;
+    private DateTime _lastOpenAt;
+
     /// <summary>
-    /// Both modes are handled here, and the double is detected on the ENTRY
-    /// rather than on the visual.
+    /// The single place that opens, and it de-duplicates.
     ///
-    /// Avalonia's DoubleTapped needs both clicks on the same element, and a row
-    /// does not keep the same element across a click: the diagnostic showed the
-    /// first click landing on a ContentPresenter and the second on a Border,
-    /// because selecting the row changes what is under the pointer. Clicking
-    /// the icon or the filename worked — those controls survive selection — but
-    /// clicking the empty part of the line reset the gesture, which is why it
-    /// took up to four clicks.
+    /// TWO routes can each legitimately decide a row was double-clicked, and
+    /// which one fires depends on whether Avalonia's gesture formed — so rather
+    /// than bet on one, both call this and a repeat within the interval is
+    /// dropped. Opening a folder twice is invisible; launching an application
+    /// twice is not.
+    /// </summary>
+    private void TryOpen(FileEntry entry)
+    {
+        var now = DateTime.UtcNow;
+
+        if (_lastOpenPath == entry.FullPath
+            && now - _lastOpenAt < TimeSpan.FromMilliseconds(600))
+            return;
+
+        _lastOpenPath = entry.FullPath;
+        _lastOpenAt = now;
+
+        _ = _shell.ActiveTab?.OpenAsync(entry);
+    }
+
+    /// <summary>
+    /// **Avalonia raises Tapped for the FIRST click and DoubleTapped for the
+    /// second — it does not raise Tapped twice.** A previous attempt here
+    /// counted two taps and therefore never fired when the gesture worked
+    /// properly.
     ///
-    /// Keying on the entry's path sidesteps that entirely: two clicks on the
-    /// same row within the interval open it, whatever the row happened to be
-    /// made of at the time.
+    /// So this is only the FALLBACK: it catches the case where the gesture does
+    /// not form because the row's visual changed between clicks (selection
+    /// swaps a ContentPresenter for a Border, which is why clicking the empty
+    /// part of a line used to take four clicks while the icon and filename
+    /// worked). DoubleTapped remains the normal path.
     /// </summary>
     private void OnTapped(object? sender, TappedEventArgs e)
     {
@@ -1251,7 +1273,7 @@ public partial class MainWindow : Window
 
         if (OpensOnSingleClick)
         {
-            _ = _shell.ActiveTab?.OpenAsync(entry);
+            TryOpen(entry);
             return;
         }
 
@@ -1260,11 +1282,8 @@ public partial class MainWindow : Window
         if (_lastTapPath == entry.FullPath
             && now - _lastTapAt <= TimeSpan.FromMilliseconds(500))
         {
-            // Cleared so a third click starts a fresh pair rather than opening
-            // again on every subsequent click.
             _lastTapPath = null;
-
-            _ = _shell.ActiveTab?.OpenAsync(entry);
+            TryOpen(entry);
             return;
         }
 
@@ -1288,12 +1307,9 @@ public partial class MainWindow : Window
         var source = e.Source as Control;
         var entry = EntryAt(e.Source);
 
-        var acts = kind == "tap" ? OpensOnSingleClick : !OpensOnSingleClick;
-
         Console.Error.WriteLine(
             $"[heimdall] click: {kind} source={source?.GetType().Name ?? "null"} "
             + $"entry={entry?.Name ?? "NONE"} "
-            + $"acts={acts} opens={(acts && entry is not null)} "
             + $"mode={AppSettings.Current.Navigation.OpenItemsWith}");
 
         // When the lookup fails, print the whole visual chain and each link's
@@ -1353,10 +1369,11 @@ public partial class MainWindow : Window
     {
         LogClick("double", e);
 
-        // Deliberately does NOT open any more. OnTapped now detects the double
-        // itself, and when Avalonia's gesture does fire it fires on the same
-        // second click — so acting here too would open the folder twice, or
-        // launch an application twice.
+        // The normal path, restored. TryOpen drops a duplicate if the fallback
+        // in OnTapped has already acted on this same row.
+        if (OpensOnSingleClick) return;
+
+        if (EntryAt(e.Source) is { } entry) TryOpen(entry);
     }
 
     /// <summary>
