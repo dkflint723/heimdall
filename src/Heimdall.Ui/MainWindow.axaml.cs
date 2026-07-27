@@ -1347,9 +1347,28 @@ public partial class MainWindow : Window
         // Only while the path box is open and focused. Tab keeps its ordinary
         // meaning everywhere else, including the other text boxes.
         if (_shell.ActiveTab is not { IsPathEditing: true } pane) return;
-        if (FocusManager?.GetFocusedElement() is not TextBox) return;
+        if (FocusManager?.GetFocusedElement() is not TextBox box) return;
 
         pane.CompletePathCommand.Execute(null);
+
+        // Caret to the end, and the selection collapsed there, so the next
+        // keystroke continues the path instead of landing wherever the caret
+        // happened to sit — or worse, replacing a selection the text
+        // replacement left behind.
+        //
+        // POSTED rather than set inline: the command assigns PathText, and the
+        // binding has to propagate to this TextBox before its Text is the new
+        // value. Setting CaretIndex now would measure against the OLD text and
+        // get clamped to the wrong place.
+        Dispatcher.UIThread.Post(() =>
+        {
+            var end = box.Text?.Length ?? 0;
+
+            box.CaretIndex = end;
+            box.SelectionStart = end;
+            box.SelectionEnd = end;
+        }, DispatcherPriority.Background);
+
         e.Handled = true;
     }
 
