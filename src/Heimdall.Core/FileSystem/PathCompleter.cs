@@ -17,12 +17,23 @@ public sealed class PathCompleter
     private List<string> _matches = [];
     private int _index = -1;
 
+    // The directory and fragment the candidates were built FOR. Cycling must
+    // stay anchored to these rather than re-reading the text, because each
+    // completion appends a trailing "/" and re-splitting would then treat the
+    // folder just offered as the one to search — so the next candidate landed
+    // INSIDE it instead of replacing it, and Tab produced
+    // /home/flint/ → /home/flint/Desktop/ → /home/flint/Desktop/Documents/.
+    private string _directory = "";
+    private string _partial = "";
+
     /// <summary>Forgets the cycle; call when the user types something new.</summary>
     public void Reset()
     {
         _lastResult = "";
         _matches = [];
         _index = -1;
+        _directory = "";
+        _partial = "";
     }
 
     /// <summary>
@@ -31,30 +42,30 @@ public sealed class PathCompleter
     /// </summary>
     public string? Complete(string text)
     {
-        // A fresh edit invalidates the cycle: the candidates were computed for
-        // text the user has since changed.
-        if (text != _lastResult) Rebuild(text);
+        // Rebuild when the user has typed something new, and also when the last
+        // offer was UNAMBIGUOUS — one candidate means the trailing "/" has taken
+        // us inside it, so the next Tab should complete in there. With several
+        // candidates the text still ends in a folder we are choosing BETWEEN,
+        // so the cycle continues instead.
+        if (text != _lastResult || _matches.Count <= 1) Rebuild(text);
 
         if (_matches.Count == 0) return null;
-
-        var (directory, _) = Split(text);
 
         if (_matches.Count == 1)
         {
             _index = 0;
-            return Remember(Join(directory, _matches[0]));
+            return Remember(Join(_directory, _matches[0]));
         }
 
         // Extend to the shared prefix first, and only start cycling once there
         // is nothing left that every candidate agrees on.
         var shared = CommonPrefix(_matches);
-        var current = Split(text).Partial;
 
-        if (_index < 0 && shared.Length > current.Length)
-            return Remember(Join(directory, shared), cycling: false);
+        if (_index < 0 && shared.Length > _partial.Length)
+            return Remember(Join(_directory, shared), cycling: false);
 
         _index = (_index + 1) % _matches.Count;
-        return Remember(Join(directory, _matches[_index]));
+        return Remember(Join(_directory, _matches[_index]));
     }
 
     private string Remember(string result, bool cycling = true)
@@ -70,6 +81,10 @@ public sealed class PathCompleter
         _matches = [];
 
         var (directory, partial) = Split(text);
+
+        _directory = directory;
+        _partial = partial;
+
         if (directory.Length == 0) return;
 
         try

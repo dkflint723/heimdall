@@ -1266,8 +1266,6 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnTapped(object? sender, TappedEventArgs e)
     {
-        LogClick("tap", e);
-
         if (EntryAt(e.Source) is not { } entry) return;
 
         if (OpensOnSingleClick)
@@ -1293,45 +1291,6 @@ public partial class MainWindow : Window
         _lastTapPath = entry.FullPath;
     }
 
-    /// <summary>
-    /// Temporary, and this time it stays until the user confirms the fix — the
-    /// last version was deleted on the strength of a theory that turned out to
-    /// be wrong.
-    ///
-    /// Reports three separate things, because the previous diagnostic only
-    /// answered the first: whether the gesture arrived at all, whether an entry
-    /// was resolved from it, and whether Open was actually called. A missing
-    /// "double" line, a "double" with no entry, and a "double" that opens
-    /// nothing are three different bugs.
-    /// </summary>
-    private void LogClick(string kind, TappedEventArgs e)
-    {
-        var source = e.Source as Control;
-        var entry = EntryAt(e.Source);
-
-        Console.Error.WriteLine(
-            $"[heimdall] click: {kind} source={source?.GetType().Name ?? "null"} "
-            + $"entry={entry?.Name ?? "NONE"} "
-            + $"mode={AppSettings.Current.Navigation.OpenItemsWith}");
-
-        // When the lookup fails, print the whole visual chain and each link's
-        // DataContext. AccessText resolving to NONE is the one case left, and
-        // guessing what it sits inside is exactly the habit that produced two
-        // wrong fixes for this symptom already.
-        if (entry is not null) return;
-
-        var chain = new List<string>();
-
-        for (var visual = e.Source as Visual;
-             visual is not null && chain.Count < 12;
-             visual = visual.GetVisualParent())
-        {
-            var ctx = (visual as Control)?.DataContext?.GetType().Name ?? "-";
-            chain.Add($"{visual.GetType().Name}[{ctx}]");
-        }
-
-        Console.Error.WriteLine("[heimdall] chain: " + string.Join(" < ", chain));
-    }
 
     /// <summary>
     /// The row's entry, found by walking UP from whatever was physically under
@@ -1369,8 +1328,6 @@ public partial class MainWindow : Window
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
-        LogClick("double", e);
-
         // The normal path, restored. TryOpen drops a duplicate if the fallback
         // in OnTapped has already acted on this same row.
         if (OpensOnSingleClick) return;

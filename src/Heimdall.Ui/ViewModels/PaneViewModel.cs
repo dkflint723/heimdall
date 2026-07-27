@@ -1733,39 +1733,25 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 // Says what the listing actually produced. "No files showing"
                 // has two very different causes — nothing enumerated, or
                 // nothing rendered — and only this separates them.
-                // Split three ways, because "the load took 45 seconds" does not
-                // say WHICH part did. setup = cancel/clear/reset before any I/O;
-                // enumerate = the filesystem walk plus its dispatcher hops;
-                // finish = sort, filter and StartWatching.
-                // sw starts AFTER setup is captured, so it never contains it —
-                // the three phases add up to the total, they are not slices of
-                // one running clock.
-                // Memory and collection counts alongside the phases. The
-                // enumerate phase holds ~58 s for EIGHT files, which cannot be
-                // the walk — it is the dispatcher hop waiting on a UI thread
-                // blocked in one long operation. Background priority did not
-                // help, which rules out a queue of small callbacks. The times
-                // also climb run over run (33 s → 45 s → 58 s), and the one
-                // change that stopped releasing anything was dropping
-                // Dispose() from thumbnail eviction. If gen2 climbs with the
-                // stall, that is the answer.
+                // Timing stays — it is how a 44-second stall was found at
+                // all. Heap, GC and thread-pool counters were for that hunt
+                // specifically and are noise in daily use, so they need asking
+                // for: HEIMDALL_LOAD_DEBUG=1.
+                //
+                // The three phases SUM to the total; sw starts after setup is
+                // captured, so they are separate clocks, not slices of one.
+                var detail = Environment.GetEnvironmentVariable("HEIMDALL_LOAD_DEBUG") == "1"
+                    ? $"heap {GC.GetTotalMemory(false) / (1024 * 1024)} MiB "
+                      + $"gc {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)} "
+                      + $"pool {ThreadPool.ThreadCount}t/{ThreadPool.PendingWorkItemCount}q "
+                    : "";
+
                 Console.Error.WriteLine(
                     $"[heimdall] listing: {Entries.Count:N0} of {_all.Count:N0} "
                     + $"in {phaseSetup + sw.ElapsedMilliseconds} ms "
                     + $"(setup {phaseSetup} · enumerate {enumerateMs} · "
                     + $"finish {sw.ElapsedMilliseconds - enumerateMs}) "
-                    + $"heap {GC.GetTotalMemory(false) / (1024 * 1024)} MiB "
-                    + $"gc {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)} "
-                    // The pool, because the heap is flat and priority did not
-                    // help — so the block is neither GC nor the dispatcher
-                    // queue. RowIcon fires one Task.Run PER REALIZED ROW with
-                    // no cancellation, and all three layouts stay alive, so
-                    // cycling them over 300 rows queues ~900 filesystem lookups.
-                    // LoadListingAsync awaits with ConfigureAwait(false), so its
-                    // continuations need a pool thread too — and would wait
-                    // behind every one of them. Gray icons say those lookups
-                    // never finished, which is the same story from the other end.
-                    + $"pool {ThreadPool.ThreadCount}t/{ThreadPool.PendingWorkItemCount}q "
+                    + detail
                     + $"· {View} · {path}");
             });
         }
