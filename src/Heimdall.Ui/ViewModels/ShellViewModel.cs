@@ -75,11 +75,18 @@ public sealed partial class ShellViewModel : ObservableObject
         _launcher = launcher;
         _clipboard = clipboard;
 
-        Sidebar = new SidebarViewModel(fs, places, search, () => ActiveTab?.CurrentPath);
+        Sidebar = new SidebarViewModel(places, search, () => ActiveTab?.CurrentPath);
 
         // A chosen result navigates the active tab to its folder and selects it,
         // rather than opening the file — search is for finding, not launching.
         // A tag click narrows whichever pane has focus.
+        // Same arrangement as tags: the store holds the data, the shell decides
+        // what a click does. Attached here rather than in MainWindow because
+        // this is the only place that knows which pane is active.
+        Sidebar.AttachVisits(
+            PaneViewModel.Visits,
+            path => _ = ActiveTab?.NavigateAsync(path));
+
         Sidebar.AttachTags(tags, tag =>
         {
             if (ActiveTab is { } pane) _ = pane.FilterByTagAsync(tag);
@@ -645,23 +652,6 @@ public sealed partial class ShellViewModel : ObservableObject
     public bool ShowStatusBar => Settings.AppSettings.Current.General.ShowStatusBar;
 
     public bool ShowFreeSpace => Settings.AppSettings.Current.General.ShowFreeSpace;
-
-    /// <summary>
-    /// The folders tree's selection. It had none — the TreeView listed and
-    /// expanded folders and clicking one did nothing at all, which is a panel
-    /// that looks like a control and behaves like a picture.
-    ///
-    /// Selection rather than a click handler, because that is what a TreeView
-    /// natively reports and it makes keyboard navigation work for free.
-    /// </summary>
-    [ObservableProperty] private FolderNode? _selectedTreeNode;
-
-    partial void OnSelectedTreeNodeChanged(FolderNode? value)
-    {
-        if (value is null) return;
-
-        _ = ActiveTab?.NavigateAsync(value.Path);
-    }
 
     // ---- context menu visibility ------------------------------------------
     //

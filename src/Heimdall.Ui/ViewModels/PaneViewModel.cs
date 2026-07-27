@@ -17,6 +17,13 @@ public sealed record PathSegment(string Name, string FullPath, ICommand Open, bo
 public sealed record TagOption(string Name, ICommand Command);
 
 /// <summary>
+/// A frequently-visited folder, for the sidebar. Carries the full path as well
+/// as the label so the tooltip can disambiguate the four different folders
+/// everyone has called "src".
+/// </summary>
+public sealed record VisitedOption(string Label, string Path, int Count, ICommand Command);
+
+/// <summary>
 /// One pane: a path, its listing, its own navigation history, its own sort.
 ///
 /// Everything about this class is self-contained on purpose. A tab is a pane, a
@@ -248,6 +255,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// Per-folder view overrides. Null until the shell supplies one.
     /// </summary>
     public static IFolderViewStore? FolderViews { get; set; }
+
+    /// <summary>
+    /// Visit counts. Recorded from NavigateAsync ONLY — back, forward, F5 and
+    /// session restore all call LoadAsync directly, and none of them is a
+    /// choice about where to go.
+    /// </summary>
+    public static IVisitStore? Visits { get; set; }
 
     /// <summary>
     /// Applied on arrival, before the listing is asked for, so the folder is
@@ -942,6 +956,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }
 
         await LoadAsync(path).ConfigureAwait(false);
+
+        // After the load, and only if it worked — a path that could not be read
+        // is not somewhere the user goes, and counting it would push dead
+        // folders up the list.
+        if (IsLoaded) Visits?.Record(path);
     }
 
     [RelayCommand]

@@ -23,13 +23,11 @@ public sealed partial class SidebarViewModel : ObservableObject
     private readonly IPlacesProvider? _places;
 
     public SidebarViewModel(
-        IFileSystemProvider fs,
         IPlacesProvider? places,
         ISearchProvider? search = null,
         Func<string?>? currentPath = null)
     {
         _places = places;
-        Tree = new FolderTreeViewModel(fs);
         Search = new SearchViewModel(search, currentPath ?? (() => null));
 
         if (places is not null)
@@ -62,7 +60,6 @@ public sealed partial class SidebarViewModel : ObservableObject
 
         OnPropertyChanged(nameof(HasTags));
     }
-    public FolderTreeViewModel Tree { get; }
     public SearchViewModel Search { get; }
 
     [ObservableProperty] private string _activePanel = "places";
@@ -76,15 +73,55 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     /// <summary>The folder tree is the one section worth collapsing: it is tall,
     /// and it is the least used of the four.</summary>
-    [ObservableProperty] private bool _isTreeExpanded;
 
-    public string TreeGlyph => IsTreeExpanded ? "\u25BE" : "\u25B8";
 
-    partial void OnIsTreeExpandedChanged(bool value) => OnPropertyChanged(nameof(TreeGlyph));
 
     [ObservableProperty] private bool _isSearching;
 
     public ObservableCollection<TagOption> Tags { get; } = new();
+
+    // ---- frequently visited ------------------------------------------------
+
+    private IVisitStore? _visits;
+    private Action<string>? _onFolderChosen;
+
+    public ObservableCollection<VisitedOption> Frequent { get; } = new();
+
+    public bool HasFrequent => Frequent.Count > 0;
+
+    /// <summary>Wired by the shell, which owns what a click actually does —
+    /// the same arrangement as tags.</summary>
+    public void AttachVisits(IVisitStore? visits, Action<string> onChosen)
+    {
+        _visits = visits;
+        _onFolderChosen = onChosen;
+
+        if (visits is not null)
+            visits.Changed += (_, _) => Dispatcher.UIThread.Post(RefreshFrequent);
+
+        RefreshFrequent();
+    }
+
+    /// <summary>
+    /// Six entries. Enough to be useful, few enough that the list does not
+    /// become a second places section competing with the real one.
+    /// </summary>
+    public void RefreshFrequent()
+    {
+        Frequent.Clear();
+
+        if (_visits is not null)
+            foreach (var visited in _visits.Top(6))
+            {
+                var path = visited.Path;
+
+                Frequent.Add(new VisitedOption(
+                    visited.Label, path, visited.Count,
+                    new RelayCommand(() => _onFolderChosen?.Invoke(path))));
+            }
+
+        OnPropertyChanged(nameof(HasFrequent));
+    }
 
     /// <summary>
     /// Remote locations the desktop has mounted. Shown beside Devices because
@@ -128,8 +165,6 @@ public sealed partial class SidebarViewModel : ObservableObject
         IsSearching = true;
     }
 
-    [RelayCommand]
-    private void ToggleTree() => IsTreeExpanded = !IsTreeExpanded;
 
     partial void OnActivePanelChanged(string value) => NotifyVisibility();
     partial void OnRailChanged(RailState value) => NotifyVisibility();

@@ -1378,34 +1378,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
-              <!-- Tags sit beside places rather than under a menu: they are a
-                   way of organising, so they belong where the places are. -->
-              <StackPanel Margin="0,10,0,0" IsVisible="{Binding Sidebar.HasTags}">
-                <TextBlock Text="tags" Margin="12,0,12,4"
-                           FontSize="{DynamicResource FontSizeTiny}"
-                           Foreground="{DynamicResource ViewDimText}"/>
-                <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TagOption">
-                      <Button Command="{Binding Command}"
-                              Background="Transparent" BorderThickness="0"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Left" Padding="12,4">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                          <Border Width="9" Height="9" CornerRadius="2"
-                                  VerticalAlignment="Center"
-                                  Background="{Binding Name, Converter={x:Static th:TagBrush.ForName}}"/>
-                          <TextBlock Text="{Binding Name}"
-                                     FontSize="{DynamicResource FontSizeSmall}"/>
-                        </StackPanel>
-                      </Button>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </StackPanel>
-
-              <!-- The tree is the one section worth collapsing: it is tall, and
-                   it is the least reached for of the four. -->
+              <!-- Network, sharing, tags and frequent folders. -->
               <StackPanel Margin="0,10,0,0">
                 <!-- Servers announcing themselves on the LAN. copyparty does
                      this when started with -z, which is how Heimdall starts its own
@@ -1575,37 +1548,56 @@
                   </ItemsControl>
                 </StackPanel>
 
-                <!-- A disclosure arrow, so a collapsed section reads as
-                     collapsed rather than as a heading with nothing under it. -->
-                <Button Command="{Binding Sidebar.ToggleTreeCommand}"
-                        Background="Transparent" BorderThickness="0"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                        Padding="12,2">
-                  <StackPanel Orientation="Horizontal" Spacing="5">
-                    <TextBlock Text="{Binding Sidebar.TreeGlyph}"
-                               FontSize="{DynamicResource FontSizeTiny}"
-                               Foreground="{DynamicResource ViewDimText}"
-                               VerticalAlignment="Center"/>
-                    <TextBlock Text="folders" FontSize="{DynamicResource FontSizeTiny}"
-                               Foreground="{DynamicResource ViewDimText}"/>
-                  </StackPanel>
-                </Button>
-                <TreeView ItemsSource="{Binding Sidebar.Tree.Roots}"
-                          SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}"
-                          IsVisible="{Binding Sidebar.IsTreeExpanded}"
-                          Background="Transparent" Margin="4,2,4,0">
-                  <TreeView.ItemTemplate>
-                    <TreeDataTemplate x:DataType="vm:FolderNode" ItemsSource="{Binding Children}">
-                      <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeSmall}"
-                                 TextTrimming="CharacterEllipsis"/>
-                    </TreeDataTemplate>
-                  </TreeView.ItemTemplate>
-                  <TreeView.Styles>
-                    <Style Selector="TreeViewItem" x:DataType="vm:FolderNode">
-                      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                    </Style>
-                  </TreeView.Styles>
-                </TreeView>
+                <!-- Tags. Moved down here from beside places at the user's
+                     request; the rationale for the old position was that tags
+                     are a way of organising and belonged with the places. -->
+                <StackPanel Margin="0,10,0,0" IsVisible="{Binding Sidebar.HasTags}">
+                  <TextBlock Text="tags" Margin="12,0,12,4"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             Foreground="{DynamicResource ViewDimText}"/>
+                  <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:TagOption">
+                        <Button Command="{Binding Command}"
+                                Background="Transparent" BorderThickness="0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left" Padding="12,4">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Width="9" Height="9" CornerRadius="2"
+                                    VerticalAlignment="Center"
+                                    Background="{Binding Name, Converter={x:Static th:TagBrush.ForName}}"/>
+                            <TextBlock Text="{Binding Name}"
+                                       FontSize="{DynamicResource FontSizeSmall}"/>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- Folders opened often enough to be a habit. Hidden entirely
+                     until there is something to show, so a new install is not
+                     staring at an empty heading. -->
+                <StackPanel Margin="0,10,0,0" IsVisible="{Binding Sidebar.HasFrequent}">
+                  <TextBlock Text="frequent" Margin="12,0,12,4"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             Foreground="{DynamicResource ViewDimText}"/>
+                  <ItemsControl ItemsSource="{Binding Sidebar.Frequent}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:VisitedOption">
+                        <Button Command="{Binding Command}"
+                                Background="Transparent" BorderThickness="0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left" Padding="12,4"
+                                ToolTip.Tip="{Binding Path}">
+                          <TextBlock Text="{Binding Label}"
+                                     FontSize="{DynamicResource FontSizeSmall}"
+                                     TextTrimming="CharacterEllipsis"/>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
               </StackPanel>
 
             </StackPanel>
