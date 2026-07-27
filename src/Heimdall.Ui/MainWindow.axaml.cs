@@ -1222,42 +1222,45 @@ public partial class MainWindow : Window
 
     private void OnTapped(object? sender, TappedEventArgs e)
     {
-        LogClick("tap", e);
-
         if (!OpensOnSingleClick) return;
 
-        if ((e.Source as Control)?.DataContext is FileEntry entry)
-            _ = _shell.ActiveTab?.OpenAsync(entry);
+        if (EntryAt(e.Source) is { } entry) _ = _shell.ActiveTab?.OpenAsync(entry);
     }
 
     /// <summary>
-    /// Temporary, for the "double click sometimes needs four clicks" bug. Says
-    /// which gesture arrived, what it landed on, and whether that thing carried
-    /// a FileEntry — because a tap that reaches a Border or a TextBlock instead
-    /// of the row would explain a click that appears to do nothing, and so
-    /// would a DoubleTapped that never arrives at all.
+    /// The row's entry, found by walking UP from whatever was physically under
+    /// the pointer.
+    ///
+    /// `e.Source` is the innermost visual, and the row template is several
+    /// controls deep — a click on the filename lands on an `AccessText` whose
+    /// DataContext is a `string`, not the `FileEntry`. Testing the source
+    /// directly therefore only worked when the pointer happened to hit a
+    /// control that carried the entry, which is why opening a folder could take
+    /// four clicks: you were hunting for the right pixel. Double-click made it
+    /// worse because it needs two qualifying hits in a row, not one.
+    ///
+    /// The same upward walk already exists in OnPointerPressedAnywhere for
+    /// PaneGroupViewModel; this is that pattern, not a new idea.
     /// </summary>
-    private void LogClick(string kind, TappedEventArgs e)
+    private static FileEntry? EntryAt(object? source)
     {
-        var source = e.Source as Control;
+        for (var control = source as Control; control is not null;
+             control = control.Parent as Control)
+        {
+            if (control.DataContext is FileEntry entry) return entry;
+        }
 
-        Console.Error.WriteLine(
-            $"[heimdall] click: {kind} source={source?.GetType().Name ?? "null"} "
-            + $"ctx={source?.DataContext?.GetType().Name ?? "null"} "
-            + $"mode={AppSettings.Current.Navigation.OpenItemsWith}");
+        return null;
     }
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
-        LogClick("double", e);
-
         // Otherwise the second click of a double re-opens what the first
         // already did — harmless when navigating into a folder, but it would
         // launch an application twice.
         if (OpensOnSingleClick) return;
 
-        if ((e.Source as Control)?.DataContext is FileEntry entry)
-            _ = _shell.ActiveTab?.OpenAsync(entry);
+        if (EntryAt(e.Source) is { } entry) _ = _shell.ActiveTab?.OpenAsync(entry);
     }
 
     /// <summary>
