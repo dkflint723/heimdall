@@ -1222,9 +1222,36 @@ public partial class MainWindow : Window
 
     private void OnTapped(object? sender, TappedEventArgs e)
     {
+        LogClick("tap", e);
+
         if (!OpensOnSingleClick) return;
 
         if (EntryAt(e.Source) is { } entry) _ = _shell.ActiveTab?.OpenAsync(entry);
+    }
+
+    /// <summary>
+    /// Temporary, and this time it stays until the user confirms the fix — the
+    /// last version was deleted on the strength of a theory that turned out to
+    /// be wrong.
+    ///
+    /// Reports three separate things, because the previous diagnostic only
+    /// answered the first: whether the gesture arrived at all, whether an entry
+    /// was resolved from it, and whether Open was actually called. A missing
+    /// "double" line, a "double" with no entry, and a "double" that opens
+    /// nothing are three different bugs.
+    /// </summary>
+    private void LogClick(string kind, TappedEventArgs e)
+    {
+        var source = e.Source as Control;
+        var entry = EntryAt(e.Source);
+
+        var acts = kind == "tap" ? OpensOnSingleClick : !OpensOnSingleClick;
+
+        Console.Error.WriteLine(
+            $"[heimdall] click: {kind} source={source?.GetType().Name ?? "null"} "
+            + $"entry={entry?.Name ?? "NONE"} "
+            + $"acts={acts} opens={(acts && entry is not null)} "
+            + $"mode={AppSettings.Current.Navigation.OpenItemsWith}");
     }
 
     /// <summary>
@@ -1255,6 +1282,8 @@ public partial class MainWindow : Window
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
+        LogClick("double", e);
+
         // Otherwise the second click of a double re-opens what the first
         // already did — harmless when navigating into a folder, but it would
         // launch an application twice.
