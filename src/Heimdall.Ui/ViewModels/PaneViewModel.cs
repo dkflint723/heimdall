@@ -706,8 +706,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         if (!CanUseTileLayouts && View != ViewMode.Details)
         {
             View = ViewMode.Details;
+            // EffectiveTileLimit, not the constant: with HEIMDALL_TILE_LIMIT set
+            // this message otherwise reports a limit that is not the one being
+            // enforced, which is worse than saying nothing.
             Status = $"switched to list view — {Entries.Count:N0} items is beyond "
-                   + $"the {UnvirtualizedLimit:N0} limit for tile layouts";
+                   + $"the {EffectiveTileLimit:N0} limit for tile layouts";
         }
 
         OnPropertyChanged(nameof(IsEmpty));
