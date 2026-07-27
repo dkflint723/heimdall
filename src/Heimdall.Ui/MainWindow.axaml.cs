@@ -1224,13 +1224,52 @@ public partial class MainWindow : Window
             _ => SystemSingleClick ?? false,
         };
 
+    private string? _lastTapPath;
+    private DateTime _lastTapAt;
+
+    /// <summary>
+    /// Both modes are handled here, and the double is detected on the ENTRY
+    /// rather than on the visual.
+    ///
+    /// Avalonia's DoubleTapped needs both clicks on the same element, and a row
+    /// does not keep the same element across a click: the diagnostic showed the
+    /// first click landing on a ContentPresenter and the second on a Border,
+    /// because selecting the row changes what is under the pointer. Clicking
+    /// the icon or the filename worked — those controls survive selection — but
+    /// clicking the empty part of the line reset the gesture, which is why it
+    /// took up to four clicks.
+    ///
+    /// Keying on the entry's path sidesteps that entirely: two clicks on the
+    /// same row within the interval open it, whatever the row happened to be
+    /// made of at the time.
+    /// </summary>
     private void OnTapped(object? sender, TappedEventArgs e)
     {
         LogClick("tap", e);
 
-        if (!OpensOnSingleClick) return;
+        if (EntryAt(e.Source) is not { } entry) return;
 
-        if (EntryAt(e.Source) is { } entry) _ = _shell.ActiveTab?.OpenAsync(entry);
+        if (OpensOnSingleClick)
+        {
+            _ = _shell.ActiveTab?.OpenAsync(entry);
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+
+        if (_lastTapPath == entry.FullPath
+            && now - _lastTapAt <= TimeSpan.FromMilliseconds(500))
+        {
+            // Cleared so a third click starts a fresh pair rather than opening
+            // again on every subsequent click.
+            _lastTapPath = null;
+
+            _ = _shell.ActiveTab?.OpenAsync(entry);
+            return;
+        }
+
+        _lastTapPath = entry.FullPath;
+        _lastTapAt = now;
     }
 
     /// <summary>
@@ -1314,12 +1353,10 @@ public partial class MainWindow : Window
     {
         LogClick("double", e);
 
-        // Otherwise the second click of a double re-opens what the first
-        // already did — harmless when navigating into a folder, but it would
+        // Deliberately does NOT open any more. OnTapped now detects the double
+        // itself, and when Avalonia's gesture does fire it fires on the same
+        // second click — so acting here too would open the folder twice, or
         // launch an application twice.
-        if (OpensOnSingleClick) return;
-
-        if (EntryAt(e.Source) is { } entry) _ = _shell.ActiveTab?.OpenAsync(entry);
     }
 
     /// <summary>
