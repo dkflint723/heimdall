@@ -7,6 +7,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Heimdall.Core.FileSystem;
 using Heimdall.Core;
 using Heimdall.Core.Places;
@@ -326,10 +327,13 @@ public partial class MainWindow : Window
             : null;
         _dragTrigger = _dragSource is null ? null : e;
 
-        for (var control = e.Source as Control; control is not null;
-             control = control.Parent as Control)
+        // Visual tree — same reason as EntryAt. A press that lands on
+        // templated content has no logical path back to the group, so clicking
+        // a filename would not activate its side.
+        for (var visual = e.Source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
         {
-            if (control.DataContext is PaneGroupViewModel group)
+            if (visual is Control { DataContext: PaneGroupViewModel group })
             {
                 _shell.ActivateGroup(group);
                 break;
@@ -495,10 +499,10 @@ public partial class MainWindow : Window
     /// <summary>Walks up from whatever was hit to the pane that owns it.</summary>
     private static PaneViewModel? PaneAt(object? source)
     {
-        for (var control = source as Control; control is not null;
-             control = control.Parent as Control)
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
         {
-            if (control.DataContext is PaneViewModel pane) return pane;
+            if (visual is Control { DataContext: PaneViewModel pane }) return pane;
         }
 
         return null;
@@ -508,10 +512,10 @@ public partial class MainWindow : Window
     /// rather than into the directory being listed.</summary>
     private static string? FolderRowAt(object? source)
     {
-        for (var control = source as Control; control is not null;
-             control = control.Parent as Control)
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
         {
-            if (control.DataContext is FileEntry { IsDirectory: true } entry)
+            if (visual is Control { DataContext: FileEntry { IsDirectory: true } entry })
                 return entry.FullPath;
         }
 
@@ -1271,10 +1275,18 @@ public partial class MainWindow : Window
     /// </summary>
     private static FileEntry? EntryAt(object? source)
     {
-        for (var control = source as Control; control is not null;
-             control = control.Parent as Control)
+        // VISUAL tree, not Control.Parent.
+        //
+        // Parent is the LOGICAL parent, and a control generated inside a
+        // template has no logical path back to the row that owns it — the
+        // diagnostic showed `source=AccessText entry=NONE` even after the walk
+        // was added, because AccessText lives inside the template and its
+        // logical chain simply ends. The visual tree always connects, which is
+        // why hit-testing questions belong there.
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
         {
-            if (control.DataContext is FileEntry entry) return entry;
+            if (visual is Control { DataContext: FileEntry entry }) return entry;
         }
 
         return null;
