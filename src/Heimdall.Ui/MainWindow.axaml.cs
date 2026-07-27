@@ -1222,14 +1222,35 @@ public partial class MainWindow : Window
 
     private void OnTapped(object? sender, TappedEventArgs e)
     {
+        LogClick("tap", e);
+
         if (!OpensOnSingleClick) return;
 
         if ((e.Source as Control)?.DataContext is FileEntry entry)
             _ = _shell.ActiveTab?.OpenAsync(entry);
     }
 
+    /// <summary>
+    /// Temporary, for the "double click sometimes needs four clicks" bug. Says
+    /// which gesture arrived, what it landed on, and whether that thing carried
+    /// a FileEntry — because a tap that reaches a Border or a TextBlock instead
+    /// of the row would explain a click that appears to do nothing, and so
+    /// would a DoubleTapped that never arrives at all.
+    /// </summary>
+    private void LogClick(string kind, TappedEventArgs e)
+    {
+        var source = e.Source as Control;
+
+        Console.Error.WriteLine(
+            $"[heimdall] click: {kind} source={source?.GetType().Name ?? "null"} "
+            + $"ctx={source?.DataContext?.GetType().Name ?? "null"} "
+            + $"mode={AppSettings.Current.Navigation.OpenItemsWith}");
+    }
+
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
+        LogClick("double", e);
+
         // Otherwise the second click of a double re-opens what the first
         // already did — harmless when navigating into a folder, but it would
         // launch an application twice.
