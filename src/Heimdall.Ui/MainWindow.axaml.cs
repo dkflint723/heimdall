@@ -1256,6 +1256,24 @@ public partial class MainWindow : Window
             + $"entry={entry?.Name ?? "NONE"} "
             + $"acts={acts} opens={(acts && entry is not null)} "
             + $"mode={AppSettings.Current.Navigation.OpenItemsWith}");
+
+        // When the lookup fails, print the whole visual chain and each link's
+        // DataContext. AccessText resolving to NONE is the one case left, and
+        // guessing what it sits inside is exactly the habit that produced two
+        // wrong fixes for this symptom already.
+        if (entry is not null) return;
+
+        var chain = new List<string>();
+
+        for (var visual = e.Source as Visual;
+             visual is not null && chain.Count < 12;
+             visual = visual.GetVisualParent())
+        {
+            var ctx = (visual as Control)?.DataContext?.GetType().Name ?? "-";
+            chain.Add($"{visual.GetType().Name}[{ctx}]");
+        }
+
+        Console.Error.WriteLine("[heimdall] chain: " + string.Join(" < ", chain));
     }
 
     /// <summary>
