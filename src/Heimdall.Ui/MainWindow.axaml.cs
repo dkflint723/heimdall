@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private readonly JsonSettingsStore _settingsStore;
     private readonly SettingsState _settings;
 
+    private JsonFolderViewStore? _folderViews;
     private ITrashMaintenance? _trashMaintenance;
     private DispatcherTimer? _trashTimer;
     private readonly IPropertiesProvider _properties;
@@ -78,6 +79,11 @@ public partial class MainWindow : Window
         _settingsStore.EnsureFileExists(_settings);
 
         AppSettings.Apply(_settings);
+
+        // Per-folder view overrides. A static for the same reason AppSettings is
+        // one: panes are created by the shell, not injected here.
+        _folderViews = new JsonFolderViewStore(JsonSessionStore.DefaultDirectory());
+        ViewModels.PaneViewModel.FolderViews = _folderViews;
 
         // Logged at startup, not when the settings dialog opens. The count only
         // appeared on opening the dialog, which made "no line printed" mean two
@@ -789,6 +795,7 @@ public partial class MainWindow : Window
         // actually notice, and it cannot fail because of a subprocess.
         try
         {
+            _folderViews?.Flush();
             await _store.FlushAsync(CancellationToken.None);
             await _store.DisposeAsync();
         }

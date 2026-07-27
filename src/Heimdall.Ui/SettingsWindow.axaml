@@ -61,6 +61,17 @@
                      Foreground="{DynamicResource ViewDimText}"/>
 
           <StackPanel Spacing="8">
+            <CheckBox FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding RememberViewPerFolder}">
+              <StackPanel>
+                <TextBlock Text="Remember the view for each folder"/>
+                <TextBlock Text="Off, every folder uses the same view. On, a folder keeps the layout, sort and grouping you last gave it. Stored centrally rather than written into your folders, but a .directory file Dolphin already wrote is still honoured."
+                           FontSize="{DynamicResource FontSizeTiny}"
+                           Foreground="{DynamicResource ViewDimText}"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </CheckBox>
+
             <CheckBox Content="Show tooltips on rows"
                       FontSize="{DynamicResource FontSizeSmall}"
                       IsChecked="{Binding ShowTooltips}"/>

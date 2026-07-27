@@ -28,6 +28,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         _naturalSorting = general.NaturalSorting;
         _caseSensitiveSorting = general.CaseSensitiveSorting;
+        _rememberViewPerFolder = general.RememberViewPerFolder;
         _showTooltips = general.ShowTooltips;
         _tabSwitchesSplitPanes = general.TabSwitchesSplitPanes;
         _closingSplitDiscardsOtherPane = general.ClosingSplitDiscardsOtherPane;
@@ -102,6 +103,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private bool _naturalSorting;
     [ObservableProperty] private bool _caseSensitiveSorting;
+    [ObservableProperty] private bool _rememberViewPerFolder;
     [ObservableProperty] private bool _showTooltips;
     [ObservableProperty] private bool _tabSwitchesSplitPanes;
     [ObservableProperty] private bool _closingSplitDiscardsOtherPane;
@@ -295,6 +297,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             {
                 NaturalSorting = NaturalSorting,
                 CaseSensitiveSorting = CaseSensitiveSorting,
+                RememberViewPerFolder = RememberViewPerFolder,
                 ShowTooltips = ShowTooltips,
                 TabSwitchesSplitPanes = TabSwitchesSplitPanes,
                 ClosingSplitDiscardsOtherPane = ClosingSplitDiscardsOtherPane,

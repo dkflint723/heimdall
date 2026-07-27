@@ -52,6 +52,13 @@ public sealed record GeneralSettings
 
     // ---- behaviour --------------------------------------------------------
 
+    /// <summary>
+    /// False: every folder uses the same view. True: a folder remembers the
+    /// view, sort and grouping it was last given. Off by default because it is
+    /// the behaviour the application has always had.
+    /// </summary>
+    public bool RememberViewPerFolder { get; init; }
+
     public bool ShowTooltips { get; init; } = true;
 
     /// <summary>

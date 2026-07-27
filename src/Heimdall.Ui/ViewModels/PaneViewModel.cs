@@ -244,9 +244,76 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// Details view is virtualized and always available, so nothing becomes
     /// unreachable.
     /// </summary>
+    /// <summary>
+    /// Per-folder view overrides. Null until the shell supplies one.
+    /// </summary>
+    public static IFolderViewStore? FolderViews { get; set; }
+
+    /// <summary>
+    /// Applied on arrival, before the listing is asked for, so the folder is
+    /// enumerated and sorted once under its own rules rather than sorted twice.
+    /// Silent when the preference is off or the folder has no opinion.
+    /// </summary>
+    private void ApplyFolderView(string path)
+    {
+        if (!Settings.AppSettings.Current.General.RememberViewPerFolder) return;
+        if (FolderViews?.Read(path) is not { } view) return;
+
+        View = view.View;
+        Sort = view.Sort;
+        SortDescending = view.SortDescending;
+        GroupBy = view.GroupBy;
+
+        // Zero means the folder expressed no opinion about scale, so the pane
+        // keeps whatever it had — scale is an accessibility setting and a
+        // folder must not be able to shrink someone's text.
+        if (view.FontScale > 0) FontScale = view.FontScale;
+        if (view.IconScale > 0) IconScale = view.IconScale;
+    }
+
+    /// <summary>
+    /// Records the current view against the current folder. Called when the
+    /// user changes one of these, never on arrival — otherwise merely visiting
+    /// a folder would give it an opinion it never had.
+    /// </summary>
+    public void RememberFolderView()
+    {
+        if (!Settings.AppSettings.Current.General.RememberViewPerFolder) return;
+        if (FolderViews is null || string.IsNullOrEmpty(CurrentPath)) return;
+        if (_restoringView) return;
+
+        FolderViews.Write(CurrentPath, new FolderViewState
+        {
+            View = View,
+            Sort = Sort,
+            SortDescending = SortDescending,
+            GroupBy = GroupBy,
+            FontScale = FontScale,
+            IconScale = IconScale,
+        });
+    }
+
+    private bool _restoringView;
+
     public const int UnvirtualizedLimit = 5000;
 
-    public bool CanUseTileLayouts => Entries.Count <= UnvirtualizedLimit;
+    public bool CanUseTileLayouts => Entries.Count <= EffectiveTileLimit;
+
+    /// <summary>
+    /// 5,000 was a stopgap guess and has never been measured. Override it to
+    /// find the real threshold on this machine:
+    ///
+    ///   HEIMDALL_TILE_LIMIT=20000 dotnet run --project src/Heimdall.Ui
+    ///
+    /// then switch to grid in a folder of that size and watch the
+    /// `[heimdall] tiles:` line for how long realization actually took. The
+    /// limit should be a number somebody measured, not one somebody feared.
+    /// </summary>
+    private static readonly int EffectiveTileLimit =
+        int.TryParse(Environment.GetEnvironmentVariable("HEIMDALL_TILE_LIMIT"), out var limit)
+        && limit > 0
+            ? limit
+            : UnvirtualizedLimit;
 
     private void NotifyLayoutEntries()
     {
@@ -735,6 +802,23 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnViewChanged(ViewMode oldValue, ViewMode newValue)
     {
+        // Timed because the un-virtualized layouts realize a container per
+        // item, and how bad that is at a given count is the one number the
+        // guard above should be set from.
+        var realizeWatch = newValue != ViewMode.Details && Entries.Count > 1000
+            ? System.Diagnostics.Stopwatch.StartNew()
+            : null;
+
+        if (realizeWatch is not null)
+            Dispatcher.UIThread.Post(() =>
+            {
+                realizeWatch.Stop();
+                Console.Error.WriteLine(
+                    $"[heimdall] tiles: {newValue} with {Entries.Count:N0} items "
+                    + $"realized in {realizeWatch.ElapsedMilliseconds} ms "
+                    + $"(limit {EffectiveTileLimit:N0})");
+            }, DispatcherPriority.Background);
+
         // Populate the incoming layout FIRST. Its ListBox cannot hold a
         // selection for items it does not yet have, so carrying the selection
         // before the items exist would silently drop it.
@@ -746,6 +830,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsGridView));
         OnPropertyChanged(nameof(IsCompactView));
         OnPropertyChanged(nameof(SelectedEntries));
+    
+        RememberFolderView();
     }
 
     [RelayCommand]
@@ -1141,6 +1227,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         NotifySortGlyphs();
         if (!_suppressReload) ResortInPlace();
+    
+        RememberFolderView();
     }
 
     /// <summary>
@@ -1498,6 +1586,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         NotifySortGlyphs();
         if (!_suppressReload) ResortInPlace();
+    
+        RememberFolderView();
     }
 
     private async Task LoadAsync(string path)
@@ -1522,6 +1612,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         var ct = _cts.Token;
 
         var generation = ++_generation;
+
+        // Before CurrentPath moves, and guarded so the property setters this
+        // triggers do not immediately write the folder's own state back at it.
+        _restoringView = true;
+        try { ApplyFolderView(path); }
+        finally { _restoringView = false; }
 
         CurrentPath = path;
         PathText = path;
@@ -1800,6 +1896,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsGroupedByKind));
 
         if (!_suppressReload) ApplyFilter();
+    
+        RememberFolderView();
     }
 
     /// <summary>
