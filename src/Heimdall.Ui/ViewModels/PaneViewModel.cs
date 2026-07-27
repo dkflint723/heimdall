@@ -1618,9 +1618,19 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         // Before CurrentPath moves, and guarded so the property setters this
         // triggers do not immediately write the folder's own state back at it.
+        // BOTH flags. _restoringView stops the change hooks writing the folder's
+        // own state straight back at it; _suppressReload is the codebase's
+        // existing guard — without it, setting Sort here fires ResortInPlace and
+        // setting GroupBy fires ApplyFilter, both against the PREVIOUS folder's
+        // entries, mid-load. RestoreFrom has always used it for the same reason.
         _restoringView = true;
+        _suppressReload = true;
         try { ApplyFolderView(path); }
-        finally { _restoringView = false; }
+        finally
+        {
+            _suppressReload = false;
+            _restoringView = false;
+        }
 
         CurrentPath = path;
         PathText = path;
@@ -1699,6 +1709,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 Status = "";
                 IsLoading = false;
                 IsLoaded = true;
+
+                // Says what the listing actually produced. "No files showing"
+                // has two very different causes — nothing enumerated, or
+                // nothing rendered — and only this separates them.
+                Console.Error.WriteLine(
+                    $"[heimdall] listing: {Entries.Count:N0} of {_all.Count:N0} "
+                    + $"in {sw.ElapsedMilliseconds} ms · {View} · {path}");
             });
         }
         catch (OperationCanceledException)
