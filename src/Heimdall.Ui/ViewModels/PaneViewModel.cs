@@ -1756,6 +1756,16 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                     + $"finish {sw.ElapsedMilliseconds - enumerateMs}) "
                     + $"heap {GC.GetTotalMemory(false) / (1024 * 1024)} MiB "
                     + $"gc {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)} "
+                    // The pool, because the heap is flat and priority did not
+                    // help — so the block is neither GC nor the dispatcher
+                    // queue. RowIcon fires one Task.Run PER REALIZED ROW with
+                    // no cancellation, and all three layouts stay alive, so
+                    // cycling them over 300 rows queues ~900 filesystem lookups.
+                    // LoadListingAsync awaits with ConfigureAwait(false), so its
+                    // continuations need a pool thread too — and would wait
+                    // behind every one of them. Gray icons say those lookups
+                    // never finished, which is the same story from the other end.
+                    + $"pool {ThreadPool.ThreadCount}t/{ThreadPool.PendingWorkItemCount}q "
                     + $"· {View} · {path}");
             });
         }
