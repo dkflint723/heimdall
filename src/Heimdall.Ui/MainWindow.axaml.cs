@@ -265,12 +265,22 @@ public partial class MainWindow : Window
     {
         try
         {
-            // AppContext.BaseDirectory rather than Assembly.Location, which is
-            // empty in a single-file or AOT publish.
-            var dll = Path.Combine(AppContext.BaseDirectory, "Heimdall.Ui.dll");
-            return File.Exists(dll)
-                ? File.GetLastWriteTime(dll).ToString("HH:mm:ss")
-                : "unknown";
+            // Two candidates, in order, because the managed assembly does not
+            // exist as a file in a NativeAOT publish — it is compiled into the
+            // executable. Stamping only the dll meant this read "unknown" in
+            // precisely the build where there is no other way to tell which
+            // binary is running.
+            string?[] candidates =
+            [
+                Path.Combine(AppContext.BaseDirectory, "Heimdall.Ui.dll"),
+                Environment.ProcessPath,
+            ];
+
+            foreach (var candidate in candidates)
+                if (candidate is { Length: > 0 } && File.Exists(candidate))
+                    return File.GetLastWriteTime(candidate).ToString("HH:mm:ss");
+
+            return "unknown";
         }
         catch
         {

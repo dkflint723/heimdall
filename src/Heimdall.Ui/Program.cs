@@ -48,6 +48,16 @@ internal sealed class Program
             // caller that waits for its file manager to exit must not wait on a
             // window that never closes.
             instance.Dispose();
+
+            // Said out loud. Refusing silently with exit code 0 is
+            // indistinguishable from crashing on startup — which cost a
+            // diagnostic round trip when the published binary "did nothing"
+            // and the real answer was that a copy was already running.
+            Console.Error.WriteLine(
+                paths.Length > 0
+                    ? $"[heimdall] already running — handed over {paths.Length} path(s)"
+                    : "[heimdall] already running — raising the existing window");
+
             SingleInstance.TryForward(paths);
             return;
         }
