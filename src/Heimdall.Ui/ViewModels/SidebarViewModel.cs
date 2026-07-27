@@ -44,6 +44,12 @@ public sealed partial class SidebarViewModel : ObservableObject
     {
         _tags = tags;
         _onTagChosen = onChosen;
+
+        // The store raises this and NOTHING was listening, so a tag created
+        // after startup did not appear in the sidebar until the next launch.
+        // The pane's own tag menu refreshed itself; this list did not.
+        if (tags is not null)
+            tags.TagsChanged += (_, _) => Dispatcher.UIThread.Post(RefreshTags);
         RefreshTags();
     }
 
