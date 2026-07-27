@@ -33,8 +33,39 @@ public static class DesktopEntries
         yield return Path.Combine(dataHome, "flatpak", "exports", "share", "applications");
     }
 
+    /// <summary>
+    /// Results, so cycling a listing does not re-sniff the same file. Keyed by
+    /// path because a file with no extension is classified by its CONTENT —
+    /// there is no cheaper key.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string>
+        MimeCache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Hard cap on how many of these may run at once.
+    ///
+    /// This spawns a process, and it is called PER ROW from the thread pool by
+    /// RowIcon. `SharedMimeInfo` classifies anything with a recognisable
+    /// extension, so this was meant to be rare — but a folder of extensionless
+    /// files (scripts, /usr/bin, or 300 files made by `touch`) makes it
+    /// universal. Measured: 300 rows across three layouts queued ~900 spawns,
+    /// each parking a pool thread in Task.WaitAll. The pool injected threads to
+    /// 83 trying to keep up, and an unrelated navigation that needed one waited
+    /// 44 SECONDS to list eight files.
+    /// </summary>
+    private static readonly SemaphoreSlim Sniffs = new(4, 4);
+
     public static string QueryMimeType(string path)
     {
+        if (MimeCache.TryGetValue(path, out var cached)) return cached;
+
+        // Try-acquire, never wait. A thread that blocks here is a pool thread
+        // taken out of circulation, which is the whole failure being fixed —
+        // so when the budget is spent we return "" and the row shows a generic
+        // icon. Deliberately NOT cached: the next pass over that row sniffs it
+        // properly, so the listing converges instead of freezing.
+        if (!Sniffs.Wait(0)) return "";
+
         try
         {
             var info = new ProcessStartInfo("xdg-mime")
@@ -69,14 +100,32 @@ public static class DesktopEntries
                 return "";
             }
 
-            return Task.WaitAll(new Task[] { stdout, stderr }, 5_000)
+            return Remember(path, Task.WaitAll(new Task[] { stdout, stderr }, 5_000)
                 ? stdout.Result.Trim()
-                : "";
+                : "");
         }
         catch
         {
             return "";
         }
+        finally
+        {
+            Sniffs.Release();
+        }
+    }
+
+    /// <summary>
+    /// Caches a real answer, including an empty one — a file we could not
+    /// classify will not classify next time either, and re-spawning to learn
+    /// that again is exactly the cost being removed. Bounded so a long session
+    /// over many folders cannot grow without limit.
+    /// </summary>
+    private static string Remember(string path, string mime)
+    {
+        if (MimeCache.Count > 8000) MimeCache.Clear();
+
+        MimeCache[path] = mime;
+        return mime;
     }
 
     public static IReadOnlyList<LaunchOption> ForFile(string path)
