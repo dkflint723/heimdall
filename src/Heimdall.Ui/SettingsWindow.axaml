@@ -54,16 +54,22 @@
           <Setter Property="HorizontalContentAlignment" Value="Left"/>
         </Style>
 
-        <!-- Selected keeps the strip's own colour. The accent BAR beside it is
-             the marker, plus a brighter, heavier label — three channels, none of
-             them a fill, so the accessibility rule still holds without boxing
-             the label in a rectangle that reads as a stray button.
-             Background stays Transparent in every state below for the same
-             reason; Fluent otherwise paints its own selected and hover fills. -->
+        <!-- Selected keeps the strip's own colour: the accent BAR beside it is
+             the marker, with a brighter label. Two channels, neither of them a
+             fill, so the accessibility rule holds without boxing the label in a
+             rectangle that reads as a stray button.
+
+             **NO FontWeight change.** Making the selected item SemiBold shifted
+             the label a pixel or two as you clicked between pages — weight
+             changes glyph metrics, and the monospace face has no real SemiBold
+             so it gets synthesised, moving the baseline. Nothing here may alter
+             layout between states; only colour may change.
+
+             Background stays Transparent in every state for the same reason as
+             above; Fluent otherwise paints its own selected and hover fills. -->
         <Style Selector="TabItem:selected">
           <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
           <Setter Property="Background" Value="Transparent"/>
-          <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
         <Style Selector="TabItem:selected /template/ Border#PART_LayoutRoot">
           <Setter Property="Background" Value="Transparent"/>
