@@ -374,21 +374,47 @@ public static class IconLoader
             // coordinates, so it is converted rather than declined.
             var absolute = (string?)element.Attribute("gradientUnits") == "userSpaceOnUse";
 
+            // gradientTransform, applied to the AXIS in user space before the
+            // conversion to relative units below.
+            //
+            // Avalonia's brush has no equivalent property, and for an affine
+            // transform it does not need one: a linear gradient is defined by
+            // its two endpoints, so mapping those through the matrix maps the
+            // gradient. Ignoring it is not a cosmetic loss — Tela's folder
+            // shadow declares its axis at x=-197.72 and relies on
+            // rotate(-45,-337.55,-145.8) to carry it onto the icon, so without
+            // this the axis lands far outside the shape, every pixel takes the
+            // offset-0 stop, and a soft corner shading renders as a solid black
+            // wedge.
+            var matrix = ReadTransform(element, "gradientTransform")?.Value;
+
+            // Row-vector convention, matching the matrix(a b c d e f) mapping
+            // a few lines down in ReadTransform.
+            (double X, double Y) Map(double x, double y)
+            {
+                if (matrix is not { } m) return (x, y);
+
+                return (x * m.M11 + y * m.M21 + m.M31,
+                        x * m.M12 + y * m.M22 + m.M32);
+            }
+
             double X(double v) => absolute && bounds.Width > 0 ? (v - bounds.X) / bounds.Width : v;
             double Y(double v) => absolute && bounds.Height > 0 ? (v - bounds.Y) / bounds.Height : v;
 
             if (element.Name.LocalName == "linearGradient")
             {
+                var (sx, sy) = Map(
+                    Number(element, "x1", absolute ? bounds.X : 0),
+                    Number(element, "y1", absolute ? bounds.Y : 0));
+
+                var (ex, ey) = Map(
+                    Number(element, "x2", absolute ? bounds.Right : 1),
+                    Number(element, "y2", absolute ? bounds.Y : 0));
+
                 result[id] = new LinearGradientBrush
                 {
-                    StartPoint = new RelativePoint(
-                        X(Number(element, "x1", absolute ? bounds.X : 0)),
-                        Y(Number(element, "y1", absolute ? bounds.Y : 0)),
-                        RelativeUnit.Relative),
-                    EndPoint = new RelativePoint(
-                        X(Number(element, "x2", absolute ? bounds.Right : 1)),
-                        Y(Number(element, "y2", absolute ? bounds.Y : 0)),
-                        RelativeUnit.Relative),
+                    StartPoint = new RelativePoint(X(sx), Y(sy), RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(X(ex), Y(ey), RelativeUnit.Relative),
                     GradientStops = stops,
                 };
             }
@@ -518,9 +544,9 @@ public static class IconLoader
     /// translate/scale/matrix. Ignoring transforms meant any icon that placed
     /// its parts by transform drew them in the wrong place or not at all.
     /// </summary>
-    private static Transform? ReadTransform(XElement element)
+    private static Transform? ReadTransform(XElement element, string attribute = "transform")
     {
-        var raw = (string?)element.Attribute("transform");
+        var raw = (string?)element.Attribute(attribute);
         if (string.IsNullOrWhiteSpace(raw)) return null;
 
         var group = new TransformGroup();
@@ -549,6 +575,20 @@ public static class IconLoader
                     group.Children.Add(new MatrixTransform(new Matrix(
                         numbers[0], numbers[1], numbers[2],
                         numbers[3], numbers[4], numbers[5])));
+                    break;
+
+                // SVG's rotate takes an OPTIONAL centre: rotate(angle cx cy).
+                // Dropping it rotates about the origin instead, which for a
+                // centre far from it — Tela's folder shadow uses
+                // rotate(-45,-337.55,-145.8) — puts the result nowhere near the
+                // icon. This was silently wrong for element transforms too, not
+                // only gradients.
+                case "rotate" when numbers.Length >= 3:
+                    group.Children.Add(new RotateTransform(numbers[0])
+                    {
+                        CenterX = numbers[1],
+                        CenterY = numbers[2],
+                    });
                     break;
 
                 case "rotate" when numbers.Length >= 1:
