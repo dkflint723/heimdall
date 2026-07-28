@@ -44,44 +44,49 @@
         <!-- Styled to match the sidebar: transparent, left-aligned, dim until
              chosen. The Fluent default draws a heavy pill that fights the rest
              of the application. -->
+        <!-- OUR OWN TEMPLATE, not Fluent's.
+             Removing the selected fill and then the SemiBold weight both failed
+             to stop the label shifting as pages were clicked, and Fluent's
+             TabItem template cannot be inspected from here — so rather than
+             guess at it a third time, this replaces it with one where nothing
+             state-dependent touches layout.
+
+             The accent bar is OVERLAID in a Panel, exactly as the main window
+             draws a selected row's edge bar: showing and hiding it moves
+             nothing, because it never occupied space. The ContentPresenter's
+             margin is identical in every state. Only Foreground changes. -->
         <Style Selector="TabItem">
           <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
           <Setter Property="Foreground" Value="{DynamicResource ViewDimText}"/>
-          <Setter Property="Background" Value="Transparent"/>
-          <Setter Property="Padding" Value="16,7"/>
           <Setter Property="MinWidth" Value="150"/>
-          <Setter Property="MinHeight" Value="0"/>
-          <Setter Property="HorizontalContentAlignment" Value="Left"/>
+          <Setter Property="Template">
+            <ControlTemplate>
+              <Panel Background="Transparent">
+                <Border Name="Accent" Width="3" HorizontalAlignment="Left"
+                        Margin="0,5" CornerRadius="2"
+                        Background="{DynamicResource AccentColour}"
+                        IsVisible="False"/>
+                <ContentPresenter Content="{TemplateBinding Header}"
+                                  RecognizesAccessKey="False"
+                                  Margin="16,7"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Left"/>
+              </Panel>
+            </ControlTemplate>
+          </Setter>
         </Style>
 
-        <!-- Selected keeps the strip's own colour: the accent BAR beside it is
-             the marker, with a brighter label. Two channels, neither of them a
-             fill, so the accessibility rule holds without boxing the label in a
-             rectangle that reads as a stray button.
-
-             **NO FontWeight change.** Making the selected item SemiBold shifted
-             the label a pixel or two as you clicked between pages — weight
-             changes glyph metrics, and the monospace face has no real SemiBold
-             so it gets synthesised, moving the baseline. Nothing here may alter
-             layout between states; only colour may change.
-
-             Background stays Transparent in every state for the same reason as
-             above; Fluent otherwise paints its own selected and hover fills. -->
         <Style Selector="TabItem:selected">
           <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
-          <Setter Property="Background" Value="Transparent"/>
         </Style>
-        <Style Selector="TabItem:selected /template/ Border#PART_LayoutRoot">
-          <Setter Property="Background" Value="Transparent"/>
+        <Style Selector="TabItem:selected /template/ Border#Accent">
+          <Setter Property="IsVisible" Value="True"/>
         </Style>
 
         <Style Selector="TabItem:pointerover">
           <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
-          <Setter Property="Background" Value="Transparent"/>
         </Style>
-        <Style Selector="TabItem:pointerover /template/ Border#PART_LayoutRoot">
-          <Setter Property="Background" Value="Transparent"/>
-        </Style>
+
       </TabControl.Styles>
 
       <!-- General comes first, as it does in Dolphin. Its Previews and
