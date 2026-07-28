@@ -33,6 +33,7 @@ public partial class MainWindow : Window
 
     private JsonFolderViewStore? _folderViews;
     private JsonVisitStore? _visits;
+    private JsonRecentStore? _recents;
     private ITrashMaintenance? _trashMaintenance;
     private DispatcherTimer? _trashTimer;
     private readonly IPropertiesProvider _properties;
@@ -89,6 +90,9 @@ public partial class MainWindow : Window
 
         _visits = new JsonVisitStore(JsonSessionStore.DefaultDirectory());
         ViewModels.PaneViewModel.Visits = _visits;
+
+        _recents = new JsonRecentStore(JsonSessionStore.DefaultDirectory());
+        ViewModels.PaneViewModel.Recents = _recents;
 
         // Logged at startup, not when the settings dialog opens. The count only
         // appeared on opening the dialog, which made "no line printed" mean two
@@ -855,6 +859,7 @@ public partial class MainWindow : Window
         {
             _folderViews?.Flush();
             _visits?.Flush();
+            _recents?.Flush();
             await _store.FlushAsync(CancellationToken.None);
             await _store.DisposeAsync();
         }

@@ -311,6 +311,16 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public static IVisitStore? Visits { get; set; }
 
     /// <summary>
+    /// Recently opened files and folders. A separate store from
+    /// <see cref="Visits"/> on purpose — see <see cref="IRecentStore"/> for why
+    /// counting and recency cannot share one set of retention rules.
+    ///
+    /// Static for the same reason as the others: panes are created by the
+    /// shell, not injected here.
+    /// </summary>
+    public static IRecentStore? Recents { get; set; }
+
+    /// <summary>
     /// Applied on arrival, before the listing is asked for, so the folder is
     /// enumerated and sorted once under its own rules rather than sorted twice.
     /// Silent when the preference is off or the folder has no opinion.
@@ -1026,7 +1036,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // After the load, and only if it worked — a path that could not be read
         // is not somewhere the user goes, and counting it would push dead
         // folders up the list.
-        if (IsLoaded) Visits?.Record(path);
+        if (IsLoaded)
+        {
+            Visits?.Record(path);
+            Recents?.Record(path, RecentKind.Folder);
+        }
     }
 
     [RelayCommand]
@@ -1056,6 +1070,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public Task OpenAsync(FileEntry entry)
     {
         if (entry.IsDirectory) return NavigateAsync(entry.FullPath);
+
+        // Recorded on the ATTEMPT, not on success: IApplicationLauncher.Open
+        // returns void, so there is nothing to test. Asking to open a file is
+        // the user's act either way, which is the recency semantic that matters
+        // — and a file with no handler is rare next to the cost of pretending
+        // to know whether the launch worked.
+        Recents?.Record(entry.FullPath, RecentKind.File);
 
         _launcher?.Open(entry.FullPath);
         return Task.CompletedTask;
@@ -1102,6 +1123,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public void OpenWithApp(LaunchOption? option)
     {
         if (option is null || SelectedEntry is not { } entry) return;
+
+        // Same act as OpenAsync, so it belongs in the recent list too. Missing
+        // this would make the list quietly depend on WHICH way you opened
+        // something, which nobody would guess from the UI.
+        Recents?.Record(entry.FullPath, RecentKind.File);
+
         _launcher?.OpenWith(entry.FullPath, option);
     }
 
