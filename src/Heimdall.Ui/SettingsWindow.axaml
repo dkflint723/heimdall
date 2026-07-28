@@ -47,22 +47,34 @@
         <Style Selector="TabItem">
           <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
           <Setter Property="Foreground" Value="{DynamicResource ViewDimText}"/>
+          <Setter Property="Background" Value="Transparent"/>
           <Setter Property="Padding" Value="16,7"/>
           <Setter Property="MinWidth" Value="150"/>
           <Setter Property="MinHeight" Value="0"/>
           <Setter Property="HorizontalContentAlignment" Value="Left"/>
         </Style>
-        <!-- Selected carries BOTH a fill and a brighter foreground, never
-             colour alone — the standing accessibility rule for this project.
-             ViewBackground is the listing surface, so a chosen page reads as
-             continuous with the content beside it. -->
+
+        <!-- Selected keeps the strip's own colour. The accent BAR beside it is
+             the marker, plus a brighter, heavier label — three channels, none of
+             them a fill, so the accessibility rule still holds without boxing
+             the label in a rectangle that reads as a stray button.
+             Background stays Transparent in every state below for the same
+             reason; Fluent otherwise paints its own selected and hover fills. -->
         <Style Selector="TabItem:selected">
           <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
-          <Setter Property="Background" Value="{DynamicResource ViewBackground}"/>
+          <Setter Property="Background" Value="Transparent"/>
           <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
+        <Style Selector="TabItem:selected /template/ Border#PART_LayoutRoot">
+          <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
         <Style Selector="TabItem:pointerover">
           <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
+          <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="TabItem:pointerover /template/ Border#PART_LayoutRoot">
+          <Setter Property="Background" Value="Transparent"/>
         </Style>
       </TabControl.Styles>
 
