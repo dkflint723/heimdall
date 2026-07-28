@@ -129,6 +129,23 @@ public sealed partial class SidebarViewModel : ObservableObject
         OnPropertyChanged(nameof(HasFrequent));
     }
 
+    // ---- recent ------------------------------------------------------------
+    //
+    // Two fixed entries rather than a bound collection: they never change, so a
+    // collection plus an item record would be machinery serving two buttons.
+    // They are always shown, even on a first run when both listings are empty —
+    // Dolphin does the same, and an entry that appears out of nowhere once you
+    // have opened enough files is harder to find than one that was always there.
+    //
+    // Reuses _onFolderChosen, which is how tags and frequent already reach the
+    // shell: the store holds the data, the shell decides what a click does.
+
+    [RelayCommand]
+    private void OpenRecentFiles() => _onFolderChosen?.Invoke(RecentPaths.Files);
+
+    [RelayCommand]
+    private void OpenRecentLocations() => _onFolderChosen?.Invoke(RecentPaths.Locations);
+
     /// <summary>
     /// Remote locations the desktop has mounted. Shown beside Devices because
     /// that is what they are from here — a path you can open, whatever protocol

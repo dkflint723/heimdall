@@ -1603,6 +1603,32 @@
                   </ItemsControl>
                 </StackPanel>
 
+                <!-- Recent. Above tags so the order matches Dolphin, where
+                     Recent sits between the remote entries and Devices. Always
+                     shown, unlike tags and frequent: these two are places that
+                     exist whether or not they currently hold anything. -->
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Text="recent" Margin="12,0,12,4"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             Foreground="{DynamicResource ViewDimText}"/>
+                  <Button Command="{Binding Sidebar.OpenRecentFilesCommand}"
+                          Background="Transparent" BorderThickness="0"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left" Padding="12,4">
+                    <TextBlock Text="Recent files"
+                               FontSize="{DynamicResource FontSizeSmall}"
+                               TextTrimming="CharacterEllipsis"/>
+                  </Button>
+                  <Button Command="{Binding Sidebar.OpenRecentLocationsCommand}"
+                          Background="Transparent" BorderThickness="0"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left" Padding="12,4">
+                    <TextBlock Text="Recent locations"
+                               FontSize="{DynamicResource FontSizeSmall}"
+                               TextTrimming="CharacterEllipsis"/>
+                  </Button>
+                </StackPanel>
+
                 <!-- Tags. Moved down here from beside places at the user's
                      request; the rationale for the old position was that tags
                      are a way of organising and belonged with the places. -->
