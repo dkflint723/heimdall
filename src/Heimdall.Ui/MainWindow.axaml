@@ -1384,7 +1384,7 @@
                           ToolTip.Tip="split view  (f3)"/>
             <TextBox Text="{Binding Sidebar.Search.Query}"
                      PlaceholderText="Search files"
-                     FontSize="{DynamicResource FontSizeSmall}"/>
+                     FontSize="{DynamicResource FontSizeBase}"/>
           </DockPanel>
         </Border>
 
@@ -1406,7 +1406,7 @@
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             Padding="12,7">
                       <StackPanel>
-                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeSmall}"
+                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBase}"
                                    TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding FullPath}" FontSize="{DynamicResource FontSizeTiny}"
                                    Foreground="{DynamicResource ViewDimText}"
@@ -1425,7 +1425,7 @@
                   <DataTemplate x:DataType="vm:PlaceGroupViewModel">
                     <StackPanel Margin="0,8,0,0">
                       <TextBlock Text="{Binding Label}" Margin="12,0,12,4"
-                                 FontSize="{DynamicResource FontSizeTiny}"
+                                 FontSize="{DynamicResource FontSizeSmall}"
                                  Foreground="{DynamicResource ViewDimText}"/>
                       <ItemsControl ItemsSource="{Binding Places}">
                         <ItemsControl.ItemTemplate>
@@ -1447,7 +1447,7 @@
                                      hardcoded offset would not survive. -->
                                 <DockPanel>
                                   <Path DockPanel.Dock="Left" Margin="0,0,9,0"
-                                        Width="16" Height="16" Stretch="Uniform"
+                                        Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                                         VerticalAlignment="Bottom"
                                         Stroke="{DynamicResource ViewText}"
                                         StrokeThickness="1.6"
@@ -1455,7 +1455,7 @@
                                         th:SidebarIcon.Token="{Binding Icon}"/>
                                   <TextBlock Text="{Binding Label}"
                                              VerticalAlignment="Bottom"
-                                             FontSize="{DynamicResource FontSizeSmall}"
+                                             FontSize="{DynamicResource FontSizeBase}"
                                              TextTrimming="CharacterEllipsis"/>
                                 </DockPanel>
                                 <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
@@ -1498,7 +1498,7 @@
                             ToolTip.Tip="share a folder from this machine"
                             IsVisible="{Binding CanShare}"
                             Command="{Binding RequestShareCommand}"/>
-                    <TextBlock Text="network" FontSize="{DynamicResource FontSizeTiny}"
+                    <TextBlock Text="network" FontSize="{DynamicResource FontSizeSmall}"
                                Foreground="{DynamicResource ViewDimText}"/>
                   </DockPanel>
 
@@ -1526,7 +1526,7 @@
                           </Button.ContextMenu>
                           <DockPanel>
                             <Path DockPanel.Dock="Left" Margin="0,0,9,0"
-                                  Width="16" Height="16" Stretch="Uniform"
+                                  Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                                   VerticalAlignment="Center"
                                   Stroke="{DynamicResource ViewText}"
                                   StrokeThickness="1.6"
@@ -1534,7 +1534,7 @@
                                   th:SidebarIcon.Token="server"/>
                           <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Text="{Binding Name}"
-                                       FontSize="{DynamicResource FontSizeSmall}"
+                                       FontSize="{DynamicResource FontSizeBase}"
                                        TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text="{Binding Friendly}"
                                        FontSize="{DynamicResource FontSizeTiny}"
@@ -1558,7 +1558,7 @@
                             FontSize="{DynamicResource FontSizeTiny}"
                             ToolTip.Tip="connect to a server"
                             Command="{Binding ConnectCommand}"/>
-                    <TextBlock Text="remote" FontSize="{DynamicResource FontSizeTiny}"
+                    <TextBlock Text="remote" FontSize="{DynamicResource FontSizeSmall}"
                                Foreground="{DynamicResource ViewDimText}"/>
                   </DockPanel>
                   <ItemsControl ItemsSource="{Binding Sidebar.Remotes}">
@@ -1588,7 +1588,7 @@
                           </Button.ContextMenu>
                           <DockPanel>
                             <Path DockPanel.Dock="Left" Margin="0,0,9,0"
-                                  Width="16" Height="16" Stretch="Uniform"
+                                  Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                                   VerticalAlignment="Center"
                                   Stroke="{DynamicResource ViewText}"
                                   StrokeThickness="1.6"
@@ -1596,7 +1596,7 @@
                                   th:SidebarIcon.Token="server"/>
                           <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Text="{Binding Label}"
-                                       FontSize="{DynamicResource FontSizeSmall}"
+                                       FontSize="{DynamicResource FontSizeBase}"
                                        TextTrimming="CharacterEllipsis"/>
                             <!-- A dead mount lists as an empty folder, which is
                                  indistinguishable from an empty share unless
@@ -1618,19 +1618,19 @@
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                         Background="Transparent" BorderThickness="0" Padding="12,7"
                         Margin="0,8,0,12"
-                        FontSize="{DynamicResource FontSizeSmall}"
+                        FontSize="{DynamicResource FontSizeBase}"
                         IsEnabled="{Binding CanConnect}"
                         Command="{Binding ConnectCommand}">
                   <DockPanel>
                     <Path DockPanel.Dock="Left" Margin="0,0,9,0"
-                          Width="16" Height="16" Stretch="Uniform"
+                          Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                           VerticalAlignment="Center"
                           Stroke="{DynamicResource ViewText}"
                           StrokeThickness="1.6"
                           StrokeLineCap="Round" StrokeJoin="Round"
                           th:SidebarIcon.Token="server"/>
                     <TextBlock Text="connect to server…"
-                               FontSize="{DynamicResource FontSizeSmall}"
+                               FontSize="{DynamicResource FontSizeBase}"
                                VerticalAlignment="Center"/>
                   </DockPanel>
                 </Button>
@@ -1640,7 +1640,7 @@
                      have to remember. -->
                 <StackPanel IsVisible="{Binding HasShares}" Margin="0,8,0,12">
                   <TextBlock Text="sharing" Margin="12,0,0,2"
-                             FontSize="{DynamicResource FontSizeTiny}"
+                             FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <ItemsControl ItemsSource="{Binding Shares}">
                     <ItemsControl.ItemTemplate>
@@ -1662,7 +1662,7 @@
                                     CommandParameter="{Binding}"/>
                             <StackPanel>
                               <TextBlock Text="{Binding Label}"
-                                         FontSize="{DynamicResource FontSizeSmall}"
+                                         FontSize="{DynamicResource FontSizeBase}"
                                          TextTrimming="CharacterEllipsis"/>
                               <TextBlock Text="{Binding Url}"
                                          FontSize="{DynamicResource FontSizeTiny}"
@@ -1682,7 +1682,7 @@
                      exist whether or not they currently hold anything. -->
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Text="recent" Margin="12,0,12,4"
-                             FontSize="{DynamicResource FontSizeTiny}"
+                             FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <Button Command="{Binding Sidebar.OpenRecentFilesCommand}"
                           Background="Transparent" BorderThickness="0"
@@ -1690,14 +1690,14 @@
                           HorizontalContentAlignment="Left" Padding="12,7">
                     <DockPanel>
                       <Path DockPanel.Dock="Left" Margin="0,0,9,0"
-                            Width="16" Height="16" Stretch="Uniform"
+                            Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                             VerticalAlignment="Center"
                             Stroke="{DynamicResource ViewText}"
                             StrokeThickness="1.6"
                             StrokeLineCap="Round" StrokeJoin="Round"
                             th:SidebarIcon.Token="recent-files"/>
                       <TextBlock Text="Recent files"
-                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 FontSize="{DynamicResource FontSizeBase}"
                                  TextTrimming="CharacterEllipsis"
                                  VerticalAlignment="Center"/>
                     </DockPanel>
@@ -1708,14 +1708,14 @@
                           HorizontalContentAlignment="Left" Padding="12,7">
                     <DockPanel>
                       <Path DockPanel.Dock="Left" Margin="0,0,9,0"
-                            Width="16" Height="16" Stretch="Uniform"
+                            Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                             VerticalAlignment="Center"
                             Stroke="{DynamicResource ViewText}"
                             StrokeThickness="1.6"
                             StrokeLineCap="Round" StrokeJoin="Round"
                             th:SidebarIcon.Token="recent-locations"/>
                       <TextBlock Text="Recent locations"
-                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 FontSize="{DynamicResource FontSizeBase}"
                                  TextTrimming="CharacterEllipsis"
                                  VerticalAlignment="Center"/>
                     </DockPanel>
@@ -1727,7 +1727,7 @@
                      are a way of organising and belonged with the places. -->
                 <StackPanel Margin="0,14,0,0" IsVisible="{Binding Sidebar.HasTags}">
                   <TextBlock Text="tags" Margin="12,0,12,4"
-                             FontSize="{DynamicResource FontSizeTiny}"
+                             FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
                     <ItemsControl.ItemTemplate>
@@ -1758,7 +1758,7 @@
                                     VerticalAlignment="Center"
                                     Background="{Binding Name, Converter={x:Static th:TagBrush.ForName}}"/>
                             <TextBlock Text="{Binding Name}"
-                                       FontSize="{DynamicResource FontSizeSmall}"/>
+                                       FontSize="{DynamicResource FontSizeBase}"/>
                           </StackPanel>
                         </Button>
                       </DataTemplate>

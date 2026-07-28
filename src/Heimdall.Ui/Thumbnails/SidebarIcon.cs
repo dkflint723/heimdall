@@ -100,8 +100,15 @@ public static class SidebarIcon
         ["usb"] =
             "M9 3 H15 V8 H9 Z M12 8 V21 M4 13 H20",
 
+        // Drawn to FILL the canvas vertically, not just wide enough to read.
+        // The first version was 17 x 7 — 41% of the box — and because
+        // Stretch="Uniform" centres the ink, bottom-aligning the box left five
+        // empty pixels underneath and the icon appeared to float above its row.
+        // Ink height is what aligns, not the control's height.
         ["device-desktop"] =
-            "M3.5 8.5 H20.5 V15.5 H3.5 Z M6.5 12 H9 M16.5 12 H18",
+            "M3.5 4.5 H20.5 V19.5 H3.5 Z "
+            + "M13 12 a3.2 3.2 0 1 0 6.4 0 a3.2 3.2 0 1 0 -6.4 0 "
+            + "M6.5 8 H9.5 M6.5 16 H9.5",
 
         ["recent-files"] =
             "M3.5 12 a8.5 8.5 0 1 0 17 0 a8.5 8.5 0 1 0 -17 0 M12 7 V12 L15.5 14.5",
