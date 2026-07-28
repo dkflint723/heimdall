@@ -251,6 +251,27 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     {
         if (!_realized.Remove(index, out var container)) return;
 
+        // TEMPORARY — separates two explanations that the 27 July log cannot.
+        //
+        // After a successful Home or End, the NEXT keypress reports
+        // `focus=null` and does nothing until the list is clicked again. Two
+        // mechanisms fit that log equally well:
+        //
+        //   1. the container ScrollIntoView just realized took focus, and the
+        //      following measure — still running against the OLD viewport —
+        //      recycled it, destroying focus;
+        //   2. the scroll BringIntoView performed dropped focus by itself.
+        //
+        // They are CONFOUNDED in that log: every case where focus went null
+        // also scrolled, and the one case where focus survived on a
+        // ListBoxItem (`nav: Last` onto an already-realized 99999) neither
+        // scrolled nor recycled. Nothing there distinguishes them.
+        //
+        // This line does: if it prints, recycling is taking the focus. If
+        // focus still goes null and this never prints, the scroll is.
+        if (container.IsFocused)
+            Console.Error.WriteLine($"[heimdall] recycle-focused: index={index}");
+
         var recycleKey = container.GetValue(RecycleKeyProperty);
 
         // An item that is its own container may not be cleared or pooled, only
@@ -401,6 +422,11 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
             target = target < 0 ? count - 1 : 0;
         }
+
+        // TEMPORARY, alongside recycle-focused: the index actually returned,
+        // so a focus loss can be matched to the container it was returned on
+        // without deriving it from the direction.
+        Console.Error.WriteLine($"[heimdall] nav-target: {target}");
 
         return ScrollIntoView(target);
     }
