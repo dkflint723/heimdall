@@ -83,9 +83,7 @@ public sealed partial class ShellViewModel : ObservableObject
         // Same arrangement as tags: the store holds the data, the shell decides
         // what a click does. Attached here rather than in MainWindow because
         // this is the only place that knows which pane is active.
-        Sidebar.AttachVisits(
-            PaneViewModel.Visits,
-            path => _ = ActiveTab?.NavigateAsync(path));
+        Sidebar.AttachNavigation(path => _ = ActiveTab?.NavigateAsync(path));
 
         Sidebar.AttachTags(tags, tag =>
         {

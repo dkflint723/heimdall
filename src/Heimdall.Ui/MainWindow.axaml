@@ -1412,18 +1412,29 @@
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
                                     Padding="12,4" Opacity="{Binding Opacity}">
-                              <StackPanel>
-                                <TextBlock Text="{Binding Label}"
-                                           FontSize="{DynamicResource FontSizeSmall}"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
-                                             Height="2" Margin="0,4,10,0"
+                              <DockPanel>
+                                <!-- Place.Icon has carried a token since the
+                                     places provider was written and nothing
+                                     rendered it. Sized off the same scale as
+                                     the label so it follows Ctrl +/-. -->
+                                <Image DockPanel.Dock="Left" Margin="0,0,8,0"
+                                       Width="16" Height="16"
+                                       VerticalAlignment="Center"
+                                       th:NamedIcon.Name="{Binding Icon}"
+                                       th:NamedIcon.Size="16"/>
+                                <StackPanel>
+                                  <TextBlock Text="{Binding Label}"
+                                             FontSize="{DynamicResource FontSizeSmall}"
+                                             TextTrimming="CharacterEllipsis"/>
+                                  <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
+                                               Height="2" Margin="0,4,10,0"
+                                               IsVisible="{Binding HasCapacity}"/>
+                                  <TextBlock Text="{Binding CapacityText}"
+                                             FontSize="{DynamicResource FontSizeTiny}"
+                                             Foreground="{DynamicResource ViewDimText}"
                                              IsVisible="{Binding HasCapacity}"/>
-                                <TextBlock Text="{Binding CapacityText}"
-                                           FontSize="{DynamicResource FontSizeTiny}"
-                                           Foreground="{DynamicResource ViewDimText}"
-                                           IsVisible="{Binding HasCapacity}"/>
-                              </StackPanel>
+                                </StackPanel>
+                              </DockPanel>
                             </Button>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -1615,17 +1626,29 @@
                           Background="Transparent" BorderThickness="0"
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Left" Padding="12,4">
-                    <TextBlock Text="Recent files"
-                               FontSize="{DynamicResource FontSizeSmall}"
-                               TextTrimming="CharacterEllipsis"/>
+                    <DockPanel>
+                      <Image DockPanel.Dock="Left" Margin="0,0,8,0"
+                             Width="16" Height="16" VerticalAlignment="Center"
+                             th:NamedIcon.Name="recent-files" th:NamedIcon.Size="16"/>
+                      <TextBlock Text="Recent files"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 TextTrimming="CharacterEllipsis"
+                                 VerticalAlignment="Center"/>
+                    </DockPanel>
                   </Button>
                   <Button Command="{Binding Sidebar.OpenRecentLocationsCommand}"
                           Background="Transparent" BorderThickness="0"
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Left" Padding="12,4">
-                    <TextBlock Text="Recent locations"
-                               FontSize="{DynamicResource FontSizeSmall}"
-                               TextTrimming="CharacterEllipsis"/>
+                    <DockPanel>
+                      <Image DockPanel.Dock="Left" Margin="0,0,8,0"
+                             Width="16" Height="16" VerticalAlignment="Center"
+                             th:NamedIcon.Name="recent-locations" th:NamedIcon.Size="16"/>
+                      <TextBlock Text="Recent locations"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 TextTrimming="CharacterEllipsis"
+                                 VerticalAlignment="Center"/>
+                    </DockPanel>
                   </Button>
                 </StackPanel>
 
@@ -1667,30 +1690,6 @@
                             <TextBlock Text="{Binding Name}"
                                        FontSize="{DynamicResource FontSizeSmall}"/>
                           </StackPanel>
-                        </Button>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </StackPanel>
-
-                <!-- Folders opened often enough to be a habit. Hidden entirely
-                     until there is something to show, so a new install is not
-                     staring at an empty heading. -->
-                <StackPanel Margin="0,10,0,0" IsVisible="{Binding Sidebar.HasFrequent}">
-                  <TextBlock Text="frequent" Margin="12,0,12,4"
-                             FontSize="{DynamicResource FontSizeTiny}"
-                             Foreground="{DynamicResource ViewDimText}"/>
-                  <ItemsControl ItemsSource="{Binding Sidebar.Frequent}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:VisitedOption">
-                        <Button Command="{Binding Command}"
-                                Background="Transparent" BorderThickness="0"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left" Padding="12,4"
-                                ToolTip.Tip="{Binding Path}">
-                          <TextBlock Text="{Binding Label}"
-                                     FontSize="{DynamicResource FontSizeSmall}"
-                                     TextTrimming="CharacterEllipsis"/>
                         </Button>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>

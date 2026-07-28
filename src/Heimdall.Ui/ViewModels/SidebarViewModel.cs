@@ -86,48 +86,21 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public ObservableCollection<TagOption> Tags { get; } = new();
 
-    // ---- frequently visited ------------------------------------------------
+    // ---- navigation --------------------------------------------------------
+    //
+    // The frequently-visited list was REMOVED at the user's request once Recent
+    // files and Recent locations existed — recency covers what frequency was
+    // being used for, and two ranked lists of folders in one sidebar is one too
+    // many. Git has it. Note this leaves IVisitStore with no reader at all.
+    //
+    // What survives is the callback: the shell owns what a click does, and both
+    // the recent entries and tags reach it this way.
 
-    private IVisitStore? _visits;
     private Action<string>? _onFolderChosen;
 
-    public ObservableCollection<VisitedOption> Frequent { get; } = new();
-
-    public bool HasFrequent => Frequent.Count > 0;
-
-    /// <summary>Wired by the shell, which owns what a click actually does —
-    /// the same arrangement as tags.</summary>
-    public void AttachVisits(IVisitStore? visits, Action<string> onChosen)
-    {
-        _visits = visits;
-        _onFolderChosen = onChosen;
-
-        if (visits is not null)
-            visits.Changed += (_, _) => Dispatcher.UIThread.Post(RefreshFrequent);
-
-        RefreshFrequent();
-    }
-
-    /// <summary>
-    /// Six entries. Enough to be useful, few enough that the list does not
-    /// become a second places section competing with the real one.
-    /// </summary>
-    public void RefreshFrequent()
-    {
-        Frequent.Clear();
-
-        if (_visits is not null)
-            foreach (var visited in _visits.Top(6))
-            {
-                var path = visited.Path;
-
-                Frequent.Add(new VisitedOption(
-                    visited.Label, path, visited.Count,
-                    new RelayCommand(() => _onFolderChosen?.Invoke(path))));
-            }
-
-        OnPropertyChanged(nameof(HasFrequent));
-    }
+    /// <summary>Wired by the shell, which is the only place that knows which
+    /// pane is active — the same arrangement as tags.</summary>
+    public void AttachNavigation(Action<string> onChosen) => _onFolderChosen = onChosen;
 
     // ---- recent ------------------------------------------------------------
     //

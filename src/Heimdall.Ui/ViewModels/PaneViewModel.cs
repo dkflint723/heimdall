@@ -21,7 +21,6 @@ public sealed record TagOption(string Name, ICommand Command);
 /// as the label so the tooltip can disambiguate the four different folders
 /// everyone has called "src".
 /// </summary>
-public sealed record VisitedOption(string Label, string Path, int Count, ICommand Command);
 
 /// <summary>
 /// One pane: a path, its listing, its own navigation history, its own sort.
