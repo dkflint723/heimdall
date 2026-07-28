@@ -252,11 +252,17 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     }
 
     // ---- the abstract contract ---------------------------------------------
+    //
+    // Declared `protected`, NOT `protected internal`, even though the base
+    // declares them `protected internal`. Across an assembly boundary the
+    // `internal` half does not apply, so C# requires the override to drop it
+    // (CS0507). `GetControl` below is plain `protected` in the base and needs no
+    // such adjustment.
 
-    protected internal override Control? ContainerFromIndex(int index)
+    protected override Control? ContainerFromIndex(int index)
         => _realized.TryGetValue(index, out var container) ? container : null;
 
-    protected internal override int IndexFromContainer(Control container)
+    protected override int IndexFromContainer(Control container)
     {
         foreach (var (index, realized) in _realized)
             if (ReferenceEquals(realized, container)) return index;
@@ -264,10 +270,10 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         return -1;
     }
 
-    protected internal override IEnumerable<Control>? GetRealizedContainers()
+    protected override IEnumerable<Control>? GetRealizedContainers()
         => _realized.Values;
 
-    protected internal override Control? ScrollIntoView(int index)
+    protected override Control? ScrollIntoView(int index)
     {
         if (index < 0 || index >= Items.Count) return null;
 
