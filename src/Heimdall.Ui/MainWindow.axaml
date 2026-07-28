@@ -445,12 +445,21 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PathSegment">
                       <StackPanel Orientation="Horizontal">
-                        <Button Content="{Binding Name}" Command="{Binding Open}"
+                        <!-- The name goes in a TextBlock, NOT in Content.
+                             A Button renders its content through AccessText,
+                             which treats "_" as an access-key marker: it eats
+                             the underscore and underlines the next letter, so
+                             "git_projects" rendered as "gitprojects". Folder
+                             names are data, not labels, and must never be
+                             parsed for mnemonics. -->
+                        <Button Command="{Binding Open}"
                                 Background="Transparent" BorderThickness="0"
-                                Padding="4,2" CornerRadius="3"
-                                FontWeight="{Binding IsLast, Converter={x:Static vm:FileConverters.CrumbWeight}}"
-                                Foreground="{Binding IsLast, Converter={x:Static vm:FileConverters.CrumbBrush}}"
-                                FontSize="{DynamicResource FontSizeBase}"/>
+                                Padding="4,2" CornerRadius="3">
+                          <TextBlock Text="{Binding Name}"
+                                     FontWeight="{Binding IsLast, Converter={x:Static vm:FileConverters.CrumbWeight}}"
+                                     Foreground="{Binding IsLast, Converter={x:Static vm:FileConverters.CrumbBrush}}"
+                                     FontSize="{DynamicResource FontSizeBase}"/>
+                        </Button>
                         <!-- No trailing separator after the current folder. -->
                         <TextBlock Text="/" VerticalAlignment="Center" Margin="1,0"
                                    IsVisible="{Binding !IsLast}"
