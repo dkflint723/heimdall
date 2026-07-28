@@ -246,6 +246,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _limitActionOldest;
     [ObservableProperty] private bool _limitActionLargest;
 
+    // TEMPORARY — the save-time log showed the trash radios in exactly their
+    // loaded state after a click, i.e. the click produced NO view-model change
+    // at all, while the Navigation group in the same dialog works. These say
+    // whether a click reaches the properties. Remove once solved.
+    partial void OnLimitActionWarnChanged(bool value)
+        => Console.Error.WriteLine($"[heimdall] radio: warn -> {value}");
+
+    partial void OnLimitActionOldestChanged(bool value)
+        => Console.Error.WriteLine($"[heimdall] radio: oldest -> {value}");
+
+    partial void OnLimitActionLargestChanged(bool value)
+        => Console.Error.WriteLine($"[heimdall] radio: largest -> {value}");
+
     public bool CanSetTrashAge => DeleteOldTrash;
     public bool CanSetTrashSize => LimitTrashSize;
 
