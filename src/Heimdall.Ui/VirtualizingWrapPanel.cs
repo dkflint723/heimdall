@@ -144,6 +144,23 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         foreach (var container in _realized.Values) container.Measure(tile);
 
+        // GROUND TRUTH for "is this actually virtualizing".
+        //
+        // The tiles: timer posts at Background priority and stops when the
+        // dispatcher drains, which need not coincide with realization
+        // finishing — it read 35 ms and 356 ms for the same 5,000-item folder
+        // on two runs. The realized COUNT cannot be ambiguous like that: if it
+        // approaches the item count, nothing is being virtualized at all.
+        if (items.Count > 1000)
+        {
+            Console.Error.WriteLine(
+                $"[heimdall] wrap: items={items.Count:N0} realized={_realized.Count} "
+                + $"range={first}..{last} cols={_columns} "
+                + $"viewport={_viewport.Top:F0}..{_viewport.Bottom:F0} "
+                + $"avail={availableSize.Width:F0}x{availableSize.Height:F0} "
+                + $"extent={extent.Width:F0}x{extent.Height:F0}");
+        }
+
         return extent;
     }
 
