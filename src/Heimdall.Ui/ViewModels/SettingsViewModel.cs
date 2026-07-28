@@ -288,6 +288,19 @@ public sealed partial class SettingsViewModel : ObservableObject
             : StartInHome ? StartupLocation.HomeFolder
             : StartupLocation.RestoreSession;
 
+        // TEMPORARY — the trash limit radios load correctly but do not save.
+        // Three bools map to one enum, so either the group is not clearing the
+        // siblings' bound properties or the mapping is wrong; this says which
+        // rather than guessing between them. Remove once the cause is known.
+        Console.Error.WriteLine(
+            $"[heimdall] settings save: warn={LimitActionWarn} "
+            + $"oldest={LimitActionOldest} largest={LimitActionLargest} "
+            + $"→ {(LimitActionOldest ? Core.Settings.TrashLimitAction.DeleteOldest
+                  : LimitActionLargest ? Core.Settings.TrashLimitAction.DeleteLargest
+                  : Core.Settings.TrashLimitAction.Warn)} "
+            + $"| activation: system={OpenWithSystem} single={OpenWithSingle} "
+            + $"double={OpenWithDouble}");
+
         // `with` on the whole state, so pages that are not built yet keep
         // whatever is already in the file rather than being reset to defaults
         // by a dialog that never showed them.
