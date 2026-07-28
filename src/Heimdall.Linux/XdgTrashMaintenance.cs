@@ -215,7 +215,17 @@ public sealed class XdgTrashMaintenance : ITrashMaintenance
     {
         try
         {
-            var drive = new DriveInfo(Path.GetPathRoot(XdgTrash.TrashRoot) ?? "/");
+            // The volume the trash ACTUALLY sits on.
+            //
+            // This used to be `new DriveInfo(Path.GetPathRoot(TrashRoot))`, and
+            // on Linux `GetPathRoot` returns "/" for every absolute path — so a
+            // percentage of the disk was always measured against the ROOT
+            // filesystem, even when the home directory is a separate partition.
+            // On a small root and a large home that under-counts the allowance
+            // wildly, and deleting against a number computed from the wrong
+            // volume is exactly the class of mistake the rest of this file
+            // guards against.
+            if (MountFor(XdgTrash.TrashRoot) is not { } drive) return 0;
 
             return (long)(drive.TotalSize * (Math.Clamp(percentOfDisk, 1, 100) / 100.0));
         }
@@ -225,5 +235,37 @@ public sealed class XdgTrashMaintenance : ITrashMaintenance
             // guessing one would mean deleting against a number we invented.
             return 0;
         }
+    }
+
+    /// <summary>
+    /// The mount point containing <paramref name="path"/> — the LONGEST mount
+    /// whose root prefixes it, since "/" prefixes everything and would otherwise
+    /// always win.
+    /// </summary>
+    private static DriveInfo? MountFor(string path)
+    {
+        DriveInfo? best = null;
+
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            try
+            {
+                if (!drive.IsReady || drive.TotalSize <= 0) continue;
+
+                var root = drive.RootDirectory.FullName;
+
+                if (!path.StartsWith(root, StringComparison.Ordinal)) continue;
+
+                if (best is null || root.Length > best.RootDirectory.FullName.Length)
+                    best = drive;
+            }
+            catch
+            {
+                // Pseudo filesystems throw on TotalSize; they are never the
+                // answer anyway.
+            }
+        }
+
+        return best;
     }
 }
