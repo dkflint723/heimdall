@@ -964,22 +964,30 @@ public partial class MainWindow : Window
 
             var result = await maintenance.SweepAsync(policy, CancellationToken.None);
 
-            // Said out loud when it acted. The application deleting files with
-            // nobody watching is exactly the thing that should not be silent.
+            // ALWAYS logged, including when it did nothing.
+            //
+            // It used to speak only when it removed something, so silence meant
+            // three different things — the feature is off, it ran and matched
+            // nothing, or it never ran at all. For the one feature that deletes
+            // files unattended, "I ran and did nothing" is exactly as important
+            // as "I removed four", and being unable to tell them apart cost a
+            // test round trip.
+            var state = !policy.DeleteOldFiles && !policy.LimitSize
+                ? "disabled"
+                : $"age={(policy.DeleteOldFiles ? $"{policy.DeleteAfterDays}d" : "off")} "
+                  + $"size={(policy.LimitSize ? $"{policy.MaximumPercentOfDisk}%" : "off")}";
+
+            var freed = ByteSize.Format(result.BytesFreed);
+
+            Console.Error.WriteLine(
+                $"[heimdall] trash: {state} · removed {result.Removed} · "
+                + $"freed {freed} · skipped {result.Skipped} undated"
+                + (result.OverLimit ? " · OVER LIMIT" : ""));
+
             if (result.Removed > 0)
-            {
-                var freed = ByteSize.Format(result.BytesFreed);
-
-                Console.Error.WriteLine(
-                    $"[heimdall] trash: removed {result.Removed} item(s), freed {freed}"
-                    + (result.Skipped > 0 ? $", skipped {result.Skipped} undated" : ""));
-
                 _shell.OperationStatus = $"trash: removed {result.Removed} item(s), freed {freed}";
-            }
             else if (result.OverLimit)
-            {
                 _shell.OperationStatus = "trash is over its size limit";
-            }
         }
         catch (Exception ex)
         {
