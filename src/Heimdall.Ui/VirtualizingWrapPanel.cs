@@ -68,6 +68,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     private Rect _viewport;
     private int _columns = 1;
 
+    /// <summary>
+    /// The index of the most recent <see cref="ScrollIntoView"/> target, until
+    /// the viewport catches up with it. TEMPORARY, and only read by the
+    /// `recycle-scrolltarget` diagnostic — see the comment in
+    /// <see cref="Recycle"/> for what it is testing for.
+    /// </summary>
+    private int _scrollTarget = -1;
+
     public VirtualizingWrapPanel()
     {
         EffectiveViewportChanged += OnEffectiveViewportChanged;
@@ -137,6 +145,10 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         var first = firstRow * _columns;
         var last = Math.Min(items.Count - 1, ((lastRow + 1) * _columns) - 1);
+
+        // The viewport has caught up with the scroll target, so it is no longer
+        // at risk from a stale-viewport measure.
+        if (_scrollTarget >= first && _scrollTarget <= last) _scrollTarget = -1;
 
         Realize(first, last, items);
 
@@ -254,6 +266,25 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     private void Recycle(int index, bool force = false)
     {
         if (!_realized.TryGetValue(index, out var container)) return;
+
+        // TEMPORARY — tests a gap the Avalonia decompile predicts but nothing
+        // here has yet observed.
+        //
+        // VirtualizingStackPanel tracks TWO protected elements, not one:
+        // `_focusedElement`/`_focusedIndex` AND `_scrollToElement`/
+        // `_scrollToIndex`. Keeping the focused container (below) matches the
+        // first. Nothing here matches the second, so a ScrollIntoView target
+        // that does NOT take focus is still exposed to exactly the
+        // stale-viewport recycle that broke keyboard navigation.
+        //
+        // The paths that scroll without focusing are the ones to watch:
+        // AutoScrollToSelectedItem, which is how type-ahead moves the view, and
+        // any plain BringIntoView. If this line fires, the scroll target needs
+        // pinning the way Avalonia pins it. If it never fires, the focused-
+        // container guard alone is sufficient here and no more machinery is
+        // warranted.
+        if (index == _scrollTarget && !container.IsFocused)
+            Console.Error.WriteLine($"[heimdall] recycle-scrolltarget: index={index}");
 
         // KEEPING THE FOCUSED CONTAINER REALIZED IS REQUIRED, NOT AN
         // OPTIMISATION. Recycling hides the control and clears its item, and
@@ -375,6 +406,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         var items = Items;
 
         if (index < 0 || index >= items.Count) return null;
+
+        _scrollTarget = index;
 
         var itemWidth = CellWidth;
         var itemHeight = CellHeight;
