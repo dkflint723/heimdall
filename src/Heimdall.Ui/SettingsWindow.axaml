@@ -24,7 +24,13 @@
          existed, because the header text is wider than the dialog. A vertical
          list cannot wrap, reads as a list of places rather than a row of
          controls, and matches the main window's own left-hand sidebar. -->
-    <TabControl TabStripPlacement="Left" Padding="16,0,0,0">
+    <!-- PanelBackground is the same brush the main window's sidebar uses, so
+         the strip reads as the same kind of surface. Set on the TabControl
+         rather than on the strip's internal presenter, which would mean
+         reaching into the Fluent template; the page content below paints
+         AppBackground back over the right-hand side. -->
+    <TabControl TabStripPlacement="Left" Padding="16,0,0,0"
+                Background="{DynamicResource PanelBackground}">
 
       <TabControl.Styles>
         <!-- Styled to match the sidebar: transparent, left-aligned, dim until
@@ -37,8 +43,14 @@
           <Setter Property="MinHeight" Value="0"/>
           <Setter Property="HorizontalContentAlignment" Value="Left"/>
         </Style>
+        <!-- Selected carries BOTH a fill and a brighter foreground, never
+             colour alone — the standing accessibility rule for this project.
+             ViewBackground is the listing surface, so a chosen page reads as
+             continuous with the content beside it. -->
         <Style Selector="TabItem:selected">
           <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
+          <Setter Property="Background" Value="{DynamicResource ViewBackground}"/>
+          <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
         <Style Selector="TabItem:pointerover">
           <Setter Property="Foreground" Value="{DynamicResource ViewText}"/>
@@ -49,7 +61,8 @@
            Confirmations tabs are not here yet: they arrive with the plumbing
            that makes them do something. -->
       <TabItem Header="General">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      Background="{DynamicResource AppBackground}">
         <StackPanel Spacing="14" Margin="0,4,14,8">
 
           <TextBlock Text="Sorting"
@@ -192,7 +205,8 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="Startup">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      Background="{DynamicResource AppBackground}">
         <StackPanel Spacing="14" Margin="0,4,14,8">
 
           <TextBlock Text="When Heimdall opens"
@@ -260,7 +274,8 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="View modes">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      Background="{DynamicResource AppBackground}">
         <StackPanel Spacing="14" Margin="0,4,14,8">
 
           <TextBlock Text="Text"
@@ -305,7 +320,8 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="Navigation">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      Background="{DynamicResource AppBackground}">
         <StackPanel Spacing="14" Margin="0,4,14,8">
 
           <TextBlock Text="Open files and folders with"
@@ -343,7 +359,8 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="Context menu">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      Background="{DynamicResource AppBackground}">
         <StackPanel Spacing="14" Margin="0,4,14,8">
 
           <TextBlock Text="Show these in the right-click menu"
@@ -376,7 +393,8 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="Trash">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      Background="{DynamicResource AppBackground}">
         <StackPanel Spacing="14" Margin="0,4,14,8">
 
           <TextBlock Text="This deletes files permanently, on its own, while Heimdall is running. Both options are off unless you turn them on."
