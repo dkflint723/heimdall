@@ -15,6 +15,21 @@ namespace Heimdall.Ui.ViewModels;
 /// — a control that does nothing is worse than an absent one, and this project
 /// requires the UI to be usable by someone with no prior knowledge of it.
 /// </summary>
+/// <summary>
+/// One entry in the font dropdown.
+///
+/// A typed record rather than a bare string **specifically so the dropdown can
+/// have an item template**. A `DataTemplate` over `System.String` needs
+/// `x:DataType` pointing at a framework type and is awkward under compiled
+/// bindings; this is the ordinary pattern used everywhere else in the
+/// application, and it also gives the sample somewhere to live.
+///
+/// <paramref name="Family"/> is built once here rather than converted in
+/// markup — binding a string to a `FontFamily` property relies on a conversion
+/// this codebase does not otherwise depend on.
+/// </summary>
+public sealed record FontOption(string Name, FontFamily Family, bool IsFollowDesktop);
+
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsState _original;
@@ -45,9 +60,14 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         AvailableFonts = BuildFontList(views.CustomFontFamily);
 
-        _selectedFont = string.IsNullOrWhiteSpace(views.CustomFontFamily)
-            ? FollowDesktop
-            : views.CustomFontFamily;
+        // Matched by NAME, not by reference: the configured value comes from a
+        // file, and the list is built fresh. A configured font that is not
+        // installed was already inserted by BuildFontList, so this cannot miss
+        // and silently fall back to the sentinel — which would rewrite the
+        // user's font the moment they pressed Save.
+        _selectedFont = AvailableFonts.FirstOrDefault(o =>
+            string.Equals(o.Name, views.CustomFontFamily, StringComparison.OrdinalIgnoreCase))
+            ?? AvailableFonts[0];
         _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
         _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
 
@@ -181,9 +201,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     private const string FollowDesktop = "Follow the desktop font";
 
-    public IReadOnlyList<string> AvailableFonts { get; }
+    public IReadOnlyList<FontOption> AvailableFonts { get; }
 
-    [ObservableProperty] private string _selectedFont;
+    [ObservableProperty] private FontOption _selectedFont;
 
     /// <summary>Extra gap between grid tiles, in pixels. Blank means none.</summary>
     [ObservableProperty] private string _iconSpacing;
@@ -199,7 +219,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// machine, or uninstalled it — would rewrite their settings the moment they
     /// opened this dialog and pressed Save.
     /// </summary>
-    private static IReadOnlyList<string> BuildFontList(string? configured)
+    private static IReadOnlyList<FontOption> BuildFontList(string? configured)
     {
         var names = new List<string> { FollowDesktop };
 
@@ -230,7 +250,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             foreach (var name in names.Skip(1))
                 Console.Error.WriteLine($"[heimdall] fontlist: {name}");
 
-        return names;
+        return names
+            .Select(n => new FontOption(n, new FontFamily(n), n == FollowDesktop))
+            .ToList();
     }
     [ObservableProperty] private bool _absoluteDates;
     [ObservableProperty] private bool _showFolderItemCounts;
@@ -334,7 +356,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             Views = _original.Views with
             {
-                CustomFontFamily = SelectedFont == FollowDesktop ? null : SelectedFont,
+                CustomFontFamily = SelectedFont is null || SelectedFont.IsFollowDesktop
+                    ? null
+                    : SelectedFont.Name,
 
                 Icons = _original.Views.Icons with { Spacing = Spacing(IconSpacing) },
                 Compact = _original.Views.Compact with { Spacing = Spacing(CompactSpacing) },

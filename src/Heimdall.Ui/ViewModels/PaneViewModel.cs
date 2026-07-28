@@ -317,6 +317,21 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public static ITrashMaintenance? Trash { get; set; }
 
     /// <summary>
+    /// Version-control decorations. Static like the other providers; null when
+    /// the feature is off or the tool is missing, and every caller must treat
+    /// that as "draw nothing", never as "everything is clean".
+    /// </summary>
+    public static Heimdall.Core.Vcs.IVersionControl? Vcs { get; set; }
+
+    /// <summary>
+    /// Status per entry of the CURRENT folder, or empty. Rebuilt per load and
+    /// never merged across folders — a stale entry here would decorate the
+    /// wrong file, which is worse than decorating nothing.
+    /// </summary>
+    public IReadOnlyDictionary<string, Heimdall.Core.Vcs.VcsState> VcsStates { get; private set; }
+        = new Dictionary<string, Heimdall.Core.Vcs.VcsState>();
+
+    /// <summary>
     /// Applied on arrival, before the listing is asked for, so the folder is
     /// enumerated and sorted once under its own rules rather than sorted twice.
     /// Silent when the preference is off or the folder has no opinion.
@@ -1183,6 +1198,54 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                + $"freed {ByteSize.Format(result.BytesFreed)}";
 
         if (IsTrashListing) await RefreshAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Fetches version-control state for a folder and publishes it if that
+    /// folder is still the one being shown.
+    ///
+    /// Fire-and-forget from the load path, so it carries its own catch-all:
+    /// an unobserved exception on a pool thread is a process abort, and this
+    /// runs a subprocess.
+    /// </summary>
+    private async Task RefreshVcsAsync(string path, int generation)
+    {
+        var empty = new Dictionary<string, Heimdall.Core.Vcs.VcsState>();
+
+        if (Vcs is null || VirtualPaths.IsVirtual(path))
+        {
+            VcsStates = empty;
+            return;
+        }
+
+        try
+        {
+            var snapshot = await Vcs.StatusAsync(path, _cts?.Token ?? default)
+                .ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                // The same guard every other dispatcher block here uses:
+                // cancelling does not unqueue a callback already in flight, and
+                // publishing this against a newer folder would decorate the
+                // wrong rows.
+                if (generation != _generation) return;
+
+                VcsStates = snapshot?.States ?? empty;
+
+                Console.Error.WriteLine(
+                    $"[heimdall] vcs: {Vcs.Name} · {VcsStates.Count} decorated "
+                    + $"· root={snapshot?.Root ?? "(none)"} · {path}");
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer navigation; the newer one owns the state.
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[heimdall] vcs: {ex.Message}");
+        }
     }
 
     /// <summary>Paths of the selection, falling back to the focused row.</summary>
@@ -2110,6 +2173,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 Status = "";
                 IsLoading = false;
                 IsLoaded = true;
+
+                // AFTER the listing is on screen, never before it. Status can
+                // take seconds on a large repository and the folder must not
+                // wait on it — decorations arriving late is the correct
+                // trade-off, a listing that stalls is not.
+                _ = RefreshVcsAsync(path, generation);
 
                 // Says what the listing actually produced. "No files showing"
                 // has two very different causes — nothing enumerated, or

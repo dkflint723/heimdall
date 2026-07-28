@@ -90,6 +90,11 @@ public partial class MainWindow : Window
         _recents = new JsonRecentStore(JsonSessionStore.DefaultDirectory());
         ViewModels.PaneViewModel.Recents = _recents;
 
+        // Platform-neutral: it drives the `git` binary, which behaves the same
+        // on both targets, so it is constructed here rather than coming from
+        // IPlatform like the trash and the icon theme do.
+        ViewModels.PaneViewModel.Vcs = new Heimdall.Core.Vcs.GitVersionControl();
+
         // Logged at startup, not when the settings dialog opens. The count only
         // appeared on opening the dialog, which made "no line printed" mean two
         // different things and cost a diagnostic round trip. Compare with:

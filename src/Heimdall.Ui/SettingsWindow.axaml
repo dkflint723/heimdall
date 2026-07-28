@@ -318,7 +318,40 @@
             <ComboBox ItemsSource="{Binding AvailableFonts}"
                       SelectedItem="{Binding SelectedFont}"
                       HorizontalAlignment="Stretch"
-                      FontSize="{DynamicResource FontSizeSmall}"/>
+                      FontSize="{DynamicResource FontSizeSmall}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:FontOption">
+                  <!-- FIXED width, not Min: every row must measure the same or
+                       the popup resizes to whichever items happen to be
+                       realized, and it visibly breathes as you scroll. Trimming
+                       alone does not do it — a TextBlock still asks for its
+                       full desired width unless something constrains it. -->
+                  <DockPanel Width="440">
+                    <!-- The sample keeps the sentinel row honest: it has no
+                         face of its own, so it shows no sample. -->
+                    <TextBlock DockPanel.Dock="Right"
+                               Text="AaBbGg 0123"
+                               IsVisible="{Binding !IsFollowDesktop}"
+                               FontFamily="{Binding Family}"
+                               Foreground="{DynamicResource ViewDimText}"
+                               Margin="16,0,0,0"
+                               VerticalAlignment="Center"/>
+                    <!-- The name now renders in its OWN face, which is what a
+                         font picker is expected to do. The trade-off is real
+                         and was the reason it did not before: a symbol or icon
+                         font draws its own name as glyphs, so that row becomes
+                         unreadable. The tooltip carries the plain name for
+                         exactly those rows — the list is alphabetical, so
+                         position narrows it down and the tooltip settles it. -->
+                    <TextBlock Text="{Binding Name}"
+                               FontFamily="{Binding Family}"
+                               ToolTip.Tip="{Binding Name}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                  </DockPanel>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
             <TextBlock Text="The first entry uses whatever Plasma is set to. Sizes still come from the per-pane scale, so this changes the face only."
                        FontSize="{DynamicResource FontSizeTiny}"
                        Foreground="{DynamicResource ViewDimText}"
