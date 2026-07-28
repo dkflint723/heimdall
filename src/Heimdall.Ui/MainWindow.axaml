@@ -1436,31 +1436,37 @@
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
                                     Padding="12,7" Opacity="{Binding Opacity}">
-                              <DockPanel>
-                                <!-- Place.Icon has carried a token since the
-                                     places provider was written and nothing
-                                     rendered it. Sized off the same scale as
-                                     the label so it follows Ctrl +/-. -->
-                                <Path DockPanel.Dock="Left" Margin="0,0,9,0"
-                                      Width="16" Height="16" Stretch="Uniform"
-                                      VerticalAlignment="Center"
-                                      Stroke="{DynamicResource ViewText}"
-                                      StrokeThickness="1.6"
-                                      StrokeLineCap="Round" StrokeJoin="Round"
-                                      th:SidebarIcon.Token="{Binding Icon}"/>
-                                <StackPanel>
+                              <StackPanel>
+                                <!-- The icon shares a LINE with the label rather
+                                     than centring against the whole row. A drive
+                                     row is three lines tall — label, bar, free
+                                     space — so a centred icon floated halfway
+                                     down it, level with nothing. Bottom-aligned
+                                     inside this line, the icon rests on the same
+                                     edge as the label at any font size, which a
+                                     hardcoded offset would not survive. -->
+                                <DockPanel>
+                                  <Path DockPanel.Dock="Left" Margin="0,0,9,0"
+                                        Width="16" Height="16" Stretch="Uniform"
+                                        VerticalAlignment="Bottom"
+                                        Stroke="{DynamicResource ViewText}"
+                                        StrokeThickness="1.6"
+                                        StrokeLineCap="Round" StrokeJoin="Round"
+                                        th:SidebarIcon.Token="{Binding Icon}"/>
                                   <TextBlock Text="{Binding Label}"
+                                             VerticalAlignment="Bottom"
                                              FontSize="{DynamicResource FontSizeSmall}"
                                              TextTrimming="CharacterEllipsis"/>
-                                  <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
-                                               Height="2" Margin="0,4,10,0"
-                                               IsVisible="{Binding HasCapacity}"/>
-                                  <TextBlock Text="{Binding CapacityText}"
-                                             FontSize="{DynamicResource FontSizeTiny}"
-                                             Foreground="{DynamicResource ViewDimText}"
+                                </DockPanel>
+                                <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
+                                             Height="2" Margin="25,4,10,0"
                                              IsVisible="{Binding HasCapacity}"/>
-                                </StackPanel>
-                              </DockPanel>
+                                <TextBlock Text="{Binding CapacityText}"
+                                           Margin="25,0,0,0"
+                                           FontSize="{DynamicResource FontSizeTiny}"
+                                           Foreground="{DynamicResource ViewDimText}"
+                                           IsVisible="{Binding HasCapacity}"/>
+                              </StackPanel>
                             </Button>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
