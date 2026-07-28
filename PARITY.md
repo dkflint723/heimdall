@@ -113,25 +113,35 @@ of the intended folder.
 
 ## Open gaps
 
-### 1. Large folders in the tile layouts — a genuine regression against Dolphin
+### 1. Large folders in the tile layouts — HALF CLOSED, July 2026
 
-The only place Heimdall currently *refuses* something Dolphin does. Grid and
-compact use `WrapPanel` and **Avalonia has no virtualizing wrap panel**, so every
-item they are given is realized. Above `UnvirtualizedLimit = 5000` the tile
-layouts are disabled and navigating into a huge folder while already in one drops
-back to list view. Refusing rather than truncating, because a file manager that
-silently omits files is dangerous.
+**Answered and built for GRID; still open for COMPACT.**
 
-Dolphin handles 200k in icon view. Two ways to close it:
+A custom `VirtualizingWrapPanel` was written (the first option below). Measured
+on 100,000 items: **grid renders in ~20 ms with 48 containers realized, constant
+regardless of folder size**, against 6,841 ms for 20,000 un-virtualized. The
+guard is now split — `CanUseGrid` is always true, and the drop-back to list view
+fires for compact only.
+
+**Compact is still the plain `WrapPanel`: 100,000 items takes ~32 seconds.** It
+wraps *vertically into columns*, so closing it needs an orientation mode on the
+panel — the row arithmetic becomes column arithmetic and `GetControl` swaps its
+axes. Same shape of work, not a swap. **This is now the only place Heimdall
+refuses something Dolphin does.**
+
+`HEIMDALL_TILE_DEBUG=1` prints the realized count, index range and viewport on
+every measure; the realized count is the ground truth for whether virtualization
+is actually happening, and it is how grid was proved.
+
+Two ways it could have been closed, for the record:
 
 - a custom `VirtualizingPanel` that wraps — preserves ListBox selection and
-  keyboard navigation, but hard to get right;
+  keyboard navigation, but hard to get right. **This is what was built.**
 - chunk items into rows and virtualize the rows — easier, but breaks ListBox
   selection semantics.
 
-**Undecided.** Worth answering first: does the guard actually bite in daily use,
-or only in benchmarks? Grid and compact are picture-and-document layouts, and a
-200k-entry folder viewed as tiles may not be a real workflow.
+**Unverified:** stale icons on recycled tiles under hard scrolling at 100k. A
+container count cannot reveal it.
 
 ### 2. Newly identified — found while building the settings dialog
 
@@ -198,6 +208,44 @@ external folders in tabs.
 
 ---
 
+## Recent Files and Recent Locations (done, July 2026)
+
+Dolphin's two `recentlyused:/` entries, reproduced. **Deliberate divergence: the
+data is Heimdall's own, not KDE's.** `ldd` on Dolphin's `recentlyused.so` shows
+both its lists come from the KActivities database — consuming it would have meant
+bundling SQLite into a trimmed NativeAOT binary against a schema that is not a
+public API, and contributing to it would have meant D-Bus. The presentation was
+what mattered, so `IRecentStore` / `JsonRecentStore` records opens in
+`recents.json` instead: files and folders separately, trimmed by time, bounded at
+200 each.
+
+**Recorded on user-initiated opens only** — `NavigateAsync` under its existing
+`IsLoaded` guard (so back, forward, refresh and session restore are excluded for
+free), plus `OpenAsync` and `OpenWith`, which are the same act.
+
+**The listings are virtual paths** — `heimdall:recent-files` and
+`heimdall:recent-locations` — that `LoadListingAsync` branches on. The listing
+source returns the same `IAsyncEnumerable` shape as the filesystem provider, so
+sorting, filtering, grouping, all three layouts and selection work unchanged. Six
+places had to learn that a path may not be on disk: the Miller strip, the file
+watcher, the breadcrumb, the visit recorder, the tab title, and the column set.
+
+Entries carry their **access** time in `LastWriteTime`, which is what gives
+Today/Yesterday banding and the timestamp column for free. That field means
+something different in these two listings than anywhere else, and it is commented
+where it is set.
+
+A **Path column** appears only here, sharing its grid column with the metadata
+column rather than adding a seventh. Without it a bare filename identifies
+nothing, since entries span the whole filesystem.
+
+**Forget** on the context menu drops the record and never the file, mirroring
+`ITagStore.ForgetKnown`.
+
+**Superseded:** the frequent-folders list and its visit store were removed at the
+user's request once recency existed. Two ranked lists of folders in one sidebar
+is one too many.
+
 ## Deliberately not doing
 
 - **Service menus** (`.desktop` files in `servicemenus/`) — the scripts menu covers
@@ -212,17 +260,20 @@ external folders in tabs.
 ## Proposed order
 
 1. ~~Settings dialog.~~ **Done, July 2026.**
-2. **Decide the tile-layout virtualization question** — the only remaining place
-   this application refuses something Dolphin does, and therefore the only real
-   violation of the 100% parity goal. Worth first establishing whether the 5,000
-   guard bites in daily use or only in benchmarks.
-3. **Per-folder view properties.** Shares a session-schema change with anything
-   else persisting per-directory state, and its settings toggle is already
-   written and waiting.
-4. Checksums, then version control decorations, then selection mode and
-   configurable shortcuts.
-5. Multi-window, which also unlocks the last context-menu entry.
-6. Terminal panel last, or never.
+2. ~~Tile-layout virtualization.~~ **Grid done, July 2026.**
+3. ~~Per-folder view properties.~~ ~~Checksums.~~ ~~Type-ahead.~~ **All done.**
+4. ~~Recent Files and Recent Locations.~~ **Done, July 2026** — Heimdall's own
+   recency store, not KDE's; see below.
+5. **Virtualize compact** — an orientation mode on `VirtualizingWrapPanel`. The
+   last place this application refuses something Dolphin does, and therefore the
+   only remaining violation of the 100% parity goal.
+6. **A Trash place in the sidebar.** Dolphin has one and Heimdall has none —
+   `LinuxPlacesProvider` emits no `trash` token, though the icon is drawn. It
+   needs restore and empty to be honest, so it is its own piece of work rather
+   than a one-line place. `XdgTrash` and `XdgTrashMaintenance` already exist.
+7. Version control decorations, then selection mode and configurable shortcuts.
+8. Multi-window, which also unlocks the last context-menu entry.
+9. Terminal panel last, or never.
 
 The Windows port sits outside this order and was deferred explicitly. It is not a
 parity item; it is the point at which twenty single-implementation interfaces get

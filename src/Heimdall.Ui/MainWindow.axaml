@@ -758,6 +758,14 @@
               </MenuItem>
               <MenuItem Header="Scripts folder…"
                         Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
+              <!-- Only in the two recent listings, where it is the one action
+                   that has no equivalent in a real folder. It drops the record,
+                   never the file — sitting this close to Delete, that has to be
+                   unmistakable, which is why the header says so. -->
+              <Separator IsVisible="{Binding ActiveTab.IsRecentListing}"/>
+              <MenuItem Header="Forget (keeps the file)"
+                        IsVisible="{Binding ActiveTab.IsRecentListing}"
+                        Command="{Binding ActiveTab.ForgetRecentCommand}"/>
               <Separator/>
               <MenuItem Header="Properties"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"/>

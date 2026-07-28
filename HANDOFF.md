@@ -328,6 +328,22 @@ silently omits files is dangerous. This is a real parity gap tracked in
 
 ---
 
+### Three that bit in July 2026
+
+**`Path` is ambiguous in this project.** Implicit usings pull in `System.IO.Path`
+and Avalonia's shape type is also `Path`, so any new file that draws a shape gets
+CS0104. Alias it: `using Path = Avalonia.Controls.Shapes.Path;`.
+
+**A `<see cref="…"/>` to a type you deleted is CS1574 — an error here, because of
+`TreatWarningsAsErrors`.** After removing a type, grep `cref=` across the tree,
+not just code references.
+
+**A `Stretch="Uniform"` icon aligns by its INK, not by its control.** A glyph that
+does not fill its canvas is scaled up and centred, so it lands in a different
+place from its neighbours and no alignment setting will fix it. Every glyph in a
+set must fill the canvas in both directions. Measure the path bounds; do not judge
+by eye.
+
 ## 6. Working practices
 
 - **Ship a full `src` snapshot, not incremental patches**, and always extract with
@@ -364,12 +380,10 @@ silently omits files is dangerous. This is a real parity gap tracked in
 
 ## 7. Open, and needing a decision
 
-1. **The virtualizing wrap panel, or the 5,000-item guard.** Closing the gap means
-   either a custom `VirtualizingPanel` that wraps — preserving ListBox selection
-   and keyboard navigation, but hard to get right — or chunking items into rows and
-   virtualizing the rows, which is easier but breaks ListBox selection semantics.
-   Worth answering first: does the guard actually bite in daily use, or only in
-   benchmarks?
+1. **Virtualize the compact layout.** The wrapping panel was written and grid now
+   renders 100,000 items in ~20 ms. Compact is still the plain `WrapPanel` at
+   ~32 seconds; it wraps vertically, so it needs an orientation mode on the panel.
+   The last place this application refuses something Dolphin does.
 2. **One icon still renders small.** Tela's `application-x-compressed-tar.svg`
    declares a 16×16 viewBox and paints 48×56. `HEIMDALL_ICON_DEBUG=1` dumps each
    shape's bounds and paint; the hypothesis is a shape spanning the full area

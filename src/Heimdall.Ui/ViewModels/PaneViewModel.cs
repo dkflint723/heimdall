@@ -1093,6 +1093,31 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Drops the selected entries from the recency store — Dolphin's "Forget",
+    /// and the counterpart to `ITagStore.ForgetKnown`.
+    ///
+    /// **It removes the RECORD, never the file.** That distinction is the whole
+    /// point of the action: a recent list you cannot prune is a log rather than
+    /// a tool, but a Forget that deleted things would be catastrophic next to a
+    /// Delete one row above it in the same menu.
+    ///
+    /// The listing is built from the store, so it has to be rebuilt afterwards
+    /// — nothing watches a virtual path, by design.
+    /// </summary>
+    [RelayCommand]
+    private async Task ForgetRecentAsync()
+    {
+        if (Recents is null) return;
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) return;
+
+        foreach (var path in paths) Recents.Forget(path);
+
+        if (RecentPaths.IsRecent(CurrentPath)) await RefreshAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Paths of the selection, falling back to the focused row.</summary>
     public IReadOnlyList<string> SelectionPaths()
         => Selection.Count > 0
