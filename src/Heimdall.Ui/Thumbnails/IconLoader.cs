@@ -238,8 +238,63 @@ public static class IconLoader
             }
         }
 
+        ApplyColourScheme(rules);
+
         return rules;
     }
+
+    /// <summary>
+    /// KDE's colour-scheme classes, filled in from the LIVE palette — the thing
+    /// that makes our folders a different colour from Dolphin's.
+    ///
+    /// **These icons deliberately declare no colour of their own.** Tela's
+    /// `folder.svg` (which `inode-directory.svg` symlinks to) paints with
+    /// `fill="currentColor"` on `class="ColorScheme-Highlight"`, and ships
+    /// `.ColorScheme-Highlight { color: #5294e2 }` only as a FALLBACK so the
+    /// icon is not invisible outside KDE. The host application is expected to
+    /// override it, which is exactly what KIconLoader does — so Dolphin draws
+    /// the scheme's highlight and, reading the file honestly, we drew Tela's
+    /// stand-in blue.
+    ///
+    /// Injected AFTER the file's own rules so ours win, and only for names we
+    /// genuinely have a colour for: an unmapped class keeps the icon's fallback,
+    /// which is better than inventing one. Same principle as everywhere else
+    /// here — consume the desktop's own data rather than reimplementing it.
+    ///
+    /// The drawn-icon cache is already invalidated on a scheme change, which is
+    /// what stops the old colour staying baked in.
+    /// </summary>
+    private static void ApplyColourScheme(
+        Dictionary<string, (string? Fill, string? Colour, string? Stroke)> rules)
+    {
+        foreach (var (selector, resource) in SchemeClasses)
+        {
+            if (Application.Current?.Resources[resource] is not ISolidColorBrush brush) continue;
+
+            var colour = brush.Color.ToString();
+
+            // Only the `color` property: these classes are referenced through
+            // `currentColor`, and overwriting a literal `fill` would repaint
+            // parts of an icon that never asked to follow the scheme.
+            rules[selector] = rules.TryGetValue(selector, out var existing)
+                ? (existing.Fill, colour, existing.Stroke)
+                : (null, colour, null);
+        }
+    }
+
+    /// <summary>
+    /// The KDE class names we can honestly answer for, mapped to theme
+    /// resources. Positive, negative and neutral text are deliberately absent —
+    /// this palette has no such roles, and a guess would be worse than the
+    /// icon's own fallback.
+    /// </summary>
+    private static readonly (string Selector, string Resource)[] SchemeClasses =
+    [
+        (".ColorScheme-Text", "ViewText"),
+        (".ColorScheme-Background", "ViewBackground"),
+        (".ColorScheme-Highlight", "AccentColour"),
+        (".ColorScheme-Contrast", "ViewText"),
+    ];
 
     /// <summary>
     /// A property's value for an element, in CSS precedence order: the
