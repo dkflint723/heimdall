@@ -40,6 +40,19 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     public static readonly StyledProperty<double> ItemHeightProperty =
         AvaloniaProperty.Register<VirtualizingWrapPanel, double>(nameof(ItemHeight), 100);
 
+    /// <summary>
+    /// Gap around each tile, added to <see cref="ItemWidth"/> and
+    /// <see cref="ItemHeight"/> to give the CELL size.
+    ///
+    /// Explicit because the grid's item template carries `Margin="3"`, so its
+    /// desired size is six pixels larger than the tile in each direction.
+    /// Arranging into a cell of exactly TileWidth would clip every tile by that
+    /// margin — a quiet, uniform wrongness that is hard to spot and easy to
+    /// misread as a styling problem.
+    /// </summary>
+    public static readonly StyledProperty<double> ItemSpacingProperty =
+        AvaloniaProperty.Register<VirtualizingWrapPanel, double>(nameof(ItemSpacing), 6);
+
     /// <summary>Remembers how each container may be pooled. An attached property
     /// rather than a dictionary, so it travels with the container.</summary>
     private static readonly AttachedProperty<object?> RecycleKeyProperty =
@@ -72,6 +85,18 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         set => SetValue(ItemHeightProperty, value);
     }
 
+    public double ItemSpacing
+    {
+        get => GetValue(ItemSpacingProperty);
+        set => SetValue(ItemSpacingProperty, value);
+    }
+
+    /// <summary>The footprint of one item, tile plus gap. Every layout decision
+    /// uses this rather than the tile size.</summary>
+    private double CellWidth => Math.Max(1, ItemWidth + ItemSpacing);
+
+    private double CellHeight => Math.Max(1, ItemHeight + ItemSpacing);
+
     private void OnEffectiveViewportChanged(object? sender, EffectiveViewportChangedEventArgs e)
     {
         _viewport = e.EffectiveViewport;
@@ -91,8 +116,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel
             return default;
         }
 
-        var itemWidth = Math.Max(1, ItemWidth);
-        var itemHeight = Math.Max(1, ItemHeight);
+        var itemWidth = CellWidth;
+        var itemHeight = CellHeight;
 
         _columns = Math.Max(1, (int)(availableSize.Width / itemWidth));
 
@@ -124,8 +149,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        var itemWidth = Math.Max(1, ItemWidth);
-        var itemHeight = Math.Max(1, ItemHeight);
+        var itemWidth = CellWidth;
+        var itemHeight = CellHeight;
 
         foreach (var (index, container) in _realized)
         {
@@ -277,8 +302,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     {
         if (index < 0 || index >= Items.Count) return null;
 
-        var itemWidth = Math.Max(1, ItemWidth);
-        var itemHeight = Math.Max(1, ItemHeight);
+        var itemWidth = CellWidth;
+        var itemHeight = CellHeight;
         var row = index / Math.Max(1, _columns);
 
         this.BringIntoView(new Rect(0, row * itemHeight, itemWidth, itemHeight));

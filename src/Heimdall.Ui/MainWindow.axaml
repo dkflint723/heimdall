@@ -1158,7 +1158,18 @@
                 </ListBox.Styles>
                 <ListBox.ItemsPanel>
                   <ItemsPanelTemplate>
-                    <WrapPanel Orientation="Horizontal"/>
+                    <!-- Grid is the first layout on the virtualizing panel.
+                         Compact deliberately stays on the plain WrapPanel below,
+                         as a control: if grid misbehaves, the difference between
+                         the two is the evidence.
+
+                         ItemWidth/ItemHeight are the TILE; the panel adds
+                         ItemSpacing to get the cell, matching the Margin="3" in
+                         the item template. -->
+                    <local:VirtualizingWrapPanel
+                        ItemWidth="{DynamicResource TileWidth}"
+                        ItemHeight="{DynamicResource TileHeight}"
+                        ItemSpacing="6"/>
                   </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
