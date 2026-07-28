@@ -975,7 +975,12 @@ public partial class MainWindow : Window
             var state = !policy.DeleteOldFiles && !policy.LimitSize
                 ? "disabled"
                 : $"age={(policy.DeleteOldFiles ? $"{policy.DeleteAfterDays}d" : "off")} "
-                  + $"size={(policy.LimitSize ? $"{policy.MaximumPercentOfDisk}%" : "off")}";
+                  + $"size={(policy.LimitSize ? $"{policy.MaximumPercentOfDisk}%" : "off")} "
+                  // The field that decides whether it DELETES. Leaving it out
+                  // made "removed 0 · OVER LIMIT" ambiguous between "set to warn"
+                  // and "set to delete and failing to", which is the whole
+                  // question this line exists to answer.
+                  + $"when={policy.WhenLimitReached}";
 
             var freed = ByteSize.Format(result.BytesFreed);
 
