@@ -479,6 +479,13 @@ public partial class MainWindow : Window
             // nothing at all.
             ThemeApplier.Apply(this, _theme?.Read());
 
+            // Icon spacing lands in the SAME kind of place — a resource that
+            // only the markup reads — so it needs the same treatment. Without
+            // this the setting saves, the file records it, and absolutely
+            // nothing moves until the next restart, which is precisely how the
+            // font setting managed to look broken for weeks.
+            ApplyScales(_shell.FontScale, _shell.IconScale);
+
             // Most settings are read at the moment they matter. Sorting and the
             // status bar are not — a listing already on screen was ordered under
             // the old rule, and a visibility binding needs telling.

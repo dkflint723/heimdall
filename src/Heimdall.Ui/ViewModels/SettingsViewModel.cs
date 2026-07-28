@@ -51,6 +51,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
         _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
 
+        // Blank rather than "0": the placeholder says what zero means, and an
+        // empty box invites a value where a literal 0 looks like a setting
+        // someone already made.
+        _iconSpacing = views.Icons.Spacing > 0 ? views.Icons.Spacing.ToString() : "";
+        _compactSpacing = views.Compact.Spacing > 0 ? views.Compact.Spacing.ToString() : "";
+
         var trash = current.Trash;
 
         _deleteOldTrash = trash.DeleteOldFiles;
@@ -179,6 +185,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private string _selectedFont;
 
+    /// <summary>Extra gap between grid tiles, in pixels. Blank means none.</summary>
+    [ObservableProperty] private string _iconSpacing;
+
+    /// <summary>Extra gap around compact cells, in pixels. Blank means none.</summary>
+    [ObservableProperty] private string _compactSpacing;
+
     /// <summary>
     /// Installed families, sorted, with the follow-the-desktop sentinel first.
     ///
@@ -263,6 +275,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     private static int Days(string text)
         => int.TryParse(text, out var value) && value > 0 ? value : 0;
 
+    /// <summary>
+    /// Spacing is clamped rather than rejected: unlike a trash age, zero is a
+    /// perfectly sensible answer here — it is the default — so a bad value
+    /// falls back to none instead of disabling anything.
+    /// </summary>
+    private static int Spacing(string text)
+        => int.TryParse(text, out var value) && value > 0 ? Math.Min(value, 48) : 0;
+
     private static int Percent(string text)
         => int.TryParse(text, out var value) && value is > 0 and <= 100 ? value : 0;
 
@@ -315,6 +335,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             Views = _original.Views with
             {
                 CustomFontFamily = SelectedFont == FollowDesktop ? null : SelectedFont,
+
+                Icons = _original.Views.Icons with { Spacing = Spacing(IconSpacing) },
+                Compact = _original.Views.Compact with { Spacing = Spacing(CompactSpacing) },
 
                 Details = _original.Views.Details with
                 {

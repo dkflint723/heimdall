@@ -327,6 +327,35 @@
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
+          <TextBlock Text="Spacing"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <Grid ColumnDefinitions="*,90">
+            <TextBlock Grid.Column="0" Text="Extra gap between grid tiles (px)"
+                       VerticalAlignment="Center"
+                       FontSize="{DynamicResource FontSizeSmall}"/>
+            <TextBox Grid.Column="1" Text="{Binding IconSpacing}"
+                     PlaceholderText="none"
+                     FontSize="{DynamicResource FontSizeSmall}"/>
+          </Grid>
+
+          <Grid ColumnDefinitions="*,90">
+            <TextBlock Grid.Column="0" Text="Extra gap around compact cells (px)"
+                       VerticalAlignment="Center"
+                       FontSize="{DynamicResource FontSizeSmall}"/>
+            <TextBox Grid.Column="1" Text="{Binding CompactSpacing}"
+                     PlaceholderText="none"
+                     FontSize="{DynamicResource FontSizeSmall}"/>
+          </Grid>
+
+          <TextBlock Text="Blank or 0 leaves the layouts as they are. The value scales with the icon size, so a grid stays proportioned when you zoom. Capped at 48."
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"
+                     TextWrapping="Wrap"/>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
           <TextBlock Text="Details view"
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"/>

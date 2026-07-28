@@ -144,11 +144,23 @@ public sealed record IconsViewSettings
     public int TextWidth { get; init; } = 120;
 
     public int MaximumLines { get; init; } = 2;
+
+    /// <summary>
+    /// Extra gap between tiles, in pixels at 100% scale. Zero is today's
+    /// behaviour: the grid panel already reserves six pixels for the item
+    /// template's margin, and this is added on top of that rather than
+    /// replacing it — a "spacing" of zero that clipped every tile would be a
+    /// setting that appears to be broken.
+    /// </summary>
+    public int Spacing { get; init; }
 }
 
 public sealed record CompactViewSettings
 {
     public int MaximumTextWidth { get; init; } = 180;
+
+    /// <summary>Extra gap around each compact cell, in pixels at 100% scale.</summary>
+    public int Spacing { get; init; }
 }
 
 public sealed record DetailsViewSettings

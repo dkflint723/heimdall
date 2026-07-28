@@ -67,6 +67,31 @@ public static class PaneScale
         yield return ("RowHeight", rowHeight);
         yield return ("TileWidth", Math.Round(tile + 24, 1));
         yield return ("TileHeight", Math.Round(tile + body * 2.9, 1));
+
+        // ---- user-adjustable spacing ----------------------------------------
+        //
+        // Read from AppSettings rather than passed in, matching the static
+        // provider convention used by IconLoader and RowMetadata. It makes this
+        // method impure, which is worth naming: it now depends on when it runs,
+        // so a settings save has to re-apply the metrics.
+        //
+        // **The six-pixel floor is not padding, it is correctness.** The grid
+        // item template carries Margin="3", so a cell exactly TileWidth clips
+        // every tile by that margin — uniformly, which reads as a styling fault
+        // rather than a layout bug. The user's number is EXTRA on top, so zero
+        // means "as it was" instead of "broken".
+        var icons = Settings.AppSettings.Current.Views.Icons.Spacing;
+        var compact = Settings.AppSettings.Current.Views.Compact.Spacing;
+
+        yield return ("TileSpacing", Math.Round(6 + Math.Max(0, icons) * iconScale, 1));
+
+        // Compact gets a CELL larger than its row, and the row is drawn inside
+        // it — rather than growing the row itself, which would stretch the
+        // selection highlight across the gap.
+        yield return ("CompactCellWidth",
+            Math.Round(210 * fontScale + Math.Max(0, compact) * iconScale, 1));
+        yield return ("CompactCellHeight",
+            Math.Round(rowHeight + Math.Max(0, compact) * iconScale, 1));
         yield return ("RailWidth", Math.Round(44 * fontScale, 1));
 
         // Compact columns are sized by the text they hold, not by the icons —
@@ -127,9 +152,26 @@ public static class PaneScale
         });
     }
 
+    /// <summary>
+    /// Spacing is a GLOBAL preference, not a per-pane metric, so it is
+    /// deliberately not written into a pane's own dictionary.
+    ///
+    /// A DynamicResource resolves nearest-outward. If a pane wrote its own
+    /// copy, a settings change would only reach the panes that happened to
+    /// rescale afterwards — every other pane would keep the old spacing with
+    /// nothing to indicate why. Leaving these keys out makes the lookup fall
+    /// through to the application dictionary, which the save handler updates.
+    /// </summary>
+    private static readonly string[] GlobalOnly =
+        ["TileSpacing", "CompactCellWidth", "CompactCellHeight"];
+
     private static void Apply(Control control, PaneViewModel pane)
     {
         foreach (var (key, value) in Compute(pane.FontScale, pane.IconScale))
+        {
+            if (Array.IndexOf(GlobalOnly, key) >= 0) continue;
+
             control.Resources[key] = value;
+        }
     }
 }

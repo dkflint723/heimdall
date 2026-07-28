@@ -1124,26 +1124,33 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="fs:FileEntry">
-                    <Panel Width="{DynamicResource CompactWidth}"
-                           Height="{DynamicResource RowHeight}">
-                      <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
-                              Margin="1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                      <!-- Same edge bar as the details rows: selection must read
-                           by position as well as by colour. -->
-                      <Border Width="3" HorizontalAlignment="Left" Margin="1"
-                              Background="{DynamicResource AccentColour}"
-                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                      <StackPanel Orientation="Horizontal" Spacing="6"
-                                  VerticalAlignment="Center" Margin="8,0,6,0">
-                        <Panel Width="{DynamicResource IconSize}"
-                               Height="{DynamicResource IconSize}">
-                          <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="24"
-                                 Stretch="Uniform"/>
-                        </Panel>
-                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                                   FontSize="{DynamicResource FontSizeBase}"
-                                   TextTrimming="CharacterEllipsis"/>
-                      </StackPanel>
+                    <!-- Outer cell carries the user's spacing; the row inside
+                         keeps its own size, so the selection highlight hugs the
+                         row rather than stretching across the gap. -->
+                    <Panel Width="{DynamicResource CompactCellWidth}"
+                           Height="{DynamicResource CompactCellHeight}">
+                      <Panel Width="{DynamicResource CompactWidth}"
+                             Height="{DynamicResource RowHeight}"
+                             HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
+                                Margin="1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                        <!-- Same edge bar as the details rows: selection must read
+                             by position as well as by colour. -->
+                        <Border Width="3" HorizontalAlignment="Left" Margin="1"
+                                Background="{DynamicResource AccentColour}"
+                                IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    VerticalAlignment="Center" Margin="8,0,6,0">
+                          <Panel Width="{DynamicResource IconSize}"
+                                 Height="{DynamicResource IconSize}">
+                            <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="24"
+                                   Stretch="Uniform"/>
+                          </Panel>
+                          <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                     FontSize="{DynamicResource FontSizeBase}"
+                                     TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                      </Panel>
                     </Panel>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
@@ -1187,7 +1194,7 @@
                     <local:VirtualizingWrapPanel
                         ItemWidth="{DynamicResource TileWidth}"
                         ItemHeight="{DynamicResource TileHeight}"
-                        ItemSpacing="6"/>
+                        ItemSpacing="{DynamicResource TileSpacing}"/>
                   </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
