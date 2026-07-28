@@ -82,6 +82,29 @@ public static class ThumbnailLoader
         var key = $"{path}|{size}";
         if (Cache.TryGetValue(key, out var cached)) return cached;
 
+        // A picture too small to be worth showing gets NO thumbnail, so the
+        // generic mime icon stands instead.
+        //
+        // [stated] the ask: "for images like this favicon.png file, can we make
+        // them just fall back to using a generic image icon instead of trying to
+        // render something such low resolution." A 32 pixel favicon blown up to
+        // fill a 256 pixel tile is mush, and mush reads as a rendering fault
+        // rather than as a small file.
+        //
+        // Measured on the ORIGINAL, never on `source`: the freedesktop cache may
+        // hold an already-upscaled thumbnail, so asking it how big the picture
+        // is would get the answer we are trying to avoid trusting.
+        //
+        // Half the requested size is the floor, which keeps this proportional —
+        // 128 for a tile, 32 for a details row — rather than pinning one number
+        // that is wrong at some other scale. **An unreadable or unknown format
+        // returns null from TryRead and is treated as "big enough", because
+        // declining to thumbnail a format we merely cannot measure would be a
+        // far larger regression than the blur.**
+        if (ImageSize.TryRead(path) is { } natural
+            && Math.Max(natural.Width, natural.Height) < size / 2)
+            return null;
+
         var source = await Provider.GetThumbnailPathAsync(path, size, ct).ConfigureAwait(false);
         if (source is null || ct.IsCancellationRequested) return null;
 

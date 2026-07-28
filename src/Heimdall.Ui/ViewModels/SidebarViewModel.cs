@@ -114,6 +114,37 @@ public sealed partial class SidebarViewModel : ObservableObject
     // Reuses _onFolderChosen, which is how tags and frequent already reach the
     // shell: the store holds the data, the shell decides what a click does.
 
+    /// <summary>
+    /// Where the active pane is, so a row can show that it is the one being
+    /// viewed. Set by the shell — the sidebar has no idea which pane is active
+    /// and should not learn.
+    ///
+    /// Compared with a trailing separator trimmed: `/home/flint` and
+    /// `/home/flint/` are the same place, and a place list that quietly fails to
+    /// highlight Home because of one character would be baffling.
+    /// </summary>
+    public void SetCurrentPath(string? path)
+    {
+        var wanted = Normalise(path);
+
+        foreach (var group in Groups)
+        foreach (var item in group.Places)
+            item.IsCurrent = Normalise(item.Path) == wanted;
+
+        CurrentPath = wanted;
+        OnPropertyChanged(nameof(IsRecentFilesCurrent));
+        OnPropertyChanged(nameof(IsRecentLocationsCurrent));
+    }
+
+    private static string Normalise(string? path)
+        => path is null ? "" : path.Length > 1 ? path.TrimEnd('/') : path;
+
+    /// <summary>The active path, for the fixed entries that are not in Groups.</summary>
+    public string CurrentPath { get; private set; } = "";
+
+    public bool IsRecentFilesCurrent => CurrentPath == VirtualPaths.Files;
+    public bool IsRecentLocationsCurrent => CurrentPath == VirtualPaths.Locations;
+
     [RelayCommand]
     private void OpenRecentFiles() => _onFolderChosen?.Invoke(VirtualPaths.Files);
 
@@ -205,6 +236,11 @@ public sealed partial class SidebarViewModel : ObservableObject
             Groups.Clear();
             foreach (var group in groups)
                 Groups.Add(new PlaceGroupViewModel(group));
+
+            // The rows are new objects, so the current-location mark has to be
+            // re-applied — a refresh would otherwise silently clear the
+            // highlight and leave the sidebar looking like nothing is open.
+            SetCurrentPath(CurrentPath);
         });
     }
 
@@ -219,8 +255,15 @@ public sealed class PlaceGroupViewModel(PlaceGroup group)
         group.Places.Select(p => new PlaceItemViewModel(p)).ToList();
 }
 
-public sealed class PlaceItemViewModel(Place place)
+public sealed partial class PlaceItemViewModel(Place place) : ObservableObject
 {
+    /// <summary>
+    /// True when this place is what the active pane is showing, which draws the
+    /// accent bar. Observable rather than computed once, because navigation
+    /// changes it long after the list was built.
+    /// </summary>
+    [ObservableProperty] private bool _isCurrent;
+
     public string Id { get; } = place.Id;
     public string Label { get; } = place.Label;
     public string Path { get; } = place.Path;

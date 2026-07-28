@@ -19,6 +19,14 @@ public sealed partial class PaneGroupViewModel : ObservableObject
 {
     private readonly Func<PaneViewModel> _createPane;
 
+    /// <summary>
+    /// Raised when the active tab's location changes, or a different tab
+    /// becomes active. The shell uses it to keep the sidebar's highlight on the
+    /// place being viewed — this group has no idea whether it is the active
+    /// side, and should not learn.
+    /// </summary>
+    public event EventHandler? LocationChanged;
+
     public PaneGroupViewModel(Func<PaneViewModel> createPane) => _createPane = createPane;
 
     public ObservableCollection<PaneViewModel> Tabs { get; } = new();
@@ -44,6 +52,7 @@ public sealed partial class PaneGroupViewModel : ObservableObject
         }
 
         RefreshInfo();
+        LocationChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // ---- details panel ----------------------------------------------------
@@ -84,6 +93,9 @@ public sealed partial class PaneGroupViewModel : ObservableObject
         if (e.PropertyName is nameof(PaneViewModel.SelectedEntry)
                            or nameof(PaneViewModel.Summary))
             RefreshInfo();
+
+        if (e.PropertyName is nameof(PaneViewModel.CurrentPath))
+            LocationChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

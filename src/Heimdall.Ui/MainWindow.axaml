@@ -1455,6 +1455,11 @@
                                     HorizontalContentAlignment="Left"
                                     Padding="12,7" Opacity="{Binding Opacity}">
                               <StackPanel>
+                                <!-- Which place is open, shown the same way the
+                                     settings dialog shows the current page: a
+                                     3px accent bar at the left edge. Same
+                                     geometry, same brush, so the two read as one
+                                     idea rather than two. -->
                                 <!-- The icon shares a LINE with the label rather
                                      than centring against the whole row. A drive
                                      row is three lines tall — label, bar, free
@@ -1464,6 +1469,9 @@
                                      edge as the label at any font size, which a
                                      hardcoded offset would not survive. -->
                                 <DockPanel>
+                                  <Border DockPanel.Dock="Left" Width="3" Margin="0,2,6,2" CornerRadius="2"
+                                        Background="{DynamicResource AccentColour}"
+                                        IsVisible="{Binding IsCurrent}"/>
                                   <Path DockPanel.Dock="Left" Margin="0,0,9,0"
                                         Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                                         VerticalAlignment="Bottom"
@@ -1707,6 +1715,9 @@
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Left" Padding="12,7">
                     <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="3" Margin="0,2,6,2" CornerRadius="2"
+                              Background="{DynamicResource AccentColour}"
+                              IsVisible="{Binding Sidebar.IsRecentFilesCurrent}"/>
                       <Path DockPanel.Dock="Left" Margin="0,0,9,0"
                             Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                             VerticalAlignment="Center"
@@ -1725,6 +1736,9 @@
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Left" Padding="12,7">
                     <DockPanel>
+                      <Border DockPanel.Dock="Left" Width="3" Margin="0,2,6,2" CornerRadius="2"
+                              Background="{DynamicResource AccentColour}"
+                              IsVisible="{Binding Sidebar.IsRecentLocationsCurrent}"/>
                       <Path DockPanel.Dock="Left" Margin="0,0,9,0"
                             Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                             VerticalAlignment="Center"

@@ -738,6 +738,13 @@ public sealed partial class ShellViewModel : ObservableObject
     /// they matter and so need nothing; sorting is the exception, because a
     /// listing already on screen was ordered under the old rule.
     /// </summary>
+    /// <summary>
+    /// Keeps the sidebar's highlight on the place the active pane is showing.
+    /// The shell is the only thing that knows which pane that is, which is the
+    /// same reason it owns the navigation callback.
+    /// </summary>
+    public void SyncSidebarLocation() => Sidebar.SetCurrentPath(ActiveTab?.CurrentPath);
+
     public void OnSettingsChanged()
     {
         OnPropertyChanged(nameof(ShowStatusBar));
@@ -777,6 +784,8 @@ public sealed partial class ShellViewModel : ObservableObject
     private PaneGroupViewModel CreateGroup()
     {
         var group = new PaneGroupViewModel(NewPane);
+
+        group.LocationChanged += (_, _) => SyncSidebarLocation();
 
         // A split created later must get the provider too, or its panel would
         // silently have nothing to show.
