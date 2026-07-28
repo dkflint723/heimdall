@@ -472,12 +472,37 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         if (count == 0) return null;
 
+        // NO ORIGIN — the list itself has focus rather than a row, which is
+        // the normal state right after clicking empty space. Arithmetic on
+        // `current = -1` produced item 7 for PageDown (`-1 + _columns`), which
+        // reads as random. Measured 27 July 2026:
+        // `nav: PageDown from=null current=-1` then `nav-target: 7`.
+        //
+        // Avalonia's VirtualizingStackPanel REFUSES this case outright —
+        // `GetControl` returns null when `from` is null and the direction is
+        // not First or Last. Selecting the first item is the friendlier
+        // reading of "I clicked into the list and pressed a key", and matches
+        // what Explorer does; flipping to Avalonia's behaviour is changing
+        // this one return to `null`.
+        if (current < 0
+            && direction is not (NavigationDirection.First or NavigationDirection.Last))
+            return ScrollIntoView(0);
+
         var target = direction switch
         {
             NavigationDirection.First => 0,
             NavigationDirection.Last => count - 1,
             NavigationDirection.Left or NavigationDirection.Previous => current - 1,
             NavigationDirection.Right or NavigationDirection.Next => current + 1,
+            // PageUp/PageDown are MEASURED to be nearly dead here. Once a row
+            // has focus the ScrollViewer claims them and pages the viewport by
+            // its own height (viewport 635..1275, then 1275..1916, …) with no
+            // `nav:` line at all — and it moves the VIEW without moving focus
+            // or selection. This panel sees them only on the first press,
+            // while the list itself still holds focus, and that case is now
+            // handled above. Left mapped rather than removed because nothing
+            // has measured what happens in a folder short enough not to
+            // scroll.
             NavigationDirection.Up or NavigationDirection.PageUp => current - _columns,
             NavigationDirection.Down or NavigationDirection.PageDown => current + _columns,
             _ => -1,
