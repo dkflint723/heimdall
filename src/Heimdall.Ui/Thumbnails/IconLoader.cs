@@ -179,9 +179,29 @@ public static class IconLoader
     {
         null => "none",
         ISolidColorBrush solid => solid.Color.ToString(),
+
+        // The AXIS and its unit, not just the stop count. Which shape a
+        // gradient is painted into, and in what units, is the whole question
+        // when a fade lands in the wrong place — and printing "gradient(2
+        // stops)" answered none of it. Matched on the concrete types this file
+        // constructs, so the interface names cannot be wrong.
+        LinearGradientBrush linear =>
+            $"linear {Where(linear.StartPoint)}->{Where(linear.EndPoint)} [{Stops(linear)}]",
+
+        RadialGradientBrush radial =>
+            $"radial centre {Where(radial.Center)} [{Stops(radial)}]",
+
         IGradientBrush gradient => $"gradient({gradient.GradientStops.Count} stops)",
         _ => brush.GetType().Name,
     };
+
+    private static string Where(RelativePoint point)
+        => $"({point.Point.X:0.##},{point.Point.Y:0.##} "
+           + $"{(point.Unit == RelativeUnit.Absolute ? "abs" : "rel")})";
+
+    private static string Stops(IGradientBrush gradient)
+        => string.Join(" ", gradient.GradientStops
+            .Select(stop => $"{stop.Offset:0.##}:{stop.Color}"));
 
     // ---- stylesheet ------------------------------------------------------
 
