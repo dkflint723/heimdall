@@ -1,6 +1,11 @@
 using Avalonia;
 using Avalonia.Media;
-using Avalonia.Controls.Shapes;
+
+// `Path` is ambiguous in this project: implicit usings pull in System.IO, and
+// the shape type has the same name. An alias rather than fully qualifying every
+// use — there are five, and the file has nothing to do with file paths.
+// Any new file that draws a shape will hit this.
+using Path = Avalonia.Controls.Shapes.Path;
 
 namespace Heimdall.Ui.Thumbnails;
 
