@@ -1,0 +1,316 @@
+using System.Collections.Specialized;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Layout;
+
+namespace Heimdall.Ui;
+
+/// <summary>
+/// A wrapping panel that realizes only the rows on screen.
+///
+/// This is the last real gap against Dolphin: `WrapPanel` realizes a container
+/// for every item it is given, so the tile layouts refuse anything over
+/// `UnvirtualizedLimit` (5,000) while Dolphin shows a 200,000-item folder in
+/// icon view without complaint.
+///
+/// **Uniform tile size is the whole trick.** Every tile is exactly
+/// <see cref="ItemWidth"/> by <see cref="ItemHeight"/>, so the row containing
+/// item N is arithmetic rather than a measurement — nothing off screen has to be
+/// measured, which is what makes wrapping virtualizable at all. Heimdall already
+/// has those numbers: `PaneScale` publishes `TileWidth` and `TileHeight`.
+///
+/// Scrolling is driven by <see cref="Layoutable.EffectiveViewportChanged"/>
+/// rather than by implementing `ILogicalScrollable`, which the base class
+/// documentation offers as the simpler of the two routes.
+///
+/// The container lifecycle follows `ItemContainerGenerator`'s documented
+/// protocol exactly: NeedsContainer, CreateContainer, PrepareItemContainer,
+/// AddInternalChild, ItemContainerPrepared — and on the way out
+/// ClearItemContainer then into a pool keyed by the recycle key.
+/// **Recycled containers stay in the panel with IsVisible false** rather than
+/// being removed. The generator's docs require it, and it is also what keeps the
+/// attached-property row decoration attached.
+/// </summary>
+public class VirtualizingWrapPanel : VirtualizingPanel
+{
+    public static readonly StyledProperty<double> ItemWidthProperty =
+        AvaloniaProperty.Register<VirtualizingWrapPanel, double>(nameof(ItemWidth), 100);
+
+    public static readonly StyledProperty<double> ItemHeightProperty =
+        AvaloniaProperty.Register<VirtualizingWrapPanel, double>(nameof(ItemHeight), 100);
+
+    /// <summary>Remembers how each container may be pooled. An attached property
+    /// rather than a dictionary, so it travels with the container.</summary>
+    private static readonly AttachedProperty<object?> RecycleKeyProperty =
+        AvaloniaProperty.RegisterAttached<VirtualizingWrapPanel, Control, object?>("RecycleKey");
+
+    /// <summary>Marks an item that IS its own container. Those can never be
+    /// recycled or cleared — the generator's docs are explicit about it.</summary>
+    private static readonly object ItemIsItsOwnContainer = new();
+
+    private readonly Dictionary<int, Control> _realized = [];
+    private readonly Dictionary<object, Stack<Control>> _pool = [];
+
+    private Rect _viewport;
+    private int _columns = 1;
+
+    public VirtualizingWrapPanel()
+    {
+        EffectiveViewportChanged += OnEffectiveViewportChanged;
+    }
+
+    public double ItemWidth
+    {
+        get => GetValue(ItemWidthProperty);
+        set => SetValue(ItemWidthProperty, value);
+    }
+
+    public double ItemHeight
+    {
+        get => GetValue(ItemHeightProperty);
+        set => SetValue(ItemHeightProperty, value);
+    }
+
+    private void OnEffectiveViewportChanged(object? sender, EffectiveViewportChangedEventArgs e)
+    {
+        _viewport = e.EffectiveViewport;
+
+        // Which rows should exist is a measure concern: arrange cannot create
+        // containers, only place ones that are already there.
+        InvalidateMeasure();
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var items = Items;
+
+        if (items.Count == 0)
+        {
+            RecycleAll();
+            return default;
+        }
+
+        var itemWidth = Math.Max(1, ItemWidth);
+        var itemHeight = Math.Max(1, ItemHeight);
+
+        _columns = Math.Max(1, (int)(availableSize.Width / itemWidth));
+
+        var rows = (items.Count + _columns - 1) / _columns;
+        var extent = new Size(_columns * itemWidth, rows * itemHeight);
+
+        // On the first pass the viewport is still empty, so fall back to the
+        // space offered. Without this nothing is realized and the panel reports
+        // an extent it never fills.
+        var top = _viewport.Height > 0 ? _viewport.Top : 0;
+        var bottom = _viewport.Height > 0 ? _viewport.Bottom : availableSize.Height;
+
+        // A row of slack either side, so scrolling does not expose a blank band
+        // before the next measure catches up.
+        var firstRow = Math.Max(0, (int)(top / itemHeight) - 1);
+        var lastRow = Math.Min(rows - 1, (int)(bottom / itemHeight) + 1);
+
+        var first = firstRow * _columns;
+        var last = Math.Min(items.Count - 1, ((lastRow + 1) * _columns) - 1);
+
+        Realize(first, last, items);
+
+        var tile = new Size(itemWidth, itemHeight);
+
+        foreach (var container in _realized.Values) container.Measure(tile);
+
+        return extent;
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        var itemWidth = Math.Max(1, ItemWidth);
+        var itemHeight = Math.Max(1, ItemHeight);
+
+        foreach (var (index, container) in _realized)
+        {
+            var row = index / _columns;
+            var column = index % _columns;
+
+            container.Arrange(new Rect(
+                column * itemWidth, row * itemHeight, itemWidth, itemHeight));
+        }
+
+        return finalSize;
+    }
+
+    /// <summary>
+    /// Brings the realized set to exactly the given range. Anything outside goes
+    /// back to the pool FIRST, so those containers are available to be reused
+    /// rather than newly created.
+    /// </summary>
+    private void Realize(int first, int last, IReadOnlyList<object?> items)
+    {
+        foreach (var index in _realized.Keys.Where(i => i < first || i > last).ToList())
+            Recycle(index);
+
+        for (var index = first; index <= last; index++)
+        {
+            if (_realized.ContainsKey(index)) continue;
+
+            if (GetOrCreate(items[index], index) is { } container)
+                _realized[index] = container;
+        }
+    }
+
+    private Control? GetOrCreate(object? item, int index)
+    {
+        var generator = ItemContainerGenerator;
+        if (generator is null) return null;
+
+        if (!generator.NeedsContainer(item, index, out var recycleKey))
+        {
+            // The item IS the container. It can never be recycled, so it is
+            // prepared exactly once and afterwards merely shown again.
+            if (item is not Control own) return null;
+
+            if (own.GetValue(RecycleKeyProperty) != ItemIsItsOwnContainer)
+            {
+                own.SetValue(RecycleKeyProperty, ItemIsItsOwnContainer);
+                generator.PrepareItemContainer(own, item, index);
+                AddInternalChild(own);
+                generator.ItemContainerPrepared(own, item, index);
+            }
+
+            own.IsVisible = true;
+            return own;
+        }
+
+        if (recycleKey is not null
+            && _pool.TryGetValue(recycleKey, out var pooled)
+            && pooled.Count > 0)
+        {
+            var reused = pooled.Pop();
+
+            reused.IsVisible = true;
+            generator.PrepareItemContainer(reused, item, index);
+            generator.ItemContainerPrepared(reused, item, index);
+
+            return reused;
+        }
+
+        var created = generator.CreateContainer(item, index, recycleKey);
+
+        created.SetValue(RecycleKeyProperty, recycleKey);
+
+        generator.PrepareItemContainer(created, item, index);
+        AddInternalChild(created);
+        generator.ItemContainerPrepared(created, item, index);
+
+        return created;
+    }
+
+    private void Recycle(int index)
+    {
+        if (!_realized.Remove(index, out var container)) return;
+
+        var recycleKey = container.GetValue(RecycleKeyProperty);
+
+        // An item that is its own container may not be cleared or pooled, only
+        // hidden.
+        if (ReferenceEquals(recycleKey, ItemIsItsOwnContainer))
+        {
+            container.IsVisible = false;
+            return;
+        }
+
+        ItemContainerGenerator?.ClearItemContainer(container);
+
+        if (recycleKey is null)
+        {
+            RemoveInternalChild(container);
+            return;
+        }
+
+        container.IsVisible = false;
+
+        if (!_pool.TryGetValue(recycleKey, out var pooled))
+            _pool[recycleKey] = pooled = new Stack<Control>();
+
+        pooled.Push(container);
+    }
+
+    private void RecycleAll()
+    {
+        foreach (var index in _realized.Keys.ToList()) Recycle(index);
+    }
+
+    protected override void OnItemsChanged(
+        IReadOnlyList<object?> items, NotifyCollectionChangedEventArgs e)
+    {
+        // Deliberately blunt: everything realized goes back and the next measure
+        // rebuilds. Index-shuffling on insert and remove is where
+        // VirtualizingStackPanel spends much of its complexity, and this panel's
+        // items come from a listing that is reloaded wholesale anyway.
+        RecycleAll();
+        InvalidateMeasure();
+    }
+
+    // ---- the abstract contract ---------------------------------------------
+
+    protected internal override Control? ContainerFromIndex(int index)
+        => _realized.TryGetValue(index, out var container) ? container : null;
+
+    protected internal override int IndexFromContainer(Control container)
+    {
+        foreach (var (index, realized) in _realized)
+            if (ReferenceEquals(realized, container)) return index;
+
+        return -1;
+    }
+
+    protected internal override IEnumerable<Control>? GetRealizedContainers()
+        => _realized.Values;
+
+    protected internal override Control? ScrollIntoView(int index)
+    {
+        if (index < 0 || index >= Items.Count) return null;
+
+        var itemWidth = Math.Max(1, ItemWidth);
+        var itemHeight = Math.Max(1, ItemHeight);
+        var row = index / Math.Max(1, _columns);
+
+        this.BringIntoView(new Rect(0, row * itemHeight, itemWidth, itemHeight));
+
+        return ContainerFromIndex(index);
+    }
+
+    /// <summary>
+    /// Keyboard navigation. Left and right move by one; up and down move by a
+    /// whole row — the only part that differs from a stack panel, and the reason
+    /// this cannot simply reuse one.
+    /// </summary>
+    protected override IInputElement? GetControl(
+        NavigationDirection direction, IInputElement? from, bool wrap)
+    {
+        var count = Items.Count;
+        if (count == 0) return null;
+
+        var current = from is Control control ? IndexFromContainer(control) : -1;
+
+        var target = direction switch
+        {
+            NavigationDirection.First => 0,
+            NavigationDirection.Last => count - 1,
+            NavigationDirection.Left or NavigationDirection.Previous => current - 1,
+            NavigationDirection.Right or NavigationDirection.Next => current + 1,
+            NavigationDirection.Up or NavigationDirection.PageUp => current - _columns,
+            NavigationDirection.Down or NavigationDirection.PageDown => current + _columns,
+            _ => -1,
+        };
+
+        if (target < 0 || target >= count)
+        {
+            if (!wrap) return null;
+
+            target = target < 0 ? count - 1 : 0;
+        }
+
+        return ScrollIntoView(target);
+    }
+}
