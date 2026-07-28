@@ -1352,7 +1352,15 @@
           </DockPanel>
         </Border>
 
-        <ScrollViewer>
+        <!-- Three rows, not one scrolling column.
+             [stated] tags and frequent stay visible permanently and share the
+             leftover space, sizing with the window; each scrolls on its own when
+             it runs out of room. Star rows mean neither can be squeezed to
+             nothing by a long places list, and MinHeight keeps a heading from
+             appearing with no room under it. -->
+        <Grid RowDefinitions="Auto,*,*">
+
+          <ScrollViewer Grid.Row="0" MaxHeight="320">
           <StackPanel Margin="0,0,0,12">
 
             <!-- Search results take over the sidebar while a query is live,
@@ -1591,13 +1599,25 @@
                   </ItemsControl>
                 </StackPanel>
 
-                <!-- Tags. Moved down here from beside places at the user's
-                     request; the rationale for the old position was that tags
-                     are a way of organising and belonged with the places. -->
-                <StackPanel Margin="0,10,0,0" IsVisible="{Binding Sidebar.HasTags}">
-                  <TextBlock Text="tags" Margin="12,0,12,4"
-                             FontSize="{DynamicResource FontSizeTiny}"
-                             Foreground="{DynamicResource ViewDimText}"/>
+              </StackPanel>
+
+            </StackPanel>
+          </StackPanel>
+          </ScrollViewer>
+
+          <!-- Always present, even when empty: a heading with a quiet "nothing
+               yet" reads as a place that will fill up, whereas a section that
+               vanishes reads as a feature that is missing. -->
+          <DockPanel Grid.Row="1" Margin="0,10,0,0" MinHeight="90">
+            <TextBlock DockPanel.Dock="Top" Text="tags" Margin="12,0,12,4"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"/>
+            <TextBlock DockPanel.Dock="Top" Text="none yet" Margin="12,0,12,4"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}" Opacity="0.6"
+                       IsVisible="{Binding !Sidebar.HasTags}"/>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
                   <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:TagOption">
@@ -1633,15 +1653,20 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                </StackPanel>
+              </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
 
-                <!-- Folders opened often enough to be a habit. Hidden entirely
-                     until there is something to show, so a new install is not
-                     staring at an empty heading. -->
-                <StackPanel Margin="0,10,0,0" IsVisible="{Binding Sidebar.HasFrequent}">
-                  <TextBlock Text="frequent" Margin="12,0,12,4"
-                             FontSize="{DynamicResource FontSizeTiny}"
-                             Foreground="{DynamicResource ViewDimText}"/>
+          <DockPanel Grid.Row="2" Margin="0,10,0,0" MinHeight="90">
+            <TextBlock DockPanel.Dock="Top" Text="frequent" Margin="12,0,12,4"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"/>
+            <TextBlock DockPanel.Dock="Top" Text="none yet" Margin="12,0,12,4"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}" Opacity="0.6"
+                       IsVisible="{Binding !Sidebar.HasFrequent}"/>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+              <StackPanel>
                   <ItemsControl ItemsSource="{Binding Sidebar.Frequent}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:VisitedOption">
@@ -1657,12 +1682,11 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                </StackPanel>
               </StackPanel>
+            </ScrollViewer>
+          </DockPanel>
 
-            </StackPanel>
-          </StackPanel>
-        </ScrollViewer>
+        </Grid>
 
       </DockPanel>
     </Border>
