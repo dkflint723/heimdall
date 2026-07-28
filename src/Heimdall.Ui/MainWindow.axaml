@@ -678,6 +678,24 @@
                   </Style>
                 </MenuItem.Styles>
               </MenuItem>
+              <!-- Built-in kinds, so this works on a machine with an empty
+                   Templates folder — which is every machine by default. The
+                   template list above stays for anything the user has put
+                   there. -->
+              <MenuItem Header="New file" ItemsSource="{Binding ActiveTab.NewFileKinds}">
+                <MenuItem.ItemTemplate>
+                  <DataTemplate x:DataType="fs:NewFileKind">
+                    <TextBlock Text="{Binding Label}"/>
+                  </DataTemplate>
+                </MenuItem.ItemTemplate>
+                <MenuItem.Styles>
+                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:NewFileKind">
+                    <Setter Property="Command"
+                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFileCommand}"/>
+                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                  </Style>
+                </MenuItem.Styles>
+              </MenuItem>
               <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
               <Separator/>
               <MenuItem Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"

@@ -1153,13 +1153,73 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         try
         {
             Directory.CreateDirectory(target);
-            await RefreshAsync().ConfigureAwait(false);
+            await RefreshAsync().ConfigureAwait(true);
+
+            // Straight into rename — the same hand-off NewFromTemplateAsync has
+            // always done, and for the same reason: "New folder" is a placeholder
+            // nobody wants to keep, and making them find it and press F2 is a
+            // second step for something they already told us they were doing.
+            BeginRenameOf(target);
         }
         catch (Exception ex)
         {
             await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
         }
     }
+
+    /// <summary>Selects a freshly created path and opens the rename prompt on
+    /// it. Shared by new folder, new file and new-from-template.</summary>
+    private void BeginRenameOf(string path)
+    {
+        var created = _all.FirstOrDefault(e => e.FullPath == path);
+
+        if (created.FullPath is not null) RenameRequested?.Invoke(this, created);
+    }
+
+    /// <summary>
+    /// Creates an empty file of the chosen kind and renames it immediately.
+    /// </summary>
+    [RelayCommand]
+    public async Task NewFileAsync(NewFileKind? kind)
+    {
+        if (kind is null) return;
+
+        try
+        {
+            var target = Path.Combine(CurrentPath, "New file" + kind.Extension);
+            var unique = target;
+            var counter = 2;
+
+            while (File.Exists(unique) || Directory.Exists(unique))
+            {
+                unique = Path.Combine(CurrentPath,
+                    $"New file {counter++}{kind.Extension}");
+            }
+
+            await Task.Run(() => File.Create(unique).Dispose()).ConfigureAwait(true);
+
+            // A script nobody can run is half a file. Guarded because
+            // SetUnixFileMode throws on Windows rather than being ignored.
+            if (kind.Executable && OperatingSystem.IsLinux())
+            {
+                File.SetUnixFileMode(unique,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                    | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                    | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
+
+            await RefreshAsync().ConfigureAwait(true);
+
+            BeginRenameOf(unique);
+        }
+        catch (Exception ex)
+        {
+            Status = $"could not create file: {ex.Message}";
+        }
+    }
+
+    /// <summary>The built-in kinds, for the menu.</summary>
+    public IReadOnlyList<NewFileKind> NewFileKinds => FileKinds.Common;
 
     private static string XdgDeduplicate(string path)
     {
@@ -1642,8 +1702,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             await Task.Run(() => File.Copy(template.Path, unique)).ConfigureAwait(true);
             await RefreshAsync().ConfigureAwait(true);
 
-            var created = _all.FirstOrDefault(e => e.FullPath == unique);
-            if (created.FullPath is not null) RenameRequested?.Invoke(this, created);
+            BeginRenameOf(unique);
         }
         catch (Exception ex)
         {
