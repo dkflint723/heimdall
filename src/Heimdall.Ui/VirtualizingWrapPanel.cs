@@ -247,30 +247,58 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         return created;
     }
 
-    private void Recycle(int index)
+    /// <summary>
+    /// Returns a container to the pool. A focused container is KEPT unless
+    /// <paramref name="force"/> — see the comment inside.
+    /// </summary>
+    private void Recycle(int index, bool force = false)
     {
-        if (!_realized.Remove(index, out var container)) return;
+        if (!_realized.TryGetValue(index, out var container)) return;
 
-        // TEMPORARY — separates two explanations that the 27 July log cannot.
+        // KEEPING THE FOCUSED CONTAINER REALIZED IS REQUIRED, NOT AN
+        // OPTIMISATION. Recycling hides the control and clears its item, and
+        // focus dies with it — leaving the window with no focused element at
+        // all, so every subsequent keystroke does nothing until the list is
+        // clicked again.
         //
-        // After a successful Home or End, the NEXT keypress reports
-        // `focus=null` and does nothing until the list is clicked again. Two
-        // mechanisms fit that log equally well:
+        // Measured 27 July 2026, and the ordering is the whole story:
         //
-        //   1. the container ScrollIntoView just realized took focus, and the
-        //      following measure — still running against the OLD viewport —
-        //      recycled it, destroying focus;
-        //   2. the scroll BringIntoView performed dropped focus by itself.
+        //   nav-target: 99999          ScrollIntoView realized it and returned
+        //                              it; the ListBox focused it
+        //   recycle-focused: 99999     the very next measure recycled it
+        //   wrap: range=0..47   viewport=-6..635        <- STALE viewport
+        //   wrap: range=99952..99999 viewport=1631866.. <- real one, too late
+        //   key: Home focus=null                       <- focus is gone
         //
-        // They are CONFOUNDED in that log: every case where focus went null
-        // also scrolled, and the one case where focus survived on a
-        // ListBoxItem (`nav: Last` onto an already-realized 99999) neither
-        // scrolled nor recycled. Nothing there distinguishes them.
+        // BringIntoView only SCHEDULES the scroll, so the measure that
+        // ScrollIntoView triggers still sees the old viewport and computes a
+        // range that excludes the row it just realized. Two mechanisms fitted
+        // that symptom — this one, and the scroll dropping focus by itself —
+        // and `recycle-focused` was added to separate them. It fired, so the
+        // scroll is not implicated.
         //
-        // This line does: if it prints, recycling is taking the focus. If
-        // focus still goes null and this never prints, the scroll is.
+        // This also covers the ordinary case the nav bug happens to expose:
+        // focus a tile, scroll it off screen, and focus should still be there.
+        // The container is recycled by the next measure that finds it out of
+        // range once focus has moved on, so nothing leaks.
+        //
+        // `IsFocused` rather than a focus-within test because the focused
+        // element measured here IS the container (`focus=ListBoxItem`), and
+        // nothing in the grid item template is focusable. Revisit if a
+        // template ever gains a focusable child.
+        if (!force && container.IsFocused)
+        {
+            Console.Error.WriteLine($"[heimdall] recycle-focused: index={index} kept=True");
+            return;
+        }
+
+        _realized.Remove(index);
+
+        // TEMPORARY, alongside nav-target. Prints only for the container that
+        // holds focus, so it stays silent in normal scrolling. `kept=False`
+        // means something forced the recycle past the guard above.
         if (container.IsFocused)
-            Console.Error.WriteLine($"[heimdall] recycle-focused: index={index}");
+            Console.Error.WriteLine($"[heimdall] recycle-focused: index={index} kept=False");
 
         var recycleKey = container.GetValue(RecycleKeyProperty);
 
@@ -298,9 +326,15 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         pooled.Push(container);
     }
 
+    /// <summary>
+    /// Forces every container back, focused or not. Used when the items
+    /// themselves change: the focused item may no longer exist, so keeping its
+    /// container would keep stale content on screen — a worse fault than
+    /// losing focus.
+    /// </summary>
     private void RecycleAll()
     {
-        foreach (var index in _realized.Keys.ToList()) Recycle(index);
+        foreach (var index in _realized.Keys.ToList()) Recycle(index, force: true);
     }
 
     protected override void OnItemsChanged(
