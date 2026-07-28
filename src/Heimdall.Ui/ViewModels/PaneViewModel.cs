@@ -1036,7 +1036,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // After the load, and only if it worked — a path that could not be read
         // is not somewhere the user goes, and counting it would push dead
         // folders up the list.
-        if (IsLoaded)
+        // Recording the recent listing itself would be circular: it would put
+        // "recent locations" at the top of recent locations.
+        if (IsLoaded && !RecentPaths.IsRecent(path))
         {
             Visits?.Record(path);
             Recents?.Record(path, RecentKind.Folder);
@@ -1602,6 +1604,17 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         Breadcrumbs.Clear();
         if (string.IsNullOrEmpty(CurrentPath)) return;
 
+        // A recent listing has no hierarchy to walk up, so it gets one crumb
+        // naming itself. Splitting it on '/' would produce "heimdall:recent"
+        // and "files" as if they were folders.
+        if (RecentPaths.IsRecent(CurrentPath))
+        {
+            Breadcrumbs.Add(new PathSegment(
+                RecentPaths.Label(CurrentPath), CurrentPath,
+                new RelayCommand(() => { }), true));
+            return;
+        }
+
         var parts = CurrentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var accumulated = "";
 
@@ -1841,7 +1854,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrEmpty(path)) return;
 
-        if (ShowColumnStrip)
+        // The column strip walks a folder hierarchy, and a recent listing has
+        // none. Guarded here rather than inside Miller, because this is the
+        // only caller that can know the path is virtual.
+        if (ShowColumnStrip && !RecentPaths.IsRecent(path))
             await Miller.ShowAsync(path).ConfigureAwait(false);
 
         await LoadListingAsync(path).ConfigureAwait(false);
@@ -1889,6 +1905,14 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         var options = new ListingOptions { IncludeHidden = ShowHidden, BatchSize = 500 };
 
+        // The ONE branch that makes a recent listing possible. Both sources are
+        // the same IAsyncEnumerable shape, so everything below — batching, the
+        // generation guard, sorting, filtering, the status line — runs
+        // unchanged and knows nothing about where the rows came from.
+        var source = RecentPaths.IsRecent(path)
+            ? RecentListing.EnumerateAsync(Recents, path, ct)
+            : _fs.EnumerateAsync(path, options, ct);
+
         var sw = Stopwatch.StartNew();
         var sinceFlush = Stopwatch.StartNew();
         var pending = new List<FileEntry>(4096);
@@ -1896,7 +1920,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
-            await foreach (var batch in _fs.EnumerateAsync(path, options, ct).ConfigureAwait(false))
+            await foreach (var batch in source.ConfigureAwait(false))
             {
                 pending.AddRange(batch);
 
@@ -1949,7 +1973,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 if (generation != _generation) return;
 
                 if (FilterText.Length > 0) ApplyFilter(); else ResortInPlace();
-                StartWatching(path);
+
+                // Nothing to watch: there is no directory behind a recent
+                // listing. Skipped explicitly rather than left to fail inside
+                // StartWatching's catch, because a silently swallowed failure
+                // is exactly the kind of thing that reads as working.
+                if (!RecentPaths.IsRecent(path)) StartWatching(path);
                 sw.Stop();
 
                 // Cleared, NOT set to the count. Summary already shows
