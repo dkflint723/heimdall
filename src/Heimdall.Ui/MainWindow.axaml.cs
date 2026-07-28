@@ -299,10 +299,35 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Walks up from whatever was clicked to find which pane group owns it.
-    /// The two sides are the same template, so there is no named control to
-    /// compare against — the DataContext is the only distinguishing thing.
+    /// Focuses the enclosing ListBox when a press lands inside it but not on an
+    /// item, so the keyboard has somewhere to start.
     /// </summary>
+    private static void FocusListIfEmptySpace(object? source)
+    {
+        ListBox? list = null;
+
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            // Landed on a row — it will take focus itself.
+            if (visual is ListBoxItem) return;
+
+            if (visual is ListBox found) { list = found; break; }
+        }
+
+        var focused = list is { IsFocused: false } && list.Focus();
+
+        // TEMPORARY. This method is already in the build where Home/End still
+        // fail after clicking empty space, so one of its three steps is not
+        // doing what it claims: it may not find a ListBox, or Focus() may
+        // refuse. The nav: log shows the panel is never reached in that case,
+        // so the key stops somewhere before it.
+        Console.Error.WriteLine(
+            $"[heimdall] focus: list={(list is null ? "none" : "found")} "
+            + $"wasFocused={list?.IsFocused} focusCall={focused} "
+            + $"focusable={list?.Focusable}");
+    }
+
     private void OnPointerPressedAnywhere(object? sender, Avalonia.Input.PointerPressedEventArgs e)
     {
         // Ctrl + wheel click resets the pane under the pointer, completing the
@@ -327,6 +352,19 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+
+        // A click on empty listing space gives the LIST keyboard focus.
+        //
+        // Without this, pressing Home or End after clicking below the tiles did
+        // nothing: keyboard navigation begins at the focused element, and the
+        // press had focused the scroll area rather than the list, so the key
+        // never reached the panel at all. Confirmed with a diagnostic — the
+        // panel's navigation was called only when a ListBoxItem already had
+        // focus, and worked correctly every time it was.
+        //
+        // Only when the press did NOT land on an item: an item click focuses
+        // itself, and stealing that would break selection.
+        FocusListIfEmptySpace(e.Source);
 
         // Recorded here so a drag can start on the first move past the
         // threshold rather than on the press itself.
