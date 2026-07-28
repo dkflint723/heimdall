@@ -369,9 +369,20 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         NavigationDirection direction, IInputElement? from, bool wrap)
     {
         var count = Items.Count;
-        if (count == 0) return null;
 
         var current = from is Control control ? IndexFromContainer(control) : -1;
+
+        // TEMPORARY. Details (Avalonia's own VirtualizingStackPanel) handles
+        // Home/End after clicking empty space; grid does not. First and Last
+        // here ignore `current` entirely, so if the key reached this method it
+        // would work regardless of selection — which suggests it does not
+        // arrive. That is a guess, and this line settles it: no output means
+        // the key never gets here and the problem is focus, not navigation.
+        Console.Error.WriteLine(
+            $"[heimdall] nav: {direction} from={from?.GetType().Name ?? "null"} "
+            + $"current={current} count={count} wrap={wrap}");
+
+        if (count == 0) return null;
 
         var target = direction switch
         {
