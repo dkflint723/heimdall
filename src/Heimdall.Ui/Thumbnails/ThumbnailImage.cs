@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace Heimdall.Ui.Thumbnails;
 
@@ -35,6 +36,39 @@ public static class ThumbnailImage
     public static void SetSize(Image image, int value) => image.SetValue(SizeProperty, value);
     public static int GetSize(Image image) => image.GetValue(SizeProperty);
 
+    /// <summary>
+    /// Shows or hides the thumbnail AND the icon it stands in for.
+    ///
+    /// **A tile shows one or the other, never both.** Both live in the same
+    /// Panel with the thumbnail on top, and `Stretch="Uniform"` fits a wide
+    /// picture to the box's width — so a 16:9 wallpaper covers only a band
+    /// across the middle and the generic mime icon shows above and below it.
+    /// That read as a second icon hiding behind the picture.
+    ///
+    /// Done here rather than by binding the icon's `IsVisible` to this one's:
+    /// element-name bindings appear NOWHERE in this codebase, and an idiom used
+    /// nowhere else is evidence rather than style — the last one invented here
+    /// (`IsVisible` bound to an `int`) failed at runtime, not at compile time.
+    ///
+    /// The sibling is identified by carrying `RowIcon.Entry`, not by being the
+    /// only other Image, so adding a third layer to a tile cannot silently
+    /// change what this hides.
+    /// </summary>
+    private static void SetShowing(Image image, bool showing)
+    {
+        image.IsVisible = showing;
+
+        if (image.GetVisualParent() is not Panel panel) return;
+
+        foreach (var child in panel.Children)
+        {
+            if (ReferenceEquals(child, image)) continue;
+
+            if (child is Image icon && icon.IsSet(RowIcon.EntryProperty))
+                icon.IsVisible = !showing;
+        }
+    }
+
     private static async void OnPathChanged(Image image, string? path)
     {
         // async void: nothing may escape, or a scroll turns into a crash.
@@ -49,12 +83,16 @@ public static class ThumbnailImage
                 previous.Dispose();
             }
 
+            // Visibility is cleared WITH the source, not only on the failure
+            // path below. A recycled container otherwise keeps `IsVisible=true`
+            // from the previous file while holding no bitmap, and the icon
+            // underneath stays hidden behind nothing at all.
             image.Source = null;
+            SetShowing(image, false);
 
             if (string.IsNullOrEmpty(path) || !ThumbnailLoader.CanThumbnail(path))
             {
                 image.SetValue(TokenProperty, null);
-                image.IsVisible = false;
                 return;
             }
 
@@ -80,7 +118,7 @@ public static class ThumbnailImage
                 if (GetPath(image) != path) return;
 
                 image.Source = bitmap;
-                image.IsVisible = bitmap is not null;
+                SetShowing(image, bitmap is not null);
             });
         }
         catch (OperationCanceledException)
