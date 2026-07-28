@@ -68,13 +68,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     private Rect _viewport;
     private int _columns = 1;
 
-    /// <summary>
-    /// The index of the most recent <see cref="ScrollIntoView"/> target, until
-    /// the viewport catches up with it. TEMPORARY, and only read by the
-    /// `recycle-scrolltarget` diagnostic — see the comment in
-    /// <see cref="Recycle"/> for what it is testing for.
-    /// </summary>
-    private int _scrollTarget = -1;
+    /// <summary>Set HEIMDALL_TILE_DEBUG=1 to print realized count, index range
+    /// and viewport on every measure. This is the ground truth for "is this
+    /// actually virtualizing" — the realized count cannot be ambiguous the way
+    /// a timing figure can — and it is what proved the panel works at 100,000
+    /// items. Kept for the compact port, which has to prove the same thing
+    /// again.</summary>
+    private static readonly bool Diagnose =
+        Environment.GetEnvironmentVariable("HEIMDALL_TILE_DEBUG") == "1";
 
     public VirtualizingWrapPanel()
     {
@@ -146,24 +147,13 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         var first = firstRow * _columns;
         var last = Math.Min(items.Count - 1, ((lastRow + 1) * _columns) - 1);
 
-        // The viewport has caught up with the scroll target, so it is no longer
-        // at risk from a stale-viewport measure.
-        if (_scrollTarget >= first && _scrollTarget <= last) _scrollTarget = -1;
-
         Realize(first, last, items);
 
         var tile = new Size(itemWidth, itemHeight);
 
         foreach (var container in _realized.Values) container.Measure(tile);
 
-        // GROUND TRUTH for "is this actually virtualizing".
-        //
-        // The tiles: timer posts at Background priority and stops when the
-        // dispatcher drains, which need not coincide with realization
-        // finishing — it read 35 ms and 356 ms for the same 5,000-item folder
-        // on two runs. The realized COUNT cannot be ambiguous like that: if it
-        // approaches the item count, nothing is being virtualized at all.
-        if (items.Count > 1000)
+        if (Diagnose)
         {
             Console.Error.WriteLine(
                 $"[heimdall] wrap: items={items.Count:N0} realized={_realized.Count} "
@@ -261,75 +251,45 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
     /// <summary>
     /// Returns a container to the pool. A focused container is KEPT unless
-    /// <paramref name="force"/> — see the comment inside.
+    /// <paramref name="force"/>.
     /// </summary>
     private void Recycle(int index, bool force = false)
     {
         if (!_realized.TryGetValue(index, out var container)) return;
 
-        // TEMPORARY — tests a gap the Avalonia decompile predicts but nothing
-        // here has yet observed.
-        //
-        // VirtualizingStackPanel tracks TWO protected elements, not one:
-        // `_focusedElement`/`_focusedIndex` AND `_scrollToElement`/
-        // `_scrollToIndex`. Keeping the focused container (below) matches the
-        // first. Nothing here matches the second, so a ScrollIntoView target
-        // that does NOT take focus is still exposed to exactly the
-        // stale-viewport recycle that broke keyboard navigation.
-        //
-        // The paths that scroll without focusing are the ones to watch:
-        // AutoScrollToSelectedItem, which is how type-ahead moves the view, and
-        // any plain BringIntoView. If this line fires, the scroll target needs
-        // pinning the way Avalonia pins it. If it never fires, the focused-
-        // container guard alone is sufficient here and no more machinery is
-        // warranted.
-        if (index == _scrollTarget && !container.IsFocused)
-            Console.Error.WriteLine($"[heimdall] recycle-scrolltarget: index={index}");
-
         // KEEPING THE FOCUSED CONTAINER REALIZED IS REQUIRED, NOT AN
         // OPTIMISATION. Recycling hides the control and clears its item, and
-        // focus dies with it — leaving the window with no focused element at
-        // all, so every subsequent keystroke does nothing until the list is
-        // clicked again.
+        // focus dies with it — leaving the window with NO focused element at
+        // all, so every later keystroke does nothing until the list is clicked
+        // again.
         //
-        // Measured 27 July 2026, and the ordering is the whole story:
+        // Measured: ScrollIntoView realizes the target and hands it back, the
+        // ListBox focuses it, and the measure that ScrollIntoView itself
+        // triggers still sees the OLD viewport — BringIntoView only schedules
+        // the scroll — so it computes a range excluding the row just realized
+        // and recycles it. Home and End both jump far outside the realized
+        // range, so this was the common case rather than an edge one.
         //
-        //   nav-target: 99999          ScrollIntoView realized it and returned
-        //                              it; the ListBox focused it
-        //   recycle-focused: 99999     the very next measure recycled it
-        //   wrap: range=0..47   viewport=-6..635        <- STALE viewport
-        //   wrap: range=99952..99999 viewport=1631866.. <- real one, too late
-        //   key: Home focus=null                       <- focus is gone
-        //
-        // BringIntoView only SCHEDULES the scroll, so the measure that
-        // ScrollIntoView triggers still sees the old viewport and computes a
-        // range that excludes the row it just realized. Two mechanisms fitted
-        // that symptom — this one, and the scroll dropping focus by itself —
-        // and `recycle-focused` was added to separate them. It fired, so the
-        // scroll is not implicated.
-        //
-        // This also covers the ordinary case the nav bug happens to expose:
-        // focus a tile, scroll it off screen, and focus should still be there.
-        // The container is recycled by the next measure that finds it out of
-        // range once focus has moved on, so nothing leaks.
+        // It also covers the ordinary case: focus a tile, scroll it off
+        // screen, and focus should still be there. The container is held for
+        // as long as focus stays on it — one extra realized container, visible
+        // as realized=49 rather than 48 — and is recycled by the first measure
+        // that finds it out of range once focus has moved on.
         //
         // `IsFocused` rather than a focus-within test because the focused
-        // element measured here IS the container (`focus=ListBoxItem`), and
-        // nothing in the grid item template is focusable. Revisit if a
-        // template ever gains a focusable child.
-        if (!force && container.IsFocused)
-        {
-            Console.Error.WriteLine($"[heimdall] recycle-focused: index={index} kept=True");
-            return;
-        }
+        // element measured here IS the container, and nothing in the grid item
+        // template is focusable. Revisit if a template gains a focusable child.
+        //
+        // KNOWN GAP, deliberately not built: Avalonia's VirtualizingStackPanel
+        // protects TWO elements — the focused one AND the current ScrollIntoView
+        // target — so a scroll that does not also focus is still exposed to the
+        // same stale-viewport recycle. Type-ahead is the path that would show
+        // it, and it was tested and behaves correctly, so the second mechanism
+        // is not warranted here. If a scroll ever lands in the wrong place,
+        // this is the first thing to suspect.
+        if (!force && container.IsFocused) return;
 
         _realized.Remove(index);
-
-        // TEMPORARY, alongside nav-target. Prints only for the container that
-        // holds focus, so it stays silent in normal scrolling. `kept=False`
-        // means something forced the recycle past the guard above.
-        if (container.IsFocused)
-            Console.Error.WriteLine($"[heimdall] recycle-focused: index={index} kept=False");
 
         var recycleKey = container.GetValue(RecycleKeyProperty);
 
@@ -407,8 +367,6 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         if (index < 0 || index >= items.Count) return null;
 
-        _scrollTarget = index;
-
         var itemWidth = CellWidth;
         var itemHeight = CellHeight;
         var row = index / Math.Max(1, _columns);
@@ -460,16 +418,6 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         var current = from is Control control ? IndexFromContainer(control) : -1;
 
-        // TEMPORARY. Details (Avalonia's own VirtualizingStackPanel) handles
-        // Home/End after clicking empty space; grid does not. First and Last
-        // here ignore `current` entirely, so if the key reached this method it
-        // would work regardless of selection — which suggests it does not
-        // arrive. That is a guess, and this line settles it: no output means
-        // the key never gets here and the problem is focus, not navigation.
-        Console.Error.WriteLine(
-            $"[heimdall] nav: {direction} from={from?.GetType().Name ?? "null"} "
-            + $"current={current} count={count} wrap={wrap}");
-
         if (count == 0) return null;
 
         // NO ORIGIN — the list itself has focus rather than a row, which is
@@ -514,11 +462,6 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
             target = target < 0 ? count - 1 : 0;
         }
-
-        // TEMPORARY, alongside recycle-focused: the index actually returned,
-        // so a focus loss can be matched to the container it was returned on
-        // without deriving it from the direction.
-        Console.Error.WriteLine($"[heimdall] nav-target: {target}");
 
         return ScrollIntoView(target);
     }

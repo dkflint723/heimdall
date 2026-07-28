@@ -301,6 +301,13 @@ public partial class MainWindow : Window
     /// <summary>
     /// Focuses the enclosing ListBox when a press lands inside it but not on an
     /// item, so the keyboard has somewhere to start.
+    ///
+    /// This was a NO-OP for as long as it existed, because a ListBox is not
+    /// focusable by default and `Focus()` simply returned false — a silent
+    /// refusal that made the fix look shipped when it had never run. Focus
+    /// stayed wherever it was, typically a toolbar button, and Home and End
+    /// never reached the panel at all. The three listing ListBoxes now carry
+    /// `Focusable="True"` explicitly, which is what makes this work.
     /// </summary>
     private static void FocusListIfEmptySpace(object? source)
     {
@@ -315,32 +322,7 @@ public partial class MainWindow : Window
             if (visual is ListBox found) { list = found; break; }
         }
 
-        var focused = list is { IsFocused: false } && list.Focus();
-
-        // STILL TEMPORARY — stays until the user confirms Home/End work.
-        //
-        // What this measured, 27 July 2026:
-        //
-        //   focus: list=found wasFocused=False focusCall=False focusable=False
-        //
-        // The walk found the ListBox. `Focus()` REFUSED, because the ListBox
-        // was not focusable — nothing in this codebase sets `Focusable`, so
-        // that was Avalonia's default arriving unexamined. This method has
-        // therefore been a no-op since it was written.
-        //
-        // The companion `key:` line showed where focus stayed instead: the
-        // layout ToggleButton in the toolbar, the button that had just been
-        // clicked to enter grid view. No `nav:` line followed, so the panel
-        // was never consulted — the key stopped in the toolbar.
-        //
-        // The three listing ListBoxes now carry Focusable="True" explicitly.
-        // Whether a focused LIST (rather than a focused row) is enough of an
-        // origin for Avalonia to consult the panel is NOT yet established —
-        // that is what the next run of these three lines answers.
-        Console.Error.WriteLine(
-            $"[heimdall] focus: list={(list is null ? "none" : "found")} "
-            + $"wasFocused={list?.IsFocused} focusCall={focused} "
-            + $"focusable={list?.Focusable}");
+        if (list is { IsFocused: false }) list.Focus();
     }
 
     private void OnPointerPressedAnywhere(object? sender, Avalonia.Input.PointerPressedEventArgs e)
@@ -1418,8 +1400,6 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnTunnelKeyDown(object? sender, KeyEventArgs e)
     {
-        NavProbe(e);
-
         if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.None) return;
 
         // Only while the path box is open and focused. Tab keeps its ordinary
@@ -1448,74 +1428,6 @@ public partial class MainWindow : Window
         }, DispatcherPriority.Background);
 
         e.Handled = true;
-    }
-
-    /// <summary>
-    /// TEMPORARY — the missing link between the `focus:` and `nav:` lines.
-    ///
-    /// Those two already say whether the click found a ListBox to focus, and
-    /// whether the panel's navigation was reached. Neither says what actually
-    /// holds focus at the moment the key is pressed, and `Focus()` returning
-    /// true does not mean focus was still there a moment later.
-    ///
-    /// Tunnel phase, so this prints BEFORE any control in the window sees the
-    /// key — the line appears whether or not something downstream claims it.
-    /// Read the three together:
-    ///
-    ///   focus: … then key: … then nav: …   the key reached the panel; if the
-    ///                                      symptom persists the fault is in
-    ///                                      GetControl or what it returns
-    ///   focus: … then key: … and NO nav:   the key stopped between the window
-    ///                                      and the panel, and `key:` names the
-    ///                                      element it stopped at
-    ///   no key: line at all                the key never reached the window,
-    ///                                      or the running binary is stale
-    ///
-    /// The third case is why this exists rather than reading absence of `nav:`
-    /// as proof: on its own, silence there cannot be told apart from a stale
-    /// build or a keypress that never landed.
-    ///
-    /// Restricted to the navigation keys, and deliberately not behind an env
-    /// var — a diagnostic you have to remember to switch on has cost a round
-    /// trip here before. It never sets Handled, so it cannot change behaviour.
-    /// </summary>
-    private void NavProbe(KeyEventArgs e)
-    {
-        if (e.Key is not (Key.Home or Key.End or Key.PageUp or Key.PageDown
-                          or Key.Up or Key.Down or Key.Left or Key.Right))
-            return;
-
-        var focused = FocusManager?.GetFocusedElement();
-
-        // The chain outwards from the focused element, so focus resting on a
-        // row is distinguishable from focus on the ScrollViewer or on the
-        // ListBox itself. Reported by type: none of these has an x:Name.
-        // Visual tree, never Control.Parent — the logical tree does not escape
-        // a template.
-        var chain = "";
-
-        if (focused is Visual visual)
-        {
-            var names = new List<string>();
-
-            for (Visual? v = visual; v is not null && names.Count < 8;
-                 v = v.GetVisualParent())
-            {
-                names.Add(v.GetType().Name);
-                if (v is ListBox) break;
-            }
-
-            chain = string.Join(" < ", names);
-        }
-
-        var pane = _shell is null ? null : _shell.ActiveTab;
-
-        Console.Error.WriteLine(
-            $"[heimdall] key: {e.Key} mods={e.KeyModifiers} "
-            + $"focus={focused?.GetType().Name ?? "null"} "
-            + $"chain={(chain.Length == 0 ? "none" : chain)} "
-            + $"view={(pane is null ? "?" : pane.View.ToString())} "
-            + $"selected={(pane?.SelectedEntry is null ? "none" : "yes")}");
     }
 
     /// <summary>
