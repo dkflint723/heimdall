@@ -923,6 +923,7 @@
                        SelectedItems="{Binding DetailsSelection}"
                        DragDrop.AllowDrop="True"
                        SizeChanged="OnListSizeChanged"
+                       Focusable="True"
                        IsVisible="{Binding IsDetailsView}" SelectionMode="Multiple" Background="Transparent" Padding="0">
                 <ListBox.Styles>
                   <Style Selector="ListBoxItem">
@@ -1077,6 +1078,7 @@
                        SelectedItems="{Binding CompactSelection}"
                        IsVisible="{Binding IsCompactView}"
                        DragDrop.AllowDrop="True"
+                       Focusable="True"
                        SelectionMode="Multiple" Background="Transparent" Padding="4"
                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
                        ScrollViewer.VerticalScrollBarVisibility="Disabled">
@@ -1138,6 +1140,7 @@
                        SelectedItems="{Binding GridSelection}"
                        IsVisible="{Binding IsGridView}"
                        DragDrop.AllowDrop="True"
+                       Focusable="True"
                        SelectionMode="Multiple" Background="Transparent" Padding="6">
                 <ListBox.Styles>
                   <Style Selector="ListBoxItem">

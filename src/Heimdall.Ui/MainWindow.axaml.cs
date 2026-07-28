@@ -317,11 +317,26 @@ public partial class MainWindow : Window
 
         var focused = list is { IsFocused: false } && list.Focus();
 
-        // TEMPORARY. This method is already in the build where Home/End still
-        // fail after clicking empty space, so one of its three steps is not
-        // doing what it claims: it may not find a ListBox, or Focus() may
-        // refuse. The nav: log shows the panel is never reached in that case,
-        // so the key stops somewhere before it.
+        // STILL TEMPORARY — stays until the user confirms Home/End work.
+        //
+        // What this measured, 27 July 2026:
+        //
+        //   focus: list=found wasFocused=False focusCall=False focusable=False
+        //
+        // The walk found the ListBox. `Focus()` REFUSED, because the ListBox
+        // was not focusable — nothing in this codebase sets `Focusable`, so
+        // that was Avalonia's default arriving unexamined. This method has
+        // therefore been a no-op since it was written.
+        //
+        // The companion `key:` line showed where focus stayed instead: the
+        // layout ToggleButton in the toolbar, the button that had just been
+        // clicked to enter grid view. No `nav:` line followed, so the panel
+        // was never consulted — the key stopped in the toolbar.
+        //
+        // The three listing ListBoxes now carry Focusable="True" explicitly.
+        // Whether a focused LIST (rather than a focused row) is enough of an
+        // origin for Avalonia to consult the panel is NOT yet established —
+        // that is what the next run of these three lines answers.
         Console.Error.WriteLine(
             $"[heimdall] focus: list={(list is null ? "none" : "found")} "
             + $"wasFocused={list?.IsFocused} focusCall={focused} "
