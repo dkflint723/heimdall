@@ -158,7 +158,6 @@
           <ToggleButton DockPanel.Dock="Right" Margin="0,0,2,4"
                         VerticalAlignment="Center" Padding="7,3"
                         IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
-                        IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
                         Command="{Binding ActiveTab.ShowAsGridCommand}"
                         ToolTip.Tip="large grid">
             <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
@@ -168,7 +167,7 @@
           <ToggleButton DockPanel.Dock="Right" Margin="0,0,2,4"
                         VerticalAlignment="Center" Padding="7,3"
                         IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
-                        IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
+                        IsEnabled="{Binding ActiveTab.CanUseCompact}"
                         Command="{Binding ActiveTab.ShowAsCompactCommand}"
                         ToolTip.Tip="small grid">
             <!-- Two short columns: the shape of the layout itself. -->
@@ -204,12 +203,11 @@
                     <RadioButton Content="Compact" GroupName="layout"
                                FontSize="{DynamicResource FontSizeSmall}"
                                IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
-                        IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
+                        IsEnabled="{Binding ActiveTab.CanUseCompact}"
                                 Command="{Binding ActiveTab.ShowAsCompactCommand}"/>
                   <RadioButton Content="Grid" GroupName="layout"
                                  FontSize="{DynamicResource FontSizeSmall}"
                                  IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
-                        IsEnabled="{Binding ActiveTab.CanUseTileLayouts}"
                                   Command="{Binding ActiveTab.ShowAsGridCommand}"/>
                   </UniformGrid>
 
