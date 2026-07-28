@@ -374,8 +374,7 @@ public static class IconLoader
             // coordinates, so it is converted rather than declined.
             var absolute = (string?)element.Attribute("gradientUnits") == "userSpaceOnUse";
 
-            // gradientTransform, applied to the AXIS in user space before the
-            // conversion to relative units below.
+            // gradientTransform, applied to the AXIS in user space.
             //
             // Avalonia's brush has no equivalent property, and for an affine
             // transform it does not need one: a linear gradient is defined by
@@ -398,8 +397,18 @@ public static class IconLoader
                         x * m.M12 + y * m.M22 + m.M32);
             }
 
-            double X(double v) => absolute && bounds.Width > 0 ? (v - bounds.X) / bounds.Width : v;
-            double Y(double v) => absolute && bounds.Height > 0 ? (v - bounds.Y) / bounds.Height : v;
+            // **userSpaceOnUse maps to Avalonia's ABSOLUTE unit, not to a
+            // fraction of the viewBox.**
+            //
+            // This previously divided by the viewBox, which looks right and is
+            // not: a Relative point is 0..1 of the BOUNDS OF THE SHAPE BEING
+            // FILLED, not of the icon. For a folder body those two rectangles
+            // are nearly the same and the error is invisible — but Tela's corner
+            // shadow is a small triangle, so a 10-unit fade got squeezed into a
+            // fraction of that triangle's width and rendered as a hard stripe.
+            // That difference is exactly why file icons looked correct while
+            // folders did not.
+            var unit = absolute ? RelativeUnit.Absolute : RelativeUnit.Relative;
 
             if (element.Name.LocalName == "linearGradient")
             {
@@ -413,36 +422,36 @@ public static class IconLoader
 
                 result[id] = new LinearGradientBrush
                 {
-                    StartPoint = new RelativePoint(X(sx), Y(sy), RelativeUnit.Relative),
-                    EndPoint = new RelativePoint(X(ex), Y(ey), RelativeUnit.Relative),
+                    StartPoint = new RelativePoint(sx, sy, unit),
+                    EndPoint = new RelativePoint(ex, ey, unit),
                     GradientStops = stops,
                 };
             }
             else
             {
+                var (cx, cy) = Map(
+                    Number(element, "cx", absolute ? bounds.Center.X : 0.5),
+                    Number(element, "cy", absolute ? bounds.Center.Y : 0.5));
+
+                var (fx, fy) = Map(
+                    Number(element, "fx", absolute ? bounds.Center.X : 0.5),
+                    Number(element, "fy", absolute ? bounds.Center.Y : 0.5));
+
                 result[id] = new RadialGradientBrush
                 {
-                    Center = new RelativePoint(
-                        X(Number(element, "cx", absolute ? bounds.Center.X : 0.5)),
-                        Y(Number(element, "cy", absolute ? bounds.Center.Y : 0.5)),
-                        RelativeUnit.Relative),
-                    GradientOrigin = new RelativePoint(
-                        X(Number(element, "fx", absolute ? bounds.Center.X : 0.5)),
-                        Y(Number(element, "fy", absolute ? bounds.Center.Y : 0.5)),
-                        RelativeUnit.Relative),
+                    Center = new RelativePoint(cx, cy, unit),
+                    GradientOrigin = new RelativePoint(fx, fy, unit),
                     // RadiusX/RadiusY as RelativeScalar, not a single Radius
                     // double — an SVG radial gradient is circular, so both take
                     // the same value.
+                    // Radius follows the same unit as the centre. A
+                    // gradientTransform that scales would also scale this, which
+                    // is not handled — no icon here has needed it, and guessing
+                    // at an average scale factor would be worse than leaving it.
                     RadiusX = new RelativeScalar(
-                        absolute && bounds.Width > 0
-                            ? Number(element, "r", bounds.Width / 2) / bounds.Width
-                            : Number(element, "r", 0.5),
-                        RelativeUnit.Relative),
+                        Number(element, "r", absolute ? bounds.Width / 2 : 0.5), unit),
                     RadiusY = new RelativeScalar(
-                        absolute && bounds.Height > 0
-                            ? Number(element, "r", bounds.Height / 2) / bounds.Height
-                            : Number(element, "r", 0.5),
-                        RelativeUnit.Relative),
+                        Number(element, "r", absolute ? bounds.Height / 2 : 0.5), unit),
                     GradientStops = stops,
                 };
             }
