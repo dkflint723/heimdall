@@ -1417,11 +1417,13 @@
                                      places provider was written and nothing
                                      rendered it. Sized off the same scale as
                                      the label so it follows Ctrl +/-. -->
-                                <Image DockPanel.Dock="Left" Margin="0,0,8,0"
-                                       Width="16" Height="16"
-                                       VerticalAlignment="Center"
-                                       th:NamedIcon.Name="{Binding Icon}"
-                                       th:NamedIcon.Size="16"/>
+                                <Path DockPanel.Dock="Left" Margin="0,0,9,0"
+                                      Width="16" Height="16" Stretch="Uniform"
+                                      VerticalAlignment="Center"
+                                      Stroke="{DynamicResource ViewText}"
+                                      StrokeThickness="1.6"
+                                      StrokeLineCap="Round" StrokeJoin="Round"
+                                      th:SidebarIcon.Token="{Binding Icon}"/>
                                 <StackPanel>
                                   <TextBlock Text="{Binding Label}"
                                              FontSize="{DynamicResource FontSizeSmall}"
@@ -1627,9 +1629,13 @@
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Left" Padding="12,4">
                     <DockPanel>
-                      <Image DockPanel.Dock="Left" Margin="0,0,8,0"
-                             Width="16" Height="16" VerticalAlignment="Center"
-                             th:NamedIcon.Name="recent-files" th:NamedIcon.Size="16"/>
+                      <Path DockPanel.Dock="Left" Margin="0,0,9,0"
+                            Width="16" Height="16" Stretch="Uniform"
+                            VerticalAlignment="Center"
+                            Stroke="{DynamicResource ViewText}"
+                            StrokeThickness="1.6"
+                            StrokeLineCap="Round" StrokeJoin="Round"
+                            th:SidebarIcon.Token="recent-files"/>
                       <TextBlock Text="Recent files"
                                  FontSize="{DynamicResource FontSizeSmall}"
                                  TextTrimming="CharacterEllipsis"
@@ -1641,9 +1647,13 @@
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Left" Padding="12,4">
                     <DockPanel>
-                      <Image DockPanel.Dock="Left" Margin="0,0,8,0"
-                             Width="16" Height="16" VerticalAlignment="Center"
-                             th:NamedIcon.Name="recent-locations" th:NamedIcon.Size="16"/>
+                      <Path DockPanel.Dock="Left" Margin="0,0,9,0"
+                            Width="16" Height="16" Stretch="Uniform"
+                            VerticalAlignment="Center"
+                            Stroke="{DynamicResource ViewText}"
+                            StrokeThickness="1.6"
+                            StrokeLineCap="Round" StrokeJoin="Round"
+                            th:SidebarIcon.Token="recent-locations"/>
                       <TextBlock Text="Recent locations"
                                  FontSize="{DynamicResource FontSizeSmall}"
                                  TextTrimming="CharacterEllipsis"
