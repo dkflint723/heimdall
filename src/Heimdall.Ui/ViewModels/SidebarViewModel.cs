@@ -115,10 +115,10 @@ public sealed partial class SidebarViewModel : ObservableObject
     // shell: the store holds the data, the shell decides what a click does.
 
     [RelayCommand]
-    private void OpenRecentFiles() => _onFolderChosen?.Invoke(RecentPaths.Files);
+    private void OpenRecentFiles() => _onFolderChosen?.Invoke(VirtualPaths.Files);
 
     [RelayCommand]
-    private void OpenRecentLocations() => _onFolderChosen?.Invoke(RecentPaths.Locations);
+    private void OpenRecentLocations() => _onFolderChosen?.Invoke(VirtualPaths.Locations);
 
     /// <summary>
     /// Remote locations the desktop has mounted. Shown beside Devices because

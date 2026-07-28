@@ -107,6 +107,23 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
             });
         }
 
+        // Trash last, matching Dolphin, and pointing at a VIRTUAL path rather
+        // than ~/.local/share/Trash/files. The payload directory holds
+        // deduplicated names with no record of where anything came from, so
+        // browsing it directly would show files you could not restore.
+        // IsAvailable stays true even when empty: a Trash entry that vanishes
+        // when there is nothing in it is harder to find than one that is always
+        // there and simply lists nothing.
+        places.Add(new Place
+        {
+            Id = "trash",
+            Label = "Trash",
+            Path = "heimdall:trash",
+            Kind = PlaceKind.Bookmark,
+            Icon = "trash",
+            IsAvailable = true,
+        });
+
         return places;
     }
 

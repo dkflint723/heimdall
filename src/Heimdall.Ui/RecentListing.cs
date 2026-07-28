@@ -17,10 +17,15 @@ namespace Heimdall.Ui;
 /// **The scheme cannot collide.** Every real path here begins with '/', so a
 /// prefix of "heimdall:" is unambiguous without a lookup.
 /// </summary>
-public static class RecentPaths
+public static class VirtualPaths
 {
     public const string Files = "heimdall:recent-files";
     public const string Locations = "heimdall:recent-locations";
+    public const string Trash = "heimdall:trash";
+
+    /// <summary>Any listing that is not a directory.</summary>
+    public static bool IsVirtual(string? path)
+        => IsRecent(path) || path == Trash;
 
     /// <summary>
     /// True for a virtual listing. Callers that must check this:
@@ -36,8 +41,12 @@ public static class RecentPaths
         => path == Files ? RecentKind.File : RecentKind.Folder;
 
     /// <summary>What the breadcrumb and the tab title show.</summary>
-    public static string Label(string path)
-        => path == Files ? "Recent files" : "Recent locations";
+    public static string Label(string path) => path switch
+    {
+        Files => "Recent files",
+        Trash => "Trash",
+        _ => "Recent locations",
+    };
 }
 
 /// <summary>
@@ -68,7 +77,7 @@ public static class RecentListing
     {
         if (store is null) yield break;
 
-        var kind = RecentPaths.KindOf(path);
+        var kind = VirtualPaths.KindOf(path);
         var entries = new List<FileEntry>(Show);
 
         foreach (var recent in store.Recent(kind, Show))
@@ -104,6 +113,43 @@ public static class RecentListing
     /// something different in these two listings than everywhere else — which is
     /// why it is written down here rather than left to be discovered.
     /// </summary>
+    /// <summary>
+    /// The trash as a listing. Rows carry the item's ORIGINAL name and the
+    /// deletion time, not the deduplicated key it is filed under — the key is an
+    /// implementation detail of the trash and means nothing to a person.
+    ///
+    /// `FullPath` is the ORIGINAL path, so the Path column, sorting and the
+    /// tooltip all say where the thing came from. Restore therefore has to map
+    /// back to the trash key, which `PaneViewModel` does by asking the store
+    /// again rather than by parsing the name.
+    /// </summary>
+    public static async IAsyncEnumerable<IReadOnlyList<FileEntry>> EnumerateTrashAsync(
+        ITrashMaintenance? trash,
+        [System.Runtime.CompilerServices.EnumeratorCancellation]
+        CancellationToken ct = default)
+    {
+        if (trash is null) yield break;
+
+        var entries = new List<FileEntry>();
+
+        foreach (var item in trash.List())
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var name = Path.GetFileName(item.OriginalPath);
+            if (string.IsNullOrEmpty(name)) name = item.TrashName;
+
+            var flags = item.IsDirectory ? EntryFlags.Directory : EntryFlags.None;
+            if (name.StartsWith('.')) flags |= EntryFlags.Hidden;
+
+            entries.Add(new FileEntry(name, item.OriginalPath, item.Size, item.Deleted, flags));
+        }
+
+        yield return entries;
+
+        await Task.CompletedTask;
+    }
+
     private static FileEntry? Build(RecentEntry recent)
     {
         try

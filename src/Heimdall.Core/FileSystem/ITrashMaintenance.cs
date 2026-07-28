@@ -42,4 +42,43 @@ public interface ITrashMaintenance
     /// limit is enabled — the disabled state is not "sweep with defaults".
     /// </summary>
     ValueTask<TrashSweepResult> SweepAsync(TrashSettings policy, CancellationToken ct);
+
+    /// <summary>
+    /// What is currently in the trash, newest first.
+    ///
+    /// Needed because the trash CANNOT be browsed as an ordinary folder: the
+    /// payload directory holds deduplicated names with no memory of where
+    /// anything came from, and the original path lives in a sidecar. A listing
+    /// built by enumerating that directory could show you a file but never
+    /// restore it.
+    /// </summary>
+    IReadOnlyList<TrashedItem> List();
+
+    /// <summary>
+    /// Puts one item back where it came from, returning the path it landed at —
+    /// which is NOT always the original: if something has since taken that name
+    /// it restores alongside rather than clobbering.
+    /// </summary>
+    string Restore(string trashName);
+
+    /// <summary>
+    /// Deletes everything, permanently. Deliberately separate from
+    /// <see cref="SweepAsync"/>, which applies a policy and stops at the
+    /// allowance — this one has no policy to obey and no stopping condition,
+    /// which is exactly why it must be its own method rather than a flag.
+    /// </summary>
+    ValueTask<TrashSweepResult> EmptyAsync(CancellationToken ct);
 }
+
+/// <summary>
+/// One trashed item. <paramref name="TrashName"/> is the key inside the trash,
+/// which is what Restore takes; <paramref name="OriginalPath"/> is where it
+/// came from and is what makes the listing meaningful.
+/// </summary>
+public sealed record TrashedItem(
+    string TrashName,
+    string OriginalPath,
+    string Payload,
+    DateTimeOffset Deleted,
+    long Size,
+    bool IsDirectory);

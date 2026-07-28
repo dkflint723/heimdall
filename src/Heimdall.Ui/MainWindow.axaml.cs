@@ -146,6 +146,7 @@ public partial class MainWindow : Window
         _shell.PaneCreated += (_, pane) => WirePane(pane);
         _shell.PropertiesRequested += (_, _) => ShowProperties();
         _shell.SettingsRequested += (_, _) => ShowSettings();
+        _shell.EmptyTrashRequested += (_, _) => AskConfirmEmptyTrash();
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
         _shell.UseRemotes(platform.Remotes);
         _shell.UseDiscovery(platform.Discovery);
@@ -989,6 +990,13 @@ public partial class MainWindow : Window
 
         _trashMaintenance = maintenance;
 
+        // Assigned HERE, not beside the other providers in the constructor:
+        // this field is null until this method runs, so the earlier assignment
+        // handed the pane a null and the Trash listing would have been silently
+        // empty forever. Same shape as the font setting, which read its value
+        // before the settings load and so never applied one.
+        ViewModels.PaneViewModel.Trash = maintenance;
+
         _ = SweepTrashAsync();
 
         _trashTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(1) };
@@ -1069,7 +1077,7 @@ public partial class MainWindow : Window
 
     // ---- inline prompt -------------------------------------------------
 
-    private enum PromptMode { None, Rename, ConfirmDelete, ConfirmTrash, NewTag, Connect }
+    private enum PromptMode { None, Rename, ConfirmDelete, ConfirmTrash, ConfirmEmptyTrash, NewTag, Connect }
 
     private PromptMode _prompt = PromptMode.None;
     private FileEntry _renameTarget;
@@ -1118,6 +1126,10 @@ public partial class MainWindow : Window
 
             case PromptMode.ConfirmTrash:
                 target?.TrashSelectedCommand.Execute(null);
+                break;
+
+            case PromptMode.ConfirmEmptyTrash:
+                _ = target?.EmptyTrashAsync();
                 break;
 
             case PromptMode.Rename when !string.IsNullOrWhiteSpace(name) && name != entry.Name:
@@ -1181,6 +1193,32 @@ public partial class MainWindow : Window
         PromptBar.IsVisible = true;
 
         PromptInput.Focus();
+    }
+
+    /// <summary>
+    /// Emptying the trash is the only action here with no undo AND no per-item
+    /// review, so unlike trashing it is never unprompted — that is not a
+    /// preference.
+    /// </summary>
+    private void AskConfirmEmptyTrash()
+    {
+        if (PromptBar is null) return;
+        if (_shell.ActiveTab is null) return;
+
+        var count = ViewModels.PaneViewModel.Trash?.List().Count ?? 0;
+        if (count == 0) { _shell.ActiveTab.Status = "the trash is already empty"; return; }
+
+        _prompt = PromptMode.ConfirmEmptyTrash;
+
+        PromptLabel.Text = $"permanently delete {count:N0} item(s) from the trash? this cannot be undone";
+        PromptInput.IsVisible = false;
+        PromptConfirm.Content = "empty trash";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptConfirm.Focus();
     }
 
     private void AskConfirmDelete()
@@ -1465,7 +1503,7 @@ public partial class MainWindow : Window
         if (_shell is null) return;
 
         // The prompt owns the keyboard while it is open.
-        if (_prompt == PromptMode.ConfirmDelete)
+        if (_prompt is PromptMode.ConfirmDelete or PromptMode.ConfirmEmptyTrash)
         {
             if (e.Key == Key.Enter)
             {

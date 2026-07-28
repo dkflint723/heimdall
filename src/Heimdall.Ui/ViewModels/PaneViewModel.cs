@@ -311,6 +311,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public static IRecentStore? Recents { get; set; }
 
     /// <summary>
+    /// The trash, for the `heimdall:trash` listing and its restore/empty
+    /// actions. Same static convention as the others.
+    /// </summary>
+    public static ITrashMaintenance? Trash { get; set; }
+
+    /// <summary>
     /// Applied on arrival, before the listing is asked for, so the folder is
     /// enumerated and sorted once under its own rules rather than sorted twice.
     /// Silent when the preference is off or the folder has no opinion.
@@ -688,13 +694,17 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public bool ShowSize => ViewportWidth >= 340 * TextScale;
     public bool ShowModified => ViewportWidth >= 520 * TextScale;
     public bool ShowPermissions => ViewportWidth >= 680 * TextScale;
-    public bool ShowMetadata => ViewportWidth >= 840 * TextScale && !IsRecentListing;
+    public bool ShowMetadata =>
+        ViewportWidth >= 840 * TextScale && !IsRecentListing && !IsTrashListing;
 
     /// <summary>
     /// True only in the two recent listings, where the rows come from a store
     /// rather than a directory.
     /// </summary>
-    public bool IsRecentListing => RecentPaths.IsRecent(CurrentPath);
+    public bool IsRecentListing => VirtualPaths.IsRecent(CurrentPath);
+
+    /// <summary>True in the trash listing, which gates restore and empty.</summary>
+    public bool IsTrashListing => CurrentPath == VirtualPaths.Trash;
 
     /// <summary>
     /// The parent folder of each row, shown ONLY in a recent listing — and not
@@ -707,7 +717,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// here), and inserting a column would renumber every element after it in
     /// two separate grids — the kind of edit that goes wrong quietly.
     /// </summary>
-    public bool ShowParentPath => IsRecentListing && ViewportWidth >= 420 * TextScale;
+    public bool ShowParentPath =>
+        (IsRecentListing || IsTrashListing) && ViewportWidth >= 420 * TextScale;
 
     partial void OnTextScaleChanged(double value) => NotifyColumns();
 
@@ -1048,7 +1059,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // folders up the list.
         // Recording the recent listing itself would be circular: it would put
         // "recent locations" at the top of recent locations.
-        if (IsLoaded && !RecentPaths.IsRecent(path))
+        if (IsLoaded && !VirtualPaths.IsVirtual(path))
         {
             Recents?.Record(path, RecentKind.Folder);
         }
@@ -1115,7 +1126,63 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         foreach (var path in paths) Recents.Forget(path);
 
-        if (RecentPaths.IsRecent(CurrentPath)) await RefreshAsync().ConfigureAwait(false);
+        if (VirtualPaths.IsRecent(CurrentPath)) await RefreshAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Puts the selected trashed items back.
+    ///
+    /// The listing shows ORIGINAL paths, and Restore needs the trash KEY, so
+    /// the mapping is looked up from the store rather than derived from the
+    /// name — a deduplicated key like `notes.3.txt` cannot be reversed into
+    /// `notes.txt` reliably, and guessing would restore the wrong file.
+    /// </summary>
+    [RelayCommand]
+    private async Task RestoreFromTrashAsync()
+    {
+        if (Trash is null || !IsTrashListing) return;
+
+        var wanted = SelectionPaths().ToHashSet(StringComparer.Ordinal);
+        if (wanted.Count == 0) return;
+
+        var restored = 0;
+
+        foreach (var item in Trash.List())
+        {
+            if (!wanted.Contains(item.OriginalPath)) continue;
+
+            try
+            {
+                Trash.Restore(item.TrashName);
+                restored++;
+            }
+            catch (Exception ex)
+            {
+                // One failure must not abandon the rest of the selection.
+                Console.Error.WriteLine($"[heimdall] restore failed: {ex.Message}");
+            }
+        }
+
+        Status = restored == 0 ? "nothing restored" : $"restored {restored:N0} item(s)";
+
+        await RefreshAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Permanently deletes everything in the trash. **Always confirmed by the
+    /// caller** — this is the one action in the application with no undo and no
+    /// per-item review, so the prompt is not a preference the way trashing is.
+    /// </summary>
+    public async Task EmptyTrashAsync()
+    {
+        if (Trash is null) return;
+
+        var result = await Trash.EmptyAsync(CancellationToken.None).ConfigureAwait(false);
+
+        Status = $"emptied trash — removed {result.Removed:N0}, "
+               + $"freed {ByteSize.Format(result.BytesFreed)}";
+
+        if (IsTrashListing) await RefreshAsync().ConfigureAwait(false);
     }
 
     /// <summary>Paths of the selection, falling back to the focused row.</summary>
@@ -1421,6 +1488,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         {
             RebuildBreadcrumbs();
             OnPropertyChanged(nameof(IsRecentListing));
+            OnPropertyChanged(nameof(IsTrashListing));
             OnPropertyChanged(nameof(ShowParentPath));
             OnPropertyChanged(nameof(ShowMetadata));
         });
@@ -1430,9 +1498,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // A virtual listing has no filename to fall back on: GetFileName of
         // "heimdall:recent-files" is the whole string, since it contains no
         // separator, and that is what the tab would have been titled.
-        if (RecentPaths.IsRecent(value))
+        if (VirtualPaths.IsVirtual(value))
         {
-            Title = RecentPaths.Label(value);
+            Title = VirtualPaths.Label(value);
             return;
         }
 
@@ -1660,10 +1728,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // A recent listing has no hierarchy to walk up, so it gets one crumb
         // naming itself. Splitting it on '/' would produce "heimdall:recent"
         // and "files" as if they were folders.
-        if (RecentPaths.IsRecent(CurrentPath))
+        if (VirtualPaths.IsVirtual(CurrentPath))
         {
             Breadcrumbs.Add(new PathSegment(
-                RecentPaths.Label(CurrentPath), CurrentPath,
+                VirtualPaths.Label(CurrentPath), CurrentPath,
                 new RelayCommand(() => { }), true));
             return;
         }
@@ -1910,7 +1978,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // The column strip walks a folder hierarchy, and a recent listing has
         // none. Guarded here rather than inside Miller, because this is the
         // only caller that can know the path is virtual.
-        if (ShowColumnStrip && !RecentPaths.IsRecent(path))
+        if (ShowColumnStrip && !VirtualPaths.IsVirtual(path))
             await Miller.ShowAsync(path).ConfigureAwait(false);
 
         await LoadListingAsync(path).ConfigureAwait(false);
@@ -1962,8 +2030,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // the same IAsyncEnumerable shape, so everything below — batching, the
         // generation guard, sorting, filtering, the status line — runs
         // unchanged and knows nothing about where the rows came from.
-        var source = RecentPaths.IsRecent(path)
-            ? RecentListing.EnumerateAsync(Recents, path, ct)
+        var source =
+            VirtualPaths.IsRecent(path) ? RecentListing.EnumerateAsync(Recents, path, ct)
+            : path == VirtualPaths.Trash ? RecentListing.EnumerateTrashAsync(Trash, ct)
             : _fs.EnumerateAsync(path, options, ct);
 
         var sw = Stopwatch.StartNew();
@@ -2031,7 +2100,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 // listing. Skipped explicitly rather than left to fail inside
                 // StartWatching's catch, because a silently swallowed failure
                 // is exactly the kind of thing that reads as working.
-                if (!RecentPaths.IsRecent(path)) StartWatching(path);
+                if (!VirtualPaths.IsVirtual(path)) StartWatching(path);
                 sw.Stop();
 
                 // Cleared, NOT set to the count. Summary already shows

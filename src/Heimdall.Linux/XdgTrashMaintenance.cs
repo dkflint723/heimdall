@@ -129,6 +129,79 @@ public sealed class XdgTrashMaintenance : ITrashMaintenance
         };
     }
 
+    public IReadOnlyList<TrashedItem> List()
+    {
+        var items = new List<TrashedItem>();
+
+        if (!Directory.Exists(XdgTrash.InfoDir)) return items;
+
+        foreach (var infoPath in Directory.EnumerateFiles(XdgTrash.InfoDir, "*.trashinfo"))
+        {
+            try
+            {
+                var trashName = Path.GetFileNameWithoutExtension(infoPath);
+                var payload = Path.Combine(XdgTrash.FilesDir, trashName);
+
+                // An info file whose payload is gone is an orphan. Listing it
+                // would offer a restore that cannot succeed.
+                var isDir = Directory.Exists(payload);
+                if (!isDir && !File.Exists(payload)) continue;
+
+                var original = XdgTrash.OriginalPathOf(infoPath);
+                if (string.IsNullOrEmpty(original)) continue;
+
+                items.Add(new TrashedItem(
+                    trashName,
+                    original,
+                    payload,
+                    ReadDeletionDate(infoPath) is { } d
+                        ? new DateTimeOffset(d)
+                        : DateTimeOffset.MinValue,
+                    isDir ? 0 : SizeOf(payload),
+                    isDir));
+            }
+            catch
+            {
+                // One unreadable entry must not empty the whole view.
+            }
+        }
+
+        // Newest first, and an unparseable date sorts last rather than being
+        // dropped — the sweep already refuses to DELETE those, so hiding them
+        // here would make the one category you cannot clear invisible.
+        items.Sort((a, b) => b.Deleted.CompareTo(a.Deleted));
+
+        return items;
+    }
+
+    public string Restore(string trashName) => XdgTrash.Restore(trashName);
+
+    public ValueTask<TrashSweepResult> EmptyAsync(CancellationToken ct)
+        => new(Task.Run(() =>
+        {
+            var removed = 0;
+            long freed = 0;
+
+            foreach (var item in List())
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var entry = new Entry(
+                    Path.Combine(XdgTrash.InfoDir, item.TrashName + ".trashinfo"),
+                    item.Payload, item.Deleted.DateTime, item.Size);
+
+                if (!Remove(entry)) continue;
+
+                removed++;
+                freed += item.Size;
+            }
+
+            Console.Error.WriteLine(
+                $"[heimdall] trash: emptied · removed {removed} · freed {ByteSize.Format(freed)}");
+
+            return new TrashSweepResult { Removed = removed, BytesFreed = freed };
+        }, ct));
+
     private sealed record Entry(string InfoPath, string Payload, DateTime Deleted, long Size);
 
     /// <summary>

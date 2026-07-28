@@ -116,6 +116,14 @@ public static class XdgTrash
         throw new IOException("Could not find a free name in the trash.");
     }
 
+    /// <summary>
+    /// Where a trashed item came from. Public because the trash LISTING needs
+    /// it too — the payload directory has no memory of origins, so this sidecar
+    /// is the only source, and a second parser would be a second thing to get
+    /// wrong about URL decoding.
+    /// </summary>
+    public static string? OriginalPathOf(string infoPath) => ReadOriginalPath(infoPath);
+
     private static string? ReadOriginalPath(string infoPath)
     {
         if (!File.Exists(infoPath)) return null;

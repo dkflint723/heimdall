@@ -766,6 +766,16 @@
               <MenuItem Header="Forget (keeps the file)"
                         IsVisible="{Binding ActiveTab.IsRecentListing}"
                         Command="{Binding ActiveTab.ForgetRecentCommand}"/>
+              <!-- Trash only. Restore puts the selection back where it came
+                   from; Empty is confirmed by the window, because it is the one
+                   action with neither an undo nor a per-item review. -->
+              <Separator IsVisible="{Binding ActiveTab.IsTrashListing}"/>
+              <MenuItem Header="Restore"
+                        IsVisible="{Binding ActiveTab.IsTrashListing}"
+                        Command="{Binding ActiveTab.RestoreFromTrashCommand}"/>
+              <MenuItem Header="Empty trash…"
+                        IsVisible="{Binding ActiveTab.IsTrashListing}"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"/>
               <Separator/>
               <MenuItem Header="Properties"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"/>

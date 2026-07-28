@@ -643,6 +643,17 @@ public sealed partial class ShellViewModel : ObservableObject
     private void ShowProperties() => PropertiesRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
+    /// Emptying the trash goes through the window, not straight to the store,
+    /// because it needs the confirm bar — and the prompt lives in the window,
+    /// which is the only thing that owns real buttons. Same arrangement as
+    /// properties and settings.
+    /// </summary>
+    public event EventHandler? EmptyTrashRequested;
+
+    [RelayCommand]
+    private void EmptyTrash() => EmptyTrashRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
     /// Status bar visibility, straight off the preferences. Re-raised rather
     /// than stored, so there is one source of truth and no copy to fall out of
     /// step with the file.
