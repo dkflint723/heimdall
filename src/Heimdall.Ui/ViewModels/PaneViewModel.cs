@@ -104,8 +104,13 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         KnownTags.Clear();
         if (_tags is null) return;
 
+        RemovableTags.Clear();
+
         foreach (var tag in _tags.KnownTags)
-            KnownTags.Add(new TagOption(tag, new RelayCommand(() => _ = ToggleTagAsync(tag))));
+        {
+            KnownTags.Add(new TagOption(tag, new RelayCommand(() => _ = AddTagAsync(tag))));
+            RemovableTags.Add(new TagOption(tag, new RelayCommand(() => _ = RemoveTagAsync(tag))));
+        }
     }
 
     [RelayCommand]
@@ -127,6 +132,48 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// have it — so one menu entry both tags and untags, and a mixed selection
     /// resolves toward tagging rather than silently clearing.
     /// </summary>
+    /// <summary>Tags offered for removal. Same names as <see cref="KnownTags"/>
+    /// but bound to the removing command — a menu that says Remove must remove,
+    /// not toggle.</summary>
+    public ObservableCollection<TagOption> RemovableTags { get; } = new();
+
+    public Task AddTagAsync(string tag) => ApplyTagAsync(tag, add: true);
+
+    public Task RemoveTagAsync(string tag) => ApplyTagAsync(tag, add: false);
+
+    /// <summary>
+    /// Explicit add or remove.
+    ///
+    /// Replaces relying on <see cref="ToggleTagAsync"/> from the menu. Toggling
+    /// worked — clicking a tag every selected file already had removed it — but
+    /// the menu said "Apply existing", so the only way to discover removal was
+    /// to try it and be surprised. Worse on a mixed selection, where toggle adds
+    /// to all rather than removing from the ones that have it.
+    /// </summary>
+    private async Task ApplyTagAsync(string tag, bool add)
+    {
+        if (_tags is null || string.IsNullOrWhiteSpace(tag)) return;
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) { Status = "nothing selected"; return; }
+
+        try
+        {
+            await _tags.ToggleAsync(paths, tag, add, CancellationToken.None).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Status = add
+                    ? $"tagged {paths.Count:N0} item(s) \u201c{tag}\u201d"
+                    : $"removed \u201c{tag}\u201d from {paths.Count:N0} item(s)";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = $"tagging failed: {ex.Message}");
+        }
+    }
+
     public async Task ToggleTagAsync(string tag)
     {
         if (_tags is null || string.IsNullOrWhiteSpace(tag)) return;

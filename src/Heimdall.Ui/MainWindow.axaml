@@ -714,6 +714,22 @@
                     </Style>
                   </MenuItem.Styles>
                 </MenuItem>
+
+                <!-- Removal was reachable before only by clicking a tag under
+                     "Apply existing" that everything selected already had, which
+                     nobody would guess. Its own menu, saying what it does. -->
+                <MenuItem Header="Remove" ItemsSource="{Binding ActiveTab.RemovableTags}">
+                  <MenuItem.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TagOption">
+                      <TextBlock Text="{Binding Name}"/>
+                    </DataTemplate>
+                  </MenuItem.ItemTemplate>
+                  <MenuItem.Styles>
+                    <Style Selector="MenuItem > MenuItem" x:DataType="vm:TagOption">
+                      <Setter Property="Command" Value="{Binding Command}"/>
+                    </Style>
+                  </MenuItem.Styles>
+                </MenuItem>
               </MenuItem>
               <MenuItem Header="Scripts folder…"
                         Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
@@ -1562,6 +1578,23 @@
                                 Background="Transparent" BorderThickness="0"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left" Padding="12,4">
+                          <Button.ContextMenu>
+                            <ContextMenu>
+                              <!-- Removes the tag from the SELECTION, which is
+                                   what a tag in a sidebar can act on. -->
+                              <MenuItem Header="Remove from selection"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).RemoveTagFromSelectionCommand}"
+                                        CommandParameter="{Binding Name}"/>
+                              <Separator/>
+                              <!-- Stops offering it. Files that carry it keep
+                                   it — this list is a suggestion, not the
+                                   truth, and deleting an xattr across files you
+                                   cannot see from here would have no undo. -->
+                              <MenuItem Header="Forget this tag"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ForgetTagCommand}"
+                                        CommandParameter="{Binding Name}"/>
+                            </ContextMenu>
+                          </Button.ContextMenu>
                           <StackPanel Orientation="Horizontal" Spacing="8">
                             <Border Width="9" Height="9" CornerRadius="2"
                                     VerticalAlignment="Center"

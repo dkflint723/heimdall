@@ -653,6 +653,32 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool ShowFreeSpace => Settings.AppSettings.Current.General.ShowFreeSpace;
 
+    // ---- tag maintenance ---------------------------------------------------
+
+    /// <summary>
+    /// Removes a tag from whatever is selected in the active pane. Reachable by
+    /// right-clicking the tag in the sidebar, so the tag itself is the handle.
+    /// </summary>
+    [RelayCommand]
+    private void RemoveTagFromSelection(string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || ActiveTab is not { } pane) return;
+
+        _ = pane.RemoveTagAsync(tag);
+    }
+
+    /// <summary>
+    /// Stops offering a tag. Files keep it — see ITagStore.ForgetKnown for why
+    /// this is not "delete everywhere".
+    /// </summary>
+    [RelayCommand]
+    private void ForgetTag(string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return;
+
+        _tags?.ForgetKnown(tag);
+    }
+
     // ---- context menu visibility ------------------------------------------
     //
     // Straight off the preferences, like the status bar above. Bound with

@@ -20,6 +20,16 @@ public interface ITagStore
     ValueTask ToggleAsync(
         IReadOnlyList<string> paths, string tag, bool add, CancellationToken ct);
 
+    /// <summary>
+    /// Stops offering a tag, WITHOUT touching any file that carries it.
+    ///
+    /// Deliberately not "delete this tag everywhere": that would rewrite an
+    /// extended attribute on files the user cannot see from here, possibly
+    /// across mounts, with no undo. Forgetting is reversible by tagging
+    /// something again; deleting is not.
+    /// </summary>
+    void ForgetKnown(string tag);
+
     /// <summary>Raised when tags change, so listings can repaint.</summary>
     event EventHandler? TagsChanged;
 }

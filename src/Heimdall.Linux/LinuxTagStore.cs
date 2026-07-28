@@ -36,6 +36,15 @@ public sealed partial class LinuxTagStore : ITagStore
 
     public event EventHandler? TagsChanged;
 
+    public void ForgetKnown(string tag)
+    {
+        if (_known.RemoveAll(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)) == 0)
+            return;
+
+        SaveKnown();
+        TagsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     // .NET has no extended-attribute API, so these come straight from libc.
     // LibraryImport rather than DllImport: the marshalling is source-generated
     // and therefore survives trimming and AOT.
@@ -161,6 +170,13 @@ public sealed partial class LinuxTagStore : ITagStore
 
         if (!changed) return;
 
+        SaveKnown();
+    }
+
+    /// <summary>Sorted then written. Two callers now, so it lives in one place
+    /// rather than being copied for the second.</summary>
+    private void SaveKnown()
+    {
         _known = _known.OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
 
         try
@@ -168,7 +184,11 @@ public sealed partial class LinuxTagStore : ITagStore
             using var stream = File.Create(_knownPath);
             JsonSerializer.Serialize(stream, _known, KnownTagsJsonContext.Default.ListString);
         }
-        catch { }
+        catch
+        {
+            // Losing the suggestion list is a cosmetic failure; the tags
+            // themselves live on the files.
+        }
     }
 
     private List<string> LoadKnown()
