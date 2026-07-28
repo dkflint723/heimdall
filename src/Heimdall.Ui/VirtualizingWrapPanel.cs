@@ -317,7 +317,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
     protected override Control? ScrollIntoView(int index)
     {
-        if (index < 0 || index >= Items.Count) return null;
+        var items = Items;
+
+        if (index < 0 || index >= items.Count) return null;
 
         var itemWidth = CellWidth;
         var itemHeight = CellHeight;
@@ -325,7 +327,37 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         this.BringIntoView(new Rect(0, row * itemHeight, itemWidth, itemHeight));
 
-        return ContainerFromIndex(index);
+        // Realize the target NOW rather than waiting for the layout pass that
+        // BringIntoView merely schedules.
+        //
+        // Returning null here is not harmless: the caller has nothing to focus,
+        // so the key looks like it did not register — and the unhandled key then
+        // falls through to whatever else is listening, which in this window is
+        // plenty. Home and End arrive as First and Last, and both jump far
+        // outside the realized range, so this was the common case rather than an
+        // edge one.
+        //
+        // A container realized here that turns out to be off screen is recycled
+        // by the next measure, exactly like any other.
+        if (!_realized.TryGetValue(index, out var container))
+        {
+            container = GetOrCreate(items[index], index);
+
+            if (container is not null)
+            {
+                _realized[index] = container;
+                container.Measure(new Size(itemWidth, itemHeight));
+
+                var column = index % Math.Max(1, _columns);
+
+                container.Arrange(new Rect(
+                    column * itemWidth, row * itemHeight, itemWidth, itemHeight));
+            }
+
+            InvalidateMeasure();
+        }
+
+        return container;
     }
 
     /// <summary>
