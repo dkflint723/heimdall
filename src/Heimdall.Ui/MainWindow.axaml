@@ -890,6 +890,13 @@
                              IsVisible="{Binding ShowMetadata}"
                              FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
+                  <!-- Shares column 2 with "info": the two are mutually
+                       exclusive, because ShowMetadata is false in a recent
+                       listing and ShowParentPath is only true there. -->
+                  <TextBlock Grid.Column="2" Width="200" Margin="8,0,0,0" Text="path"
+                             IsVisible="{Binding ShowParentPath}"
+                             FontSize="{DynamicResource FontSizeSmall}"
+                             Foreground="{DynamicResource ViewDimText}"/>
                   <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" Text="permissions" TextAlignment="Right"
                              IsVisible="{Binding ShowPermissions}"
                              FontSize="{DynamicResource FontSizeSmall}"
@@ -1040,6 +1047,16 @@
                                    th:RowMetadata.Entry="{Binding}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowMetadata}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Foreground="{DynamicResource ViewDimText}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        <!-- Where the row actually lives. Only in a recent
+                             listing, where entries span the filesystem and the
+                             name alone identifies nothing. -->
+                        <TextBlock Grid.Column="2" Width="200" Margin="8,0,0,0"
+                                   Text="{Binding Converter={x:Static vm:FileConverters.ParentPath}}"
+                                   ToolTip.Tip="{Binding FullPath}"
+                                   IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowParentPath}"
+                                   FontSize="{DynamicResource FontSizeSmall}"
+                                   Foreground="{DynamicResource ViewDimText}"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         <!-- POSIX mode, formatted as ls -l prints it. -->
                         <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" TextAlignment="Right"

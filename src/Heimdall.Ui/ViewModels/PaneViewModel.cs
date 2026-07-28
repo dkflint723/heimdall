@@ -302,20 +302,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     public static IFolderViewStore? FolderViews { get; set; }
 
-    /// <summary>
-    /// Visit counts. Recorded from NavigateAsync ONLY — back, forward, F5 and
-    /// session restore all call LoadAsync directly, and none of them is a
-    /// choice about where to go.
-    /// </summary>
-    public static IVisitStore? Visits { get; set; }
 
     /// <summary>
     /// Recently opened files and folders. A separate store from
-    /// <see cref="Visits"/> on purpose — see <see cref="IRecentStore"/> for why
-    /// counting and recency cannot share one set of retention rules.
-    ///
-    /// Static for the same reason as the others: panes are created by the
-    /// shell, not injected here.
+    /// Static for the same reason as the other providers: panes are created by
+    /// the shell, not injected here.
     /// </summary>
     public static IRecentStore? Recents { get; set; }
 
@@ -697,7 +688,26 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public bool ShowSize => ViewportWidth >= 340 * TextScale;
     public bool ShowModified => ViewportWidth >= 520 * TextScale;
     public bool ShowPermissions => ViewportWidth >= 680 * TextScale;
-    public bool ShowMetadata => ViewportWidth >= 840 * TextScale;
+    public bool ShowMetadata => ViewportWidth >= 840 * TextScale && !IsRecentListing;
+
+    /// <summary>
+    /// True only in the two recent listings, where the rows come from a store
+    /// rather than a directory.
+    /// </summary>
+    public bool IsRecentListing => RecentPaths.IsRecent(CurrentPath);
+
+    /// <summary>
+    /// The parent folder of each row, shown ONLY in a recent listing — and not
+    /// optional there: those entries span the whole filesystem, so a bare
+    /// filename says nothing about which of four `config.toml` files you are
+    /// looking at.
+    ///
+    /// Shares column 2 with the metadata column rather than adding a seventh:
+    /// the two are mutually exclusive by construction (ShowMetadata is false
+    /// here), and inserting a column would renumber every element after it in
+    /// two separate grids — the kind of edit that goes wrong quietly.
+    /// </summary>
+    public bool ShowParentPath => IsRecentListing && ViewportWidth >= 420 * TextScale;
 
     partial void OnTextScaleChanged(double value) => NotifyColumns();
 
@@ -707,6 +717,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowModified));
         OnPropertyChanged(nameof(ShowPermissions));
         OnPropertyChanged(nameof(ShowMetadata));
+        OnPropertyChanged(nameof(ShowParentPath));
     }
 
     partial void OnViewportWidthChanged(double value) => NotifyColumns();
@@ -1039,7 +1050,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // "recent locations" at the top of recent locations.
         if (IsLoaded && !RecentPaths.IsRecent(path))
         {
-            Visits?.Record(path);
             Recents?.Record(path, RecentKind.Folder);
         }
     }
@@ -1379,8 +1389,27 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // CurrentPath is assigned from LoadListingAsync after a ConfigureAwait,
         // so this runs on a pool thread. Breadcrumbs is bound to the UI, and
         // mutating it from here is a crash waiting for a slow directory.
-        Dispatcher.UIThread.Post(RebuildBreadcrumbs);
+        // The column flags depend on the path too — a recent listing shows the
+        // parent-path column and hides the metadata one — and they are bound,
+        // so they are raised on the same hop rather than from here.
+        Dispatcher.UIThread.Post(() =>
+        {
+            RebuildBreadcrumbs();
+            OnPropertyChanged(nameof(IsRecentListing));
+            OnPropertyChanged(nameof(ShowParentPath));
+            OnPropertyChanged(nameof(ShowMetadata));
+        });
+
         _ = RefreshFreeSpaceAsync(value);
+
+        // A virtual listing has no filename to fall back on: GetFileName of
+        // "heimdall:recent-files" is the whole string, since it contains no
+        // separator, and that is what the tab would have been titled.
+        if (RecentPaths.IsRecent(value))
+        {
+            Title = RecentPaths.Label(value);
+            return;
+        }
 
         var name = Path.GetFileName(value.TrimEnd('/'));
         Title = string.IsNullOrEmpty(name) ? "/" : name;

@@ -17,6 +17,36 @@ public static class FileConverters
     /// actively misleading: a folder is not empty just because its own inode
     /// has no length.
     /// </summary>
+    /// <summary>
+    /// The folder an entry lives in, with the home directory shown as `~`.
+    ///
+    /// Only used by the recent listings, where rows span the whole filesystem
+    /// and a bare filename identifies nothing. Abbreviating home is what makes
+    /// the column narrow enough to be worth having — most rows are under it.
+    /// </summary>
+    public static readonly IValueConverter ParentPath =
+        new FuncValueConverter<FileEntry, string>(entry =>
+        {
+            if (string.IsNullOrEmpty(entry.FullPath)) return "";
+
+            var parent = Path.GetDirectoryName(entry.FullPath);
+            if (string.IsNullOrEmpty(parent)) return "/";
+
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+            if (!string.IsNullOrEmpty(home))
+            {
+                if (string.Equals(parent, home, StringComparison.Ordinal)) return "~";
+
+                // The separator is part of the test on purpose: without it,
+                // "/home/flintstone" would match a home of "/home/flint".
+                if (parent.StartsWith(home + "/", StringComparison.Ordinal))
+                    return "~" + parent[home.Length..];
+            }
+
+            return parent;
+        });
+
     public static readonly IValueConverter Size =
         new FuncValueConverter<FileEntry, string>(entry =>
         {

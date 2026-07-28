@@ -9,9 +9,10 @@ public sealed record RecentEntry(string Path, RecentKind Kind, DateTimeOffset Wh
 /// <summary>
 /// The most recently opened files and folders, newest first.
 ///
-/// **Deliberately separate from <see cref="IVisitStore"/>, which counts.**
+/// **Deliberately separate from the visit-count store that used to feed the
+/// sidebar's frequent-folders list.**
 /// Frequency and recency are different questions and their retention rules
-/// contradict each other: <c>IVisitStore.Top</c> excludes anything visited once,
+/// contradicted each other: its <c>Top</c> excluded anything visited once,
 /// because a list of things you touched once is noise — but a folder you opened
 /// once a minute ago is exactly what belongs at the top of a *recent* list. Its
 /// bound trims to the strongest entries **by count**, which would evict that
@@ -22,7 +23,7 @@ public sealed record RecentEntry(string Path, RecentKind Kind, DateTimeOffset Wh
 /// was opened, and putting files into the visit counts would make them show up
 /// as frequent *folders* unless every reader filtered them out.
 ///
-/// Only **user-initiated** opening is recorded, matching <see cref="IVisitStore"/>:
+/// Only **user-initiated** opening is recorded:
 /// back, forward, refresh and session restore are not choices about where to go.
 /// </summary>
 public interface IRecentStore

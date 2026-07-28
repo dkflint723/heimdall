@@ -32,7 +32,6 @@ public partial class MainWindow : Window
     private readonly SettingsState _settings;
 
     private JsonFolderViewStore? _folderViews;
-    private JsonVisitStore? _visits;
     private JsonRecentStore? _recents;
     private ITrashMaintenance? _trashMaintenance;
     private DispatcherTimer? _trashTimer;
@@ -87,9 +86,6 @@ public partial class MainWindow : Window
         // one: panes are created by the shell, not injected here.
         _folderViews = new JsonFolderViewStore(JsonSessionStore.DefaultDirectory());
         ViewModels.PaneViewModel.FolderViews = _folderViews;
-
-        _visits = new JsonVisitStore(JsonSessionStore.DefaultDirectory());
-        ViewModels.PaneViewModel.Visits = _visits;
 
         _recents = new JsonRecentStore(JsonSessionStore.DefaultDirectory());
         ViewModels.PaneViewModel.Recents = _recents;
@@ -858,7 +854,6 @@ public partial class MainWindow : Window
         try
         {
             _folderViews?.Flush();
-            _visits?.Flush();
             _recents?.Flush();
             await _store.FlushAsync(CancellationToken.None);
             await _store.DisposeAsync();

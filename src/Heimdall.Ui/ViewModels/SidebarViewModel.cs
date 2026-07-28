@@ -91,7 +91,8 @@ public sealed partial class SidebarViewModel : ObservableObject
     // The frequently-visited list was REMOVED at the user's request once Recent
     // files and Recent locations existed — recency covers what frequency was
     // being used for, and two ranked lists of folders in one sidebar is one too
-    // many. Git has it. Note this leaves IVisitStore with no reader at all.
+    // many. Git has it. The visit-count store it read has since been deleted
+    // too, having had no other reader.
     //
     // What survives is the callback: the shell owns what a click does, and both
     // the recent entries and tags reach it this way.

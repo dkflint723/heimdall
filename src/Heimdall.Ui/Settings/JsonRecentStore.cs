@@ -7,7 +7,7 @@ namespace Heimdall.Ui.Settings;
 /// <summary>
 /// Recently opened files and folders in one file, flushed on close.
 ///
-/// Same shape as <see cref="JsonVisitStore"/> deliberately — dirty flag rather
+/// Same shape as the visit store it outlived — dirty flag rather
 /// than a write per change, atomic temp-and-rename, a bad file falling back to
 /// empty rather than blocking startup. Two stores that behave differently would
 /// be two things to remember.
