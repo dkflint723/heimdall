@@ -134,6 +134,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           find artifacts -type f -printf '%p\n'
+
+          # Same reasoning as build.yml: create only if the other workflow has
+          # not got here first.
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+
           gh release upload "$GITHUB_REF_NAME" \
             $(find artifacts -type f \( -name '*.rpm' -o -name '*.tar.gz' \)) \
             --clobber
