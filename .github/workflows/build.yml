@@ -1,0 +1,76 @@
+name: build
+
+# Every push to main proves the tree still builds; a v* tag additionally
+# publishes a release. Separating those means a broken commit is caught without
+# anyone having to remember to tag.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # needed only by the release step
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # NativeAOT links with clang and needs zlib's headers. Without these the
+      # publish fails late, after a full restore and compile.
+      - name: NativeAOT prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev
+
+      # Debug first: TreatWarningsAsErrors plus the trim, AOT and single-file
+      # analysers are all on here, so this catches a trim-hostile dependency as
+      # a warning rather than as a runtime failure in the published binary.
+      - name: Build
+        run: dotnet build -c Debug
+
+      - name: Publish
+        run: dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true
+
+      # The publish DIRECTORY is the deliverable, not the executable.
+      # libSkiaSharp.so and libHarfBuzzSharp.so sit beside the binary and are
+      # loaded from its own directory; shipping the executable alone produces
+      # something that aborts before it draws anything.
+      - name: Package
+        run: |
+          P=src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish
+          test -f "$P/libSkiaSharp.so" || { echo "libSkiaSharp.so missing"; exit 1; }
+
+          mkdir -p dist/heimdall
+          cp -a "$P"/. dist/heimdall/
+          cp packaging/install.sh dist/heimdall/
+          chmod +x dist/heimdall/install.sh dist/heimdall/Heimdall.Ui
+
+          tar -czf heimdall-linux-x64.tar.gz -C dist heimdall
+          sha256sum heimdall-linux-x64.tar.gz | tee heimdall-linux-x64.tar.gz.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heimdall-linux-x64
+          path: |
+            heimdall-linux-x64.tar.gz
+            heimdall-linux-x64.tar.gz.sha256
+
+      # `gh` is preinstalled on the runner, so this needs no third-party action.
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            heimdall-linux-x64.tar.gz heimdall-linux-x64.tar.gz.sha256 \
+            --generate-notes
