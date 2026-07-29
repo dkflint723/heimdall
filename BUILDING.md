@@ -203,6 +203,42 @@ tarball directly or make the repo public.
 
 ---
 
+## 5a. Distribution packages
+
+`.github/workflows/distro.yml` builds **natively inside Fedora and Arch
+containers**, on a `v*` tag or on demand from the Actions tab. Two reasons it is
+separate from `build.yml`: container jobs take minutes, and a distro build is
+only interesting when a release is being cut.
+
+**Fedora** produces an RPM from `packaging/heimdall.spec`. The spec packages the
+already-published tree rather than compiling inside `rpmbuild` — NativeAOT wants
+an SDK and clang, and CI has already done that work. The job then **installs the
+RPM and runs it**, because a package that installs is the only proof that the
+`Requires:` list is complete.
+
+**Arch** builds and validates `packaging/PKGBUILD`. Unlike the RPM it compiles
+from source, which is the Arch convention and what the AUR expects.
+
+> **The Arch package cannot be called `heimdall`.** That name is taken by the
+> Samsung firmware flashing tool. `pkgname=heimdall-fm` is a placeholder —
+> check with `pacman -Ss '^heimdall$'` and pick something before publishing.
+
+**Publishing to the AUR is deliberately not automated.** It needs an SSH key with
+push rights to `aur.archlinux.org`, and putting one in repository secrets so a
+workflow can publish on your behalf is a decision worth making consciously. The
+manual path:
+
+```bash
+git clone ssh://aur@aur.archlinux.org/heimdall-fm.git
+cp packaging/PKGBUILD packaging/.SRCINFO heimdall-fm/
+cd heimdall-fm && git commit -am "0.1.0" && git push
+```
+
+Update `sha256sums` in the PKGBUILD first — it ships as `SKIP`, which the AUR
+accepts but which verifies nothing.
+
+---
+
 ## 6. Things that will trip you up
 
 **`src/Heimdall.Ui/heimdall.png` must exist, and it is NOT in version

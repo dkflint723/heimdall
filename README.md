@@ -152,6 +152,17 @@ the honest list, not a roadmap.
 
 ---
 
+## Licence
+
+MIT — see [LICENSE](LICENSE).
+
+Heimdall builds on [Avalonia](https://avaloniaui.net) (MIT) and
+[CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) (MIT), and
+its published binaries bundle SkiaSharp and HarfBuzzSharp (MIT) and the Inter
+typeface (SIL Open Font License 1.1).
+
+---
+
 <div align="center">
 <sub>Named for the watchman who sees everything coming.</sub>
 </div>

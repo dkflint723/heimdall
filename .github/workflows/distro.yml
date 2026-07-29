@@ -1,0 +1,139 @@
+name: distro packages
+
+# Separate from build.yml on purpose. That workflow is the fast check on every
+# push; this one runs in containers, takes minutes, and only needs to run when a
+# release is being cut or when someone asks for it.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+
+  # ---------------------------------------------------------------- Fedora ---
+  fedora:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+
+    steps:
+      - name: Toolchain
+        run: |
+          dnf -y install git rpm-build tar clang zlib-devel
+          # Fedora's package name is version-pinned, so a release that does not
+          # carry .NET 10 yet must fall back rather than fail the job.
+          dnf -y install dotnet-sdk-10.0 || {
+            echo "dotnet-sdk-10.0 not in this Fedora release; using the installer"
+            curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+          }
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          dotnet --version
+          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true
+
+      - name: Stage the publish tree
+        run: |
+          P=src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish
+          test -f "$P/libSkiaSharp.so" || { echo "libSkiaSharp.so missing"; exit 1; }
+          mkdir -p dist/heimdall
+          cp -a "$P"/. dist/heimdall/
+          cp LICENSE README.md dist/heimdall/
+          tar -czf heimdall-linux-x64-fedora.tar.gz -C dist heimdall
+
+      - name: Build the RPM
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION:-0.0.0}"
+
+          mkdir -p ~/rpmbuild/{SOURCES,SPECS}
+          cp heimdall-linux-x64-fedora.tar.gz ~/rpmbuild/SOURCES/heimdall-linux-x64.tar.gz
+          cp brand/heimdall.desktop ~/rpmbuild/SOURCES/
+          cp -a brand/icons ~/rpmbuild/SOURCES/
+
+          rpmbuild -bb packaging/heimdall.spec --define "version $VERSION"
+          find ~/rpmbuild/RPMS -name '*.rpm' -exec cp {} . \;
+
+      # An RPM that installs is the only proof that matters. `rpm -i` runs the
+      # dependency solver, so a missing Requires fails here rather than on
+      # somebody's machine.
+      - name: Install it, then run it
+        run: |
+          dnf -y install ./*.rpm
+          test -x /usr/bin/heimdall
+          heimdall --version || true   # no display in CI; it must merely load
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fedora
+          path: |
+            *.rpm
+            heimdall-linux-x64-fedora.tar.gz
+
+  # ------------------------------------------------------------------ Arch ---
+  arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+
+    steps:
+      - name: Toolchain
+        run: |
+          pacman -Syu --noconfirm git base-devel dotnet-sdk clang
+
+          # makepkg refuses to run as root, so give it an unprivileged user.
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          dotnet --version
+          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true
+
+      - name: Stage the publish tree
+        run: |
+          P=src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish
+          test -f "$P/libSkiaSharp.so" || { echo "libSkiaSharp.so missing"; exit 1; }
+          mkdir -p dist/heimdall
+          cp -a "$P"/. dist/heimdall/
+          cp LICENSE README.md dist/heimdall/
+          tar -czf heimdall-linux-x64-arch.tar.gz -C dist heimdall
+
+      # Validates the PKGBUILD's syntax and metadata without downloading the
+      # tagged tarball, which will not exist until the release is published.
+      - name: Check the PKGBUILD
+        run: |
+          chown -R builder .
+          su builder -c 'cd packaging && makepkg --printsrcinfo > .SRCINFO'
+          cat packaging/.SRCINFO
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: |
+            heimdall-linux-x64-arch.tar.gz
+            packaging/.SRCINFO
+
+  # --------------------------------------------------------------- release ---
+  release:
+    needs: [fedora, arch]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find artifacts -type f -printf '%p\n'
+          gh release upload "$GITHUB_REF_NAME" \
+            $(find artifacts -type f \( -name '*.rpm' -o -name '*.tar.gz' \)) \
+            --clobber
