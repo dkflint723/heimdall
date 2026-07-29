@@ -44,9 +44,12 @@ public sealed class JsonSessionStore : ISessionStore, IAsyncDisposable
     {
         var directory = Path.Combine(StateRoot(), "heimdall");
 
-        // The app was called Heimdall until it was renamed. Adopt the old state
-        // rather than starting empty: losing every tab, pinned place and window
-        // position to a rename would be a poor trade for a new name.
+        // The app was called ROVE until it was renamed to Heimdall — the
+        // direction this comment used to state backwards, which is exactly the
+        // kind of thing nobody notices until they are debugging a migration.
+        // Adopt the old state rather than starting empty: losing every tab,
+        // pinned place and window position to a rename would be a poor trade
+        // for a new name.
         Heimdall.Core.PreviousName.Adopt(directory, Path.Combine(StateRoot(), "rove"));
 
         return directory;

@@ -1,0 +1,224 @@
+# Building Heimdall
+
+Linux-first, developed on Fedora KDE. Nothing here is KDE-specific — Heimdall
+reads the desktop's own configuration where it exists and falls back where it
+does not — but the colour scheme and icon theme come from `kdeglobals`, so on a
+non-KDE desktop it will use its built-in defaults.
+
+There is no Windows build yet: `Heimdall.Ui` references `Heimdall.Linux`
+unconditionally.
+
+---
+
+## 1. The SDK
+
+Heimdall targets **.NET 10** (`net10.0`). That is the one hard requirement; an
+older SDK will not build it.
+
+### Fedora
+
+```bash
+sudo dnf install dotnet-sdk-10.0
+```
+
+### Arch
+
+```bash
+sudo pacman -S dotnet-sdk
+```
+
+Arch's `dotnet-sdk` tracks the current release, so check what you actually got:
+
+```bash
+dotnet --list-sdks
+```
+
+**If your distribution does not carry .NET 10 yet**, install it beside the system
+one rather than fighting the package manager:
+
+```bash
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0
+export PATH="$HOME/.dotnet:$PATH"
+```
+
+That puts the SDK in `~/.dotnet` and touches nothing system-wide. Add the
+`export` to your shell profile if you want it to persist.
+
+---
+
+## 2. Build and run
+
+```bash
+git clone <your remote> heimdall
+cd heimdall
+dotnet build
+dotnet run --project src/Heimdall.Ui
+```
+
+The first build restores Avalonia 12.1 and CommunityToolkit.Mvvm from NuGet.
+Nothing else is fetched, and no native library is compiled — a debug build needs
+only the SDK.
+
+**`TreatWarningsAsErrors` is on for every project.** A warning you might ignore
+elsewhere fails the build here, deliberately. Trim, AOT and single-file analysers
+are also enabled in debug, so a dependency that would break a published build
+shows up now rather than months later.
+
+---
+
+## 3. Runtime programs
+
+Heimdall shells out rather than reimplementing what the desktop already does.
+None of these is needed to *build*, and the application starts without any of
+them — the corresponding feature simply does nothing.
+
+| Program | Package (Fedora) | Package (Arch) | Used for |
+|---|---|---|---|
+| `gio` | `glib2` | `glib2` | mounting and unmounting drives |
+| `git` | `git` | `git` | version-control decorations |
+| `xdg-mime`, `xdg-open` | `xdg-utils` | `xdg-utils` | opening files, mime fallback |
+| `avahi-browse` | `avahi-tools` | `avahi` | discovering network shares |
+| — | `shared-mime-info` | `shared-mime-info` | the mime database itself |
+
+```bash
+# Fedora
+sudo dnf install glib2 git xdg-utils avahi-tools shared-mime-info
+
+# Arch
+sudo pacman -S glib2 git xdg-utils avahi shared-mime-info
+```
+
+`shared-mime-info` earns its place: Heimdall parses `/usr/share/mime/globs2`
+directly and only falls back to spawning `xdg-mime` for a name the glob database
+cannot classify. That fallback is capped and cached, because it is a shell script
+that starts processes — a folder full of extensionless files once turned it into
+a 44-second listing.
+
+**Optional — file sharing.** The share feature runs `copyparty` if it can find
+it, either on `PATH` or as `python3 -m copyparty`. It is packaged on neither
+distribution:
+
+```bash
+pipx install copyparty        # or: pip install --user copyparty
+```
+
+---
+
+## 4. Publishing a single binary
+
+Release builds are trimmed, and NativeAOT removes the need to install a .NET
+runtime on the target. **It does NOT produce a single file.** That needs a C
+toolchain:
+
+```bash
+# Fedora
+sudo dnf install clang zlib-devel
+
+# Arch
+sudo pacman -S clang            # zlib is already in base
+```
+
+Then:
+
+```bash
+dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true
+```
+
+**The whole `publish/` directory is the deliverable, not just the executable:**
+
+```
+src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish/
+├── Heimdall.Ui          the program
+├── libSkiaSharp.so      rendering  — REQUIRED
+└── libHarfBuzzSharp.so  text shaping — REQUIRED
+```
+
+**"Self-contained" means no .NET runtime to install. It does not mean one
+file.** SkiaSharp and HarfBuzz are native libraries and stay beside the binary,
+which loads them from its own directory at startup. Copy the executable out on
+its own and it aborts before drawing anything:
+
+```
+System.DllNotFoundException: Unable to load shared library 'libSkiaSharp'
+  at Avalonia.Skia.SkiaPlatform.Initialize(SkiaOptions)
+```
+
+So install the directory and link to it, rather than copying the binary:
+
+```bash
+P=src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish
+mkdir -p ~/.local/lib/heimdall
+cp -a "$P"/. ~/.local/lib/heimdall/
+ln -sf ~/.local/lib/heimdall/Heimdall.Ui ~/.local/bin/heimdall
+```
+
+The symlink works because the loader resolves `/proc/self/exe` before looking
+for neighbours, so it finds the libraries in the real directory.
+
+`InvariantGlobalization` is on, so there is **no ICU dependency** — the binary
+does not need `libicu` on the target machine. Fontconfig and an X11 or Wayland
+session are still required, which any desktop already has.
+
+---
+
+## 5. Things that will trip you up
+
+**`src/Heimdall.Ui/heimdall.png` must exist, and it is NOT in version
+control.** It is referenced as an `AvaloniaResource` and embedded in the binary,
+so a fresh clone fails to build with:
+
+```
+error MSB4018: The "GenerateAvaloniaResourcesTask" task failed unexpectedly.
+System.IO.FileNotFoundException: Could not find file '…/src/Heimdall.Ui/heimdall.png'
+```
+
+**This is the one file whose loss breaks the build, and it currently lives on a
+single machine.** Fix it properly rather than working around it — from a checkout
+that has the file:
+
+```bash
+git check-ignore -v src/Heimdall.Ui/heimdall.png   # is a .gitignore rule hiding it?
+git add -f src/Heimdall.Ui/heimdall.png
+git commit -m "Commit the application icon"
+```
+
+The `-f` is needed only if an ignore rule matches it; a broad `*.png` pattern is
+the usual culprit.
+
+To unblock a build before that happens, any 128×128 PNG at that path will do —
+the build only needs a readable image, and the real one can replace it later.
+
+**Debug builds carry `AvaloniaUI.DiagnosticsSupport`**, which is excluded from
+Release by condition. If you publish and the developer tools vanish, that is why.
+
+**Avalonia is 12.1, not 11.** APIs moved. If you are reading advice written for
+Avalonia 11 and it does not compile, that is usually the reason — decompile the
+shipped assembly rather than trusting a blog post:
+
+```bash
+dotnet tool install -g ilspycmd
+export PATH="$PATH:$HOME/.dotnet/tools"
+ilspycmd -t Avalonia.RelativePoint \
+  ~/.nuget/packages/avalonia/12.1.0/lib/net10.0/Avalonia.Base.dll
+```
+
+That habit has settled more questions in this project than any amount of
+reasoning about what the framework "should" do.
+
+---
+
+## 6. Diagnostics
+
+Environment variables, all off by default:
+
+| Variable | Prints |
+|---|---|
+| `HEIMDALL_LOAD_DEBUG=1` | heap, GC and thread-pool counters per folder load |
+| `HEIMDALL_TILE_DEBUG=1` | realized container count, index range and viewport per measure |
+| `HEIMDALL_ICON_DEBUG=1` | per-shape bounds, brushes and gradient axes while rendering SVG icons |
+| `HEIMDALL_FONT_DEBUG=1` | font resolution |
+| `HEIMDALL_TILE_LIMIT=<n>` | overrides the item limit for the compact layout |
+
+`HEIMDALL_TILE_DEBUG` is the one to reach for first when a listing feels slow:
+the realized count is unambiguous in a way that a timing figure is not. If it
+approaches the item count, nothing is being virtualized.
