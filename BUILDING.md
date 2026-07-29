@@ -104,7 +104,7 @@ pipx install copyparty        # or: pip install --user copyparty
 
 ---
 
-## 4. Publishing a single binary
+## 4. Publishing
 
 Release builds are trimmed, and NativeAOT removes the need to install a .NET
 runtime on the target. **It does NOT produce a single file.** That needs a C
@@ -161,7 +161,49 @@ session are still required, which any desktop already has.
 
 ---
 
-## 5. Things that will trip you up
+## 5. Giving someone else a build
+
+`.github/workflows/build.yml` builds on every push to `main` and publishes a
+release tarball when you push a `v*` tag:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+That produces `heimdall-linux-x64.tar.gz` on the Releases page, containing the
+publish directory plus `install.sh`. The recipient runs:
+
+```bash
+tar -xzf heimdall-linux-x64.tar.gz
+cd heimdall && ./install.sh
+```
+
+It installs under `~/.local`, needs no root, and refuses to proceed if
+`libSkiaSharp.so` is missing rather than installing something that aborts at
+startup.
+
+**Two limits worth knowing before sending it to a stranger.**
+
+**glibc.** The binary is built on the runner's glibc and will not start on an
+older one — fine for current Fedora and Arch, not for a long-term-support distro
+several years behind. Building in a container based on the oldest glibc you want
+to support is the fix, when that day comes.
+
+**Nothing is sandboxed, and that is deliberate.** Heimdall reads `kdeglobals`,
+the icon theme, the XDG trash and `user-dirs.dirs`, and shells out to `gio`,
+`git`, `xdg-open` and `avahi-browse`. **Flatpak would be a poor fit** — a file
+manager wants the host filesystem and the host's programs, which is exactly what
+the sandbox exists to prevent. If a single self-contained file is ever wanted,
+**AppImage** is the format that matches this application, because it bundles
+without isolating.
+
+**A private repo's releases are private too.** Anyone you send the link to needs
+access to the repository. To hand a build to someone outside, either attach the
+tarball directly or make the repo public.
+
+---
+
+## 6. Things that will trip you up
 
 **`src/Heimdall.Ui/heimdall.png` must exist, and it is NOT in version
 control.** It is referenced as an `AvaloniaResource` and embedded in the binary,
@@ -207,7 +249,7 @@ reasoning about what the framework "should" do.
 
 ---
 
-## 6. Diagnostics
+## 7. Diagnostics
 
 Environment variables, all off by default:
 
