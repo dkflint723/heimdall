@@ -1,0 +1,253 @@
+# Starting the Windows port
+
+Written 29 July 2026, from the tree at that date. Everything below was read off
+the source rather than recalled; where something is a guess it says so.
+
+**This is a work plan, not a status document.** Delete it when the port lands.
+
+---
+
+## 1. The good news: there is exactly one seam
+
+`MainWindow.axaml.cs` line ~54 is, in its own words, *"the one and only place a
+platform type is named"*:
+
+```csharp
+IPlatform platform;
+
+if (OperatingSystem.IsLinux())
+    platform = new LinuxPlatform(JsonSessionStore.DefaultDirectory());
+else
+    throw new PlatformNotSupportedException(
+        "No platform implementation for this operating system yet.");
+```
+
+Adding Windows means adding an `else if (OperatingSystem.IsWindows())` branch
+and one project. **The UI names no other platform type** — verified by grepping
+`Heimdall.Ui` for every `Xdg*`, `Linux*`, `Avahi*`, `Copyparty*` identifier; the
+only hits are that one line, a comment, and a local helper misleadingly named
+`XdgDeduplicate` (it implements the *freedesktop* "file (1)" rename convention,
+which is not Windows' "file - Copy", so it needs a platform hook or a rename).
+
+`IPlatform` is the whole surface: 19 members, seven of them nullable because the
+interface already anticipates a platform that lacks the capability. **Those
+nullables are the porting budget** — `Sharing`, `Remotes`, `Discovery`, `Theme`,
+`Icons`, `TrashMaintenance`, `AccessEditor` can all return `null` on day one and
+the application still runs.
+
+---
+
+## 2. Two blockers before any code
+
+**`Heimdall.Ui.csproj` references `Heimdall.Linux` unconditionally.** That has to
+become conditional, or `Heimdall.Windows` will be dragged onto Linux builds and
+vice versa:
+
+```xml
+<ItemGroup Condition="'$([System.OperatingSystem]::IsLinux())' == 'true'">
+  <ProjectReference Include="..\Heimdall.Linux\Heimdall.Linux.csproj" />
+</ItemGroup>
+<ItemGroup Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
+  <ProjectReference Include="..\Heimdall.Windows\Heimdall.Windows.csproj" />
+</ItemGroup>
+```
+
+Then the `new LinuxPlatform(...)` line needs `#if` fencing, because a reference
+that is not present will not compile. **Untested — this is the first thing to
+prove, before writing a single provider.**
+
+**`Heimdall.Linux/AssemblyInfo.cs` carries `[assembly: SupportedOSPlatform("linux")]`.**
+`Heimdall.Windows` needs the mirror image, and it can additionally use the real
+`net10.0-windows` TFM, which Linux cannot (no `net10.0-linux` exists). That TFM
+unlocks the Windows Forms/WPF interop surface if it is ever wanted — probably it
+is not, but it also silences the platform analyser properly.
+
+---
+
+## 3. What is already portable, and must not be re-implemented
+
+`Heimdall.Core` holds real logic, not just contracts. **None of this needs
+touching:**
+
+| | |
+|---|---|
+| `Vcs/GitVersionControl` | drives the `git` binary; behaves identically on Windows |
+| `FileSystem/Checksums` | pure |
+| `FileSystem/ImageSize` | header parsing, byte-level |
+| `FileSystem/ByteSize`, `Grouping`, `FileKinds` | pure |
+| `NaturalOrder` | pure |
+| `PathCompleter` | **uses `/` in a doc comment only** — check the logic uses `Path.DirectorySeparatorChar` |
+| `BatchRename` | pure |
+| `PreviousName` | pure |
+
+The whole `Heimdall.Ui` layer is Avalonia and portable in principle. Its problems
+are path assumptions, not APIs — see §5.
+
+---
+
+## 4. The providers, ordered by how much they will hurt
+
+### Trivial — a day, mostly BCL
+- **`IFileSystemProvider`** — `Directory.EnumerateFileSystemEntries` already.
+  Windows adds drive roots (`C:\`) where Linux has one `/`.
+- **`IFileOperations`** — copy/move/delete are BCL. **Trash is the exception,
+  see below.**
+- **`IApplicationLauncher`** — `ShellExecute` via `Process.Start` with
+  `UseShellExecute = true`. Easier than the Linux `.desktop` parsing.
+- **`ISearchProvider`** — a directory walk. The Linux one shells out to `find`;
+  a managed walk is fine and more portable.
+- **`ITemplateProvider`** — Windows has `%APPDATA%\Microsoft\Windows\Templates`.
+- **`IScriptRunner`** — same shape, different interpreter conventions.
+
+### Moderate — real work but well-trodden
+- **`IPlacesProvider`** — `SHGetKnownFolderPath` for Desktop/Documents/etc, plus
+  `DriveInfo.GetDrives()`. **Registry-free via `Environment.GetFolderPath`,
+  which covers most of it without P/Invoke.**
+- **`IThemeProvider`** — registry: `HKCU\...\Themes\Personalize\AppsUseLightTheme`
+  for dark mode, and DWM's `ColorizationColor` for the accent. Straightforward
+  reads; no COM.
+- **`IPropertiesProvider` / `IFileMetadataProvider`** — `FileInfo` covers most.
+  Rich metadata (image dimensions, media duration) has no BCL equivalent —
+  **`ImageSize` in Core already solves the image case.**
+- **`IThumbnailProvider`** — Windows has `IShellItemImageFactory` (COM). A
+  cheaper first pass: decode images directly with `ImageSize` + Avalonia, and
+  return null for everything else. **The freedesktop thumbnail cache does not
+  exist on Windows, so `XdgThumbnailProvider`'s whole caching strategy is moot.**
+
+### Hard — expect these to dominate the schedule
+- **Trash / Recycle Bin.** There is **no BCL API.** The options are
+  `SHFileOperation` (ANSI/Unicode struct marshalling, deprecated but simple) or
+  `IFileOperation` (COM, the supported route). **Both are P/Invoke or COM under
+  NativeAOT, which is the risky combination** — COM in particular needs
+  source-generated interop or it will fail at runtime, not compile time. Budget
+  real time here, and see §6.
+  **`ITrashMaintenance` also needs `List`/`Restore`/`Empty`** — the Recycle Bin
+  exposes these through the same COM surface. Returning `null` for
+  `TrashMaintenance` on day one is legitimate and skips all of it.
+- **`ITagStore`.** Linux uses **xattrs**, which Windows does not have. The
+  nearest equivalent is **NTFS Alternate Data Streams** (`file.txt:tags`), which
+  are invisible, survive copies within NTFS, and are **silently destroyed by any
+  copy to FAT/exFAT or by most archivers.** The honest alternative is a sidecar
+  store keyed by path, which then goes stale on rename. **This is a design
+  decision, not an implementation detail — decide before writing code.**
+- **`IIconThemeProvider`.** The whole model differs. Linux has a theme of named
+  icons the app resolves; Windows has **per-file icons** from
+  `SHGetFileInfo`/`IShellItemImageFactory`. `IconLoader`'s SVG renderer and
+  `XdgIconTheme`'s name resolution have **no Windows counterpart at all.**
+  Returning `null` for `Icons` falls back to the drawn glyphs in
+  `IconLoader.Fallback` and `SidebarIcon` — **which is why those exist and are
+  hand-drawn rather than themed.** Start there.
+- **`IAccessEditor`.** POSIX modes have no meaning on Windows; ACLs are a
+  different model entirely. **Return `null`** — the interface is already nullable
+  for exactly this reason.
+
+### Not worth doing
+- **`INetworkDiscovery`** — Avahi has no Windows equivalent worth the effort.
+  Return `null`.
+- **`IRemoteMounts`** — `gio` has no counterpart; Windows mapped drives appear as
+  ordinary drive letters through `IPlacesProvider` anyway. Return `null`.
+- **`IFileSharing`** — copyparty runs on Windows if Python is installed; the
+  existing `CopypartyShare` logic is mostly path handling and could move to Core.
+
+---
+
+## 5. The path assumptions that will bite
+
+**15 sites in `Heimdall.Ui` assume POSIX paths.** They are not hard to fix but
+they are scattered, and most will *appear* to work on Windows while being subtly
+wrong. Found with:
+
+```bash
+grep -rn "StartsWith('/')\|TrimEnd('/')\|Split('/')\|== \"/\"" src/Heimdall.Ui
+```
+
+The important ones:
+
+- **`MillerViewModel.cs:148` — `if (current == "/") break;`** This is the
+  loop-termination condition when walking up to the root. On Windows the root is
+  `C:\`, and **this loop will not terminate correctly.** Highest-priority fix.
+- **`PaneViewModel.RebuildBreadcrumbs`** splits on the path separator to build
+  crumbs. Needs `Path.DirectorySeparatorChar` and a drive-letter-aware root.
+- **`TrimEnd('/')` in seven places** (`ShellViewModel`, `SidebarViewModel`,
+  `JsonRecentStore`, `JsonFolderViewStore`, `PaneViewModel`, `MillerViewModel`) —
+  these normalise trailing separators before comparing paths. On Windows they
+  silently fail to normalise `C:\Users\flint\`, so **place highlighting and
+  duplicate-tab detection will misbehave in ways that look random.**
+- **`FileClipboard.cs:130`** parses `file://` URIs by splitting on `/`. Windows
+  drag-and-drop uses a different clipboard format entirely (`CF_HDROP`).
+- **`VirtualPaths`** uses `heimdall:` prefixes. **These are safe** — the comment
+  claims no collision because real paths start with `/`, which stops being true
+  on Windows, but `heimdall:` still cannot collide with `C:\`.
+
+**Suggested approach: add a `PathRules` helper in Core** with `Normalise`,
+`IsRoot` and `Parent`, and route all fifteen through it. That turns a scattered
+port into one testable class — and `PathCompleter` and `NaturalOrder` are already
+precedent for that kind of thing living in Core.
+
+---
+
+## 6. NativeAOT is the constraint that will surprise you
+
+The project publishes with `PublishAot=true` and `TrimMode=full`, and
+`Directory.Build.props` turns on the trim, AOT and single-file analysers for
+**every** project. That means:
+
+- **A Windows provider that uses COM will produce analyser warnings, and
+  `TreatWarningsAsErrors` turns those into build failures.** This is a feature —
+  it catches the problem at build time rather than as a `PlatformNotSupported`
+  at runtime — but it will feel like an obstacle on day one.
+- Prefer **`[LibraryImport]` source-generated P/Invoke** over `[DllImport]`, and
+  **`ComWrappers`-based source-generated COM** over `Marshal.GetActiveObject`
+  style interop. Both are AOT-clean; the older styles are not.
+- **Test the published binary, not just the debug build.** The Linux side learned
+  this the hard way: a clean `dotnet build` says nothing about whether the AOT
+  binary starts. See `BUILDING.md` §4.
+
+---
+
+## 7. Suggested order
+
+1. **Prove the scaffolding.** New `Heimdall.Windows` project, conditional
+   references, `#if` around the platform construction, a `WindowsPlatform` that
+   returns `null` for every nullable member and throws for the rest. **Goal: it
+   compiles on both platforms.** Nothing runs yet.
+2. **`PathRules` in Core**, and route the 15 sites through it. **Do this before
+   any provider** — otherwise you will debug path bugs and provider bugs at the
+   same time and be unable to tell them apart.
+3. **`IFileSystemProvider` + `IPlacesProvider`.** First light: a window that
+   lists `C:\` and has drives in the sidebar. Icons will be the drawn fallbacks
+   and that is fine.
+4. **`IApplicationLauncher`, `IFileOperations` (no trash), `ISearchProvider`.**
+   Now it is usable.
+5. **`IThemeProvider`.** Cheap, and makes it stop looking alien.
+6. **Then the hard three** — trash, tags, icons — each as its own decision.
+
+---
+
+## 8. What to verify, and how
+
+- **`dotnet build` on Linux must still pass** after every step. The conditional
+  references make it possible to break the Linux build from a Windows machine
+  without noticing. **CI covers this** — `.github/workflows/build.yml` runs on
+  every push.
+- **Run the published binary on Windows**, not `dotnet run`.
+- **`HEIMDALL_TILE_DEBUG=1`** still works and is still the ground truth for
+  whether a listing is virtualizing.
+- The `[heimdall]` diagnostic lines all go to **stderr** — on Windows, run from a
+  terminal or they vanish.
+
+---
+
+## 9. Things this document is not sure about
+
+Stated plainly so they are not mistaken for findings:
+
+- The conditional `ProjectReference` syntax in §2 is **untested**. MSBuild
+  property functions in `Condition` are correct in principle; the exact form may
+  need adjusting.
+- Whether `net10.0-windows` is worth adopting over plain `net10.0` — it depends
+  on whether any Windows-only BCL surface is needed, and it complicates the
+  solution's TFM story.
+- Whether Avalonia's Windows backend needs anything beyond the existing package
+  references. It should not — `Avalonia.Desktop` covers all three desktop
+  backends — but that is an assumption, not a verified fact.
