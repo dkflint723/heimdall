@@ -68,7 +68,7 @@ jobs:
           test -x /usr/bin/heimdall
           heimdall --version || true   # no display in CI; it must merely load
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: fedora
           path: |
@@ -113,7 +113,7 @@ jobs:
           su builder -c 'cd packaging && makepkg --printsrcinfo > .SRCINFO'
           cat packaging/.SRCINFO
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: arch
           path: |
