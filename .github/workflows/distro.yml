@@ -68,7 +68,7 @@ jobs:
           test -x /usr/bin/heimdall
           heimdall --version || true   # no display in CI; it must merely load
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: fedora
           path: |
@@ -113,7 +113,7 @@ jobs:
           su builder -c 'cd packaging && makepkg --printsrcinfo > .SRCINFO'
           cat packaging/.SRCINFO
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: arch
           path: |
@@ -132,6 +132,11 @@ jobs:
 
       - env:
           GH_TOKEN: ${{ github.token }}
+          # This job downloads artifacts and never checks out, so there is no
+          # .git for gh to infer the repository from — without this it dies with
+          # "failed to run git: fatal: not a git repository". Cheaper than
+          # cloning the tree just to upload three files.
+          GH_REPO: ${{ github.repository }}
         run: |
           find artifacts -type f -printf '%p\n'
 

@@ -58,7 +58,7 @@ jobs:
           tar -czf heimdall-linux-x64.tar.gz -C dist heimdall
           sha256sum heimdall-linux-x64.tar.gz | tee heimdall-linux-x64.tar.gz.sha256
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: heimdall-linux-x64
           path: |
