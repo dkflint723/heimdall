@@ -135,8 +135,8 @@ the item count, nothing is being virtualized.
 
 ## Status
 
-Not released, and version numbers should not be trusted yet. Feature parity with
-Dolphin is tracked honestly in **[PARITY.md](PARITY.md)**, including the gaps.
+Not released, and version numbers should not be trusted yet. The gaps below are
+the honest list, not a roadmap.
 
 **Known and open:**
 
@@ -149,17 +149,6 @@ Dolphin is tracked honestly in **[PARITY.md](PARITY.md)**, including the gaps.
 - **Windows is deliberately last.** Most Core interfaces still have exactly one
   implementation, and the second is where you find out which abstractions were
   really about Linux rather than about file management.
-
----
-
-## Documents
-
-| File | What it is |
-|---|---|
-| [BUILDING.md](BUILDING.md) | prerequisites, publishing, packaging, distribution |
-| [PARITY.md](PARITY.md) | the Dolphin gap analysis, and the authoritative status |
-| [HANDOFF.md](HANDOFF.md) | architecture, constraints that will bite again, working practices |
-| [DECISIONS.md](DECISIONS.md) | why things are the way they are |
 
 ---
 
