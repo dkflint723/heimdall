@@ -507,6 +507,12 @@ public static class IconLoader
                ?? e.Attribute(XNamespace.Get("http://www.w3.org/1999/xlink") + "href");
     }
 
+    /// <summary>
+    /// How much of a black gradient stop's opacity to keep. See StopColour for
+    /// why this exists and why it is limited to black.
+    /// </summary>
+    private const double ShadowSoftness = 0.55;
+
     private static Color StopColour(XElement stop)
     {
         var colour = (string?)stop.Attribute("stop-color");
@@ -530,6 +536,24 @@ public static class IconLoader
         var parsedColour = Colors.Black;
         try { if (colour is { Length: > 0 }) parsedColour = Color.Parse(colour); }
         catch { /* leave black */ }
+
+        // **A DELIBERATE DEVIATION FROM THE FILE**, and the only one in this
+        // renderer — everything else here draws what the SVG says.
+        //
+        // [stated] "The shadow is just a little too hard. it could be softer
+        // slightly." Icon sets author their corner shadows at full black for a
+        // large canvas; at 17 px in a sidebar and 48 px in a tile the fade
+        // crosses only a handful of pixels, so the dark end reads as an edge
+        // rather than as shading.
+        //
+        // Applied ONLY to a black stop, which is what a shadow is. A coloured
+        // gradient is the icon's own artwork and is left alone — dimming those
+        // would wash out every logo in the theme.
+        //
+        // ShadowSoftness is the single dial: raise it toward 1.0 for the file's
+        // own weight, lower it for less. Deleting the two lines restores exact
+        // fidelity.
+        if (parsedColour is { R: 0, G: 0, B: 0 }) opacity *= ShadowSoftness;
 
         return Color.FromArgb((byte)(parsedColour.A * Math.Clamp(opacity, 0, 1)),
             parsedColour.R, parsedColour.G, parsedColour.B);
