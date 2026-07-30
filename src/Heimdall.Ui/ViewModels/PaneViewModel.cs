@@ -1042,7 +1042,20 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     public bool CanGoBack => _back.Count > 0;
     public bool CanGoForward => _forward.Count > 0;
-    public bool CanGoUp => !string.IsNullOrEmpty(CurrentPath) && _fs.GetParent(CurrentPath) is not null;
+    /// <summary>
+    /// A virtual listing has no parent, and the Up button must be DISABLED
+    /// there rather than merely inert.
+    ///
+    /// `GetParent` is `Path.GetDirectoryName`, which returns an EMPTY STRING —
+    /// not null — for a path with no separator in it, so
+    /// "heimdall:recent-files" reported a parent, enabled the button, and then
+    /// did nothing when pressed because `NavigateAsync` rejects a blank path.
+    /// An enabled control that does nothing is worse than a disabled one: it
+    /// invites the user to conclude the application is broken.
+    /// </summary>
+    public bool CanGoUp => !string.IsNullOrEmpty(CurrentPath)
+                           && !VirtualPaths.IsVirtual(CurrentPath)
+                           && !string.IsNullOrEmpty(_fs.GetParent(CurrentPath));
 
     [RelayCommand]
     public async Task NavigateAsync(string path)
@@ -1099,7 +1112,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task GoUpAsync()
     {
-        if (_fs.GetParent(CurrentPath) is { } parent)
+        // Guarded here as well as in CanGoUp: the button's IsEnabled binds to
+        // that property, but a keyboard shortcut reaches this command directly
+        // and would bypass it.
+        if (!CanGoUp) return;
+
+        if (_fs.GetParent(CurrentPath) is { Length: > 0 } parent)
             await NavigateAsync(parent).ConfigureAwait(false);
     }
 
@@ -1554,6 +1572,14 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsTrashListing));
             OnPropertyChanged(nameof(ShowParentPath));
             OnPropertyChanged(nameof(ShowMetadata));
+
+            // CanGoUp depends on CurrentPath, and the copy of this call inside
+            // LoadListingAsync runs on a POOL THREAD — where a binding update
+            // is not guaranteed to be applied. CanGoForward hid that, because
+            // it also changes when Back is pressed, which is on the UI thread;
+            // CanGoUp changes only with the path, so it stayed stale and the
+            // Up button remained enabled on a virtual listing.
+            NotifyNavigationState();
         });
 
         _ = RefreshFreeSpaceAsync(value);
