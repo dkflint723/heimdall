@@ -755,7 +755,10 @@ public sealed partial class ShellViewModel : ObservableObject
         foreach (var group in new[] { Left, Right })
             if (group is not null)
                 foreach (var tab in group.Tabs)
+                {
                     tab.RefreshScale();
+                    tab.RefreshDecorations();
+                }
 
         OnPropertyChanged(nameof(ShowStatusBar));
         OnPropertyChanged(nameof(ShowFreeSpace));

@@ -182,6 +182,22 @@ public sealed record DetailsViewSettings
 /// these are the starting values, not a cap, because per-pane scaling is an
 /// accessibility feature and a global setting must not take it away.
 /// </summary>
+/// <summary>
+/// Version-control decorations. Its own group rather than a line in
+/// <see cref="GeneralSettings"/>, because the feature already has more than one
+/// dimension and a second provider would land here rather than widening
+/// something unrelated.
+/// </summary>
+public sealed record VcsSettings
+{
+    /// <summary>
+    /// On by default. The decoration only appears inside a repository, so for
+    /// anyone who never opens one it costs nothing — and a feature nobody can
+    /// see until they find a checkbox may as well not exist.
+    /// </summary>
+    public bool ShowDecorations { get; init; } = true;
+}
+
 public sealed record ViewSettings
 {
     /// <summary>Null means follow the desktop font from kdeglobals.</summary>
@@ -262,6 +278,7 @@ public sealed record SettingsState
     public GeneralSettings General { get; init; } = new();
     public StartupSettings Startup { get; init; } = new();
     public ViewSettings Views { get; init; } = new();
+    public VcsSettings Vcs { get; init; } = new();
     public NavigationSettings Navigation { get; init; } = new();
     public ContextMenuSettings ContextMenu { get; init; } = new();
     public TrashSettings Trash { get; init; } = new();

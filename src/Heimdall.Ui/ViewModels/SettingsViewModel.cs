@@ -74,6 +74,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         // Blank rather than "0": the placeholder says what zero means, and an
         // empty box invites a value where a literal 0 looks like a setting
         // someone already made.
+        _showVcsDecorations = current.Vcs.ShowDecorations;
+
         _iconSpacing = views.Icons.Spacing > 0 ? views.Icons.Spacing.ToString() : "";
         _compactSpacing = views.Compact.Spacing > 0 ? views.Compact.Spacing.ToString() : "";
 
@@ -204,6 +206,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<FontOption> AvailableFonts { get; }
 
     [ObservableProperty] private FontOption _selectedFont;
+
+    /// <summary>Marks modified, added, untracked and conflicted files in a
+    /// repository. Only ever visible inside one.</summary>
+    [ObservableProperty] private bool _showVcsDecorations;
 
     /// <summary>Extra gap between grid tiles, in pixels. Blank means none.</summary>
     [ObservableProperty] private string _iconSpacing;
@@ -353,6 +359,8 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ConfirmPermanentDelete = ConfirmPermanentDelete,
                 ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
             },
+
+            Vcs = _original.Vcs with { ShowDecorations = ShowVcsDecorations },
 
             Views = _original.Views with
             {

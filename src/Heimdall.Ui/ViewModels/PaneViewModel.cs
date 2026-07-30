@@ -1317,7 +1317,19 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         var empty = new Dictionary<string, Heimdall.Core.Vcs.VcsState>();
 
-        if (Vcs is null || VirtualPaths.IsVirtual(path))
+        // The setting is read HERE rather than at startup, so turning it off
+        // takes effect on the next folder load without a restart — and turning
+        // it on does not need one either.
+        // Written as "explicitly off" rather than "not on", so a settings group
+        // that is somehow null reads as the DEFAULT (enabled) instead of
+        // throwing. `SettingsState` declares `Vcs { get; init; } = new()` and
+        // should never hand back null — but it did, this method's catch-all
+        // swallowed the NullReferenceException, and the decorations silently
+        // stopped. **A feature must not depend on a settings group being
+        // non-null to work at all.**
+        if (Vcs is null
+            || Settings.AppSettings.Current.Vcs is { ShowDecorations: false }
+            || VirtualPaths.IsVirtual(path))
         {
             VcsStates = empty;
 
@@ -1325,7 +1337,25 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             // virtual listing must not leave the previous folder's marks
             // standing.
             Thumbnails.RowVcs.Publish(path, null);
-            await Dispatcher.UIThread.InvokeAsync(() => IsRepository = false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                IsRepository = false;
+                StartWatchingRepository(null);
+            });
+
+            // Say WHICH of the three reasons. Returning silently made "no marks"
+            // mean "no provider", "switched off" or "not a real folder" with no
+            // way to tell them apart — and this method's only other output is a
+            // line that simply never appears.
+            Console.Error.WriteLine(
+                "[heimdall] vcs: skipped — "
+                + (Vcs is null ? "no provider (is git installed?)"
+                   : Settings.AppSettings.Current.Vcs is { ShowDecorations: false }
+                       ? "disabled in settings"
+                   : "virtual listing")
+                + $" · {path}");
+
             return;
         }
 
@@ -1343,6 +1373,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 if (generation != _generation) return;
 
                 VcsStates = snapshot?.States ?? empty;
+
+                // Started from here because this is where the root is already
+                // known — FindRoot walked for it, and asking twice would mean
+                // two directory walks per folder open.
+                StartWatchingRepository(snapshot?.Root);
 
                 // A snapshot with a Root means we are in a repository even when
                 // every file is clean — the column should appear, empty, rather
@@ -1366,7 +1401,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[heimdall] vcs: {ex.Message}");
+            // Type as well as message. "Object reference not set" alone does not
+            // say which reference, and this catch-all had been quietly turning a
+            // crash into an absence of marks.
+            Console.Error.WriteLine($"[heimdall] vcs: {ex.GetType().Name}: {ex}");
         }
     }
 
@@ -2369,6 +2407,51 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// Updates are applied entry by entry; re-enumerating on every event would
     /// throw away the whole point of streaming the listing in the first place.
     /// </summary>
+    private IDisposable? _repoWatcher;
+
+    /// <summary>
+    /// Watches the repository's own metadata, not the folder on screen.
+    ///
+    /// **`git commit` and `git checkout` do not touch the working tree the way
+    /// the folder watcher can see.** A commit writes `.git/index` and
+    /// `.git/HEAD` and moves no file the listing is showing, so every mark
+    /// stayed stale until a navigation or F5. A checkout rewrites both AND the
+    /// tree, which is exactly why this shares `QueueVcsRefresh`'s debounce
+    /// rather than refreshing directly — otherwise one branch switch would fire
+    /// a `git status` per file it touched.
+    /// </summary>
+    private void StartWatchingRepository(string? root)
+    {
+        _repoWatcher?.Dispose();
+        _repoWatcher = null;
+
+        if (root is null) return;
+
+        // `.git` is a FILE in a submodule or a linked worktree, holding a gitdir
+        // pointer rather than the metadata itself. Watching it would then be
+        // watching the wrong thing, so those are left to F5 rather than followed
+        // to their real directory — a resolver for one line of indirection is
+        // more machinery than the case is worth today.
+        var metadata = Path.Combine(root, ".git");
+        if (!Directory.Exists(metadata)) return;
+
+        // Safe because `Watch` is NON-RECURSIVE (`IncludeSubdirectories = false`).
+        // Watching `.git` recursively would mean watching `objects/`, where a
+        // single fetch writes thousands of files — and inotify has a per-user
+        // watch ceiling. Direct children are exactly what is wanted: HEAD,
+        // index, ORIG_HEAD.
+
+        try
+        {
+            _repoWatcher = _fs.Watch(metadata, _ =>
+                Dispatcher.UIThread.Post(QueueVcsRefresh));
+        }
+        catch
+        {
+            // Unwatchable metadata is not fatal; the marks simply wait for F5.
+        }
+    }
+
     private void StartWatching(string path)
     {
         _watcher?.Dispose();
@@ -2429,6 +2512,16 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// the timer, so the subprocess runs once after the storm rather than once
     /// per raindrop.
     /// </summary>
+    /// <summary>
+    /// Public so a settings save can take effect immediately.
+    ///
+    /// Turning the decorations off must clear what is already on screen, and
+    /// turning them on must populate it — waiting for the next navigation is
+    /// the same trap as a setting that lands in a resource and never gets its
+    /// applier re-run.
+    /// </summary>
+    public void RefreshDecorations() => QueueVcsRefresh();
+
     private void QueueVcsRefresh()
     {
         if (Vcs is null || VirtualPaths.IsVirtual(CurrentPath)) return;
@@ -2679,6 +2772,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _vcsRefresh?.Stop();
+        _repoWatcher?.Dispose();
         _previewCts?.Cancel();
         _previewCts?.Dispose();
         _miller?.Clear();

@@ -360,6 +360,23 @@
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
+          <TextBlock Text="Version control"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <CheckBox FontSize="{DynamicResource FontSizeSmall}"
+                    IsChecked="{Binding ShowVcsDecorations}">
+            <StackPanel>
+              <TextBlock Text="Mark files by version-control status"/>
+              <TextBlock Text="M modified · A added · D deleted · ? untracked · ! conflicted. Runs git once per folder, and only inside a repository."
+                         FontSize="{DynamicResource FontSizeTiny}"
+                         Foreground="{DynamicResource ViewDimText}"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
+          </CheckBox>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
           <TextBlock Text="Spacing"
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"/>
