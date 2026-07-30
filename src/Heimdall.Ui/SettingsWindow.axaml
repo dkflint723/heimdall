@@ -375,6 +375,23 @@
             </StackPanel>
           </CheckBox>
 
+          <!-- Indented and IsEnabled-bound to the checkbox above, because it does
+               nothing on its own: there is no width to hand back unless something
+               took some. A dependent option that looks independent invites people
+               to tick it and conclude the feature is broken. -->
+          <CheckBox Margin="24,0,0,0"
+                    FontSize="{DynamicResource FontSizeSmall}"
+                    IsEnabled="{Binding GrowWindowForPanel}"
+                    IsChecked="{Binding RestoreWidthOnPanelClose}">
+            <StackPanel>
+              <TextBlock Text="Shrink back when the panel closes"/>
+              <TextBlock Text="Returns the window to the width it had before it was widened. Skipped if you have resized the window yourself since — and in split view, only once neither side still needs the room."
+                         FontSize="{DynamicResource FontSizeTiny}"
+                         Foreground="{DynamicResource ViewDimText}"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
+          </CheckBox>
+
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
           <TextBlock Text="Version control"

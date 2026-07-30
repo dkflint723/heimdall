@@ -131,6 +131,22 @@ public sealed partial class PaneGroupViewModel : ObservableObject
     public event EventHandler<double>? GrowRequested;
 
     /// <summary>
+    /// Raised when a panel that HAD been given extra room is closed again, so the
+    /// window can hand it back.
+    ///
+    /// Only ever raised by a side that actually asked — closing a panel that fit
+    /// all along gives nothing back, because nothing was taken.
+    /// </summary>
+    public event EventHandler? ReleaseRequested;
+
+    /// <summary>
+    /// Whether this side's current panel is only on screen because the window was
+    /// grown for it. Cleared on release, so a second open-and-close does not hand
+    /// back width twice.
+    /// </summary>
+    public bool GrewForPanel { get; private set; }
+
+    /// <summary>
     /// Everything the panel appearing implies, in ONE place.
     ///
     /// It lives here rather than in `ToggleInfo` because the toolbar button and
@@ -148,6 +164,28 @@ public sealed partial class PaneGroupViewModel : ObservableObject
             // measurement, or it would fire the moment the width arrived and grow
             // the window for a panel nobody wants any more.
             _roomRequestPending = false;
+
+            if (!GrewForPanel)
+            {
+                // Not an error: this side's panel fitted all along, so it took no
+                // width and has none to give back.
+                return;
+            }
+
+            GrewForPanel = false;
+
+            // The setting is checked here rather than in the window, so the
+            // decision sits beside the one that caused the growth.
+            // Read as "unless told to keep it", so an absent key means give it
+            // back — see KeepWidthAfterPanelClose for why the polarity matters.
+            if (Settings.AppSettings.Current.Views.KeepWidthAfterPanelClose)
+            {
+                PanelDebug("[heimdall] panel: keeping the extra width — "
+                    + "\"shrink back when the panel closes\" is off");
+                return;
+            }
+
+            ReleaseRequested?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -184,6 +222,20 @@ public sealed partial class PaneGroupViewModel : ObservableObject
     /// </summary>
     private bool _roomRequestPending;
 
+    /// <summary>
+    /// The panel-sizing trace, off unless HEIMDALL_PANEL_DEBUG=1.
+    ///
+    /// Every other ungated `[heimdall]` line in this project reports a FAILURE,
+    /// which must always be visible. These report success on every grow and close,
+    /// so they are chatter once the feature works — but they earned their keep
+    /// across four rounds of debugging, so they are gated rather than deleted.
+    /// </summary>
+    internal static void PanelDebug(string message)
+    {
+        if (Environment.GetEnvironmentVariable("HEIMDALL_PANEL_DEBUG") == "1")
+            Console.Error.WriteLine(message);
+    }
+
     partial void OnInfoWidthChanged(double value) => NotifyInfoFit();
     partial void OnGroupWidthChanged(double value)
     {
@@ -214,7 +266,13 @@ public sealed partial class PaneGroupViewModel : ObservableObject
         // wide-enough window and fail to help on a very narrow one.
         var needed = MinimumListing * (ActiveTab?.TextScale ?? 1.0) + InfoWidth;
 
-        if (needed > GroupWidth) GrowRequested?.Invoke(this, needed - GroupWidth);
+        if (needed <= GroupWidth) return;
+
+        // Recorded BEFORE the request, so a release later knows this side is the
+        // one that took the width.
+        GrewForPanel = true;
+
+        GrowRequested?.Invoke(this, needed - GroupWidth);
     }
 
     /// <summary>Public so a settings save can re-evaluate the toggle.</summary>

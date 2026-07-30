@@ -32,6 +32,41 @@ public static class AppSettings
     public static void Apply(SettingsState settings)
     {
         _current = Normalise(settings);
+
+        // **PROVEN 30 July 2026: deserialization does NOT run property
+        // initializers here.** A key absent from settings.json arrives as
+        // `default(T)`, not as the declared default. The control below printed
+        // `False` from the file and `True` from a freshly constructed record in
+        // the same breath. `Vcs` arriving null was the same mechanism.
+        //
+        // Kept as an instrument because every `= true` default in SettingsModel is
+        // therefore decorative for any file written before that property existed,
+        // and the next one to bite will be found here.
+        if (Environment.GetEnvironmentVariable("HEIMDALL_SETTINGS_DEBUG") == "1")
+        {
+            var raw = ReferenceEquals(settings.Views, null)
+                ? "views=NULL"
+                : $"views.narrowPanel={settings.Views.NarrowDetailsPanel} "
+                  + $"views.keepWidth={settings.Views.KeepWidthAfterPanelClose}";
+
+            Console.Error.WriteLine(
+                $"[heimdall] settings: as deserialized -> {raw}"
+                + $" · vcs={(ReferenceEquals(settings.Vcs, null) ? "NULL" : "present")}");
+
+            Console.Error.WriteLine(
+                "[heimdall] settings: after normalise -> "
+                + $"views.narrowPanel={_current.Views.NarrowDetailsPanel} "
+                + $"views.keepWidth={_current.Views.KeepWidthAfterPanelClose} "
+                + $"vcs.show={_current.Vcs.ShowDecorations}");
+
+            // What a FRESH record claims, as the control. If this says True and
+            // the deserialized one says False, the initializer is being skipped.
+            var fresh = new ViewSettings();
+            Console.Error.WriteLine(
+                $"[heimdall] settings: a fresh ViewSettings claims "
+                + $"keepWidth={fresh.KeepWidthAfterPanelClose}");
+        }
+
         Changed?.Invoke(null, EventArgs.Empty);
     }
 

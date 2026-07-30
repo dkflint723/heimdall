@@ -80,6 +80,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         // that one site, and left this one to crash the dialog instead.
         _showVcsDecorations = current.Vcs?.ShowDecorations ?? true;
         _growWindowForPanel = views.NarrowDetailsPanel == NarrowPanelBehaviour.GrowWindow;
+        // The dialog asks the positive question; the record stores the negative
+        // one so its zero value is the wanted behaviour.
+        _restoreWidthOnPanelClose = !views.KeepWidthAfterPanelClose;
 
         _iconSpacing = views.Icons.Spacing > 0 ? views.Icons.Spacing.ToString() : "";
         _compactSpacing = views.Compact.Spacing > 0 ? views.Compact.Spacing.ToString() : "";
@@ -222,6 +225,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// two states do not need a picker.
     /// </summary>
     [ObservableProperty] private bool _growWindowForPanel;
+
+    /// <summary>Hand the width back when the panel closes. Only does anything
+    /// when <see cref="GrowWindowForPanel"/> is on.</summary>
+    [ObservableProperty] private bool _restoreWidthOnPanelClose;
 
     /// <summary>Extra gap between grid tiles, in pixels. Blank means none.</summary>
     [ObservableProperty] private string _iconSpacing;
@@ -382,6 +389,8 @@ public sealed partial class SettingsViewModel : ObservableObject
                 NarrowDetailsPanel = GrowWindowForPanel
                     ? NarrowPanelBehaviour.GrowWindow
                     : NarrowPanelBehaviour.DisableToggle,
+
+                KeepWidthAfterPanelClose = !RestoreWidthOnPanelClose,
 
                 CustomFontFamily = SelectedFont is null || SelectedFont.IsFollowDesktop
                     ? null

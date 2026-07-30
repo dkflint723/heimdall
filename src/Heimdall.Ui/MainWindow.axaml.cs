@@ -153,6 +153,7 @@ public partial class MainWindow : Window
         _shell.SettingsRequested += (_, _) => ShowSettings();
         _shell.EmptyTrashRequested += (_, _) => AskConfirmEmptyTrash();
         _shell.GrowRequested += (_, by) => GrowToFit(by);
+        _shell.ReleaseRequested += (_, _) => ReleaseGrownWidth();
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
         _shell.UseRemotes(platform.Remotes);
         _shell.UseDiscovery(platform.Discovery);
@@ -1241,7 +1242,87 @@ public partial class MainWindow : Window
         // surprising thing for a panel toggle to do.
         if (WindowState != WindowState.Normal) return;
 
+        // Only the FIRST grow records the original. A second panel opening in a
+        // split must not overwrite it, or closing both would restore to the
+        // already-grown width instead of the one the user chose.
+        _widthBeforeGrow ??= Width;
+
+        // **The POSITION has to be remembered as well as the width.** Growing
+        // pushes the right edge outward; when that runs past the screen the window
+        // manager shoves the whole window LEFT to keep it visible. Shrinking the
+        // width afterwards pulls the right edge back in but leaves the window
+        // where the WM put it — so it lands well left of where it started, which
+        // is exactly what "shooting to the left" was.
+        _positionBeforeGrow ??= Position;
+
         Width += Math.Ceiling(by);
+
+        // What we left it at, so a later release can tell whether the user has
+        // resized in the meantime.
+        _grownTo = Width;
+
+        ViewModels.PaneGroupViewModel.PanelDebug($"[heimdall] panel: grew by {Math.Ceiling(by)} to {Width:F0} "
+            + $"(original {_widthBeforeGrow:F0} at {_positionBeforeGrow?.X},"
+            + $"{_positionBeforeGrow?.Y}; now at {Position.X},{Position.Y})");
+    }
+
+    /// <summary>The window's width before any panel grew it, if one did.</summary>
+    private double? _widthBeforeGrow;
+
+    /// <summary>The width this class last set, to detect a manual resize since.</summary>
+    private double _grownTo;
+
+    /// <summary>Where the window sat before any panel grew it.</summary>
+    private PixelPoint? _positionBeforeGrow;
+
+    /// <summary>
+    /// Hands back the width taken for a details panel.
+    ///
+    /// **Refuses if the window is no longer the size we made it.** Someone who
+    /// has dragged the edge since has expressed a preference, and snapping back to
+    /// a width they last saw several actions ago would feel like the application
+    /// fighting them. The recorded width is dropped in that case rather than kept,
+    /// because it no longer describes anything the user would recognise.
+    /// </summary>
+    private void ReleaseGrownWidth()
+    {
+        // Every branch says WHY, because this feature has now taken three rounds
+        // and "nothing happened" has four different causes that look identical.
+        if (_widthBeforeGrow is not { } original)
+        {
+            ViewModels.PaneGroupViewModel.PanelDebug("[heimdall] panel: nothing to give back — the window was never grown");
+            return;
+        }
+
+        var origin = _positionBeforeGrow;
+
+        _widthBeforeGrow = null;
+        _positionBeforeGrow = null;
+
+        if (WindowState != WindowState.Normal)
+        {
+            ViewModels.PaneGroupViewModel.PanelDebug($"[heimdall] panel: not restoring — window is {WindowState}");
+            return;
+        }
+
+        // A pixel of tolerance: the grow rounded up, and layout can settle a
+        // fraction either way.
+        if (Math.Abs(Width - _grownTo) > 1)
+        {
+            ViewModels.PaneGroupViewModel.PanelDebug($"[heimdall] panel: not restoring — width is {Width:F0} but we left "
+                + $"it at {_grownTo:F0}, so it was resized by hand");
+            return;
+        }
+
+        ViewModels.PaneGroupViewModel.PanelDebug($"[heimdall] panel: restoring {Width:F0} -> {original:F0}"
+            + (origin is { } p && p != Position ? $", moving back to {p.X},{p.Y}" : ""));
+
+        // WIDTH FIRST, then position. Narrowing makes the window fit again, so the
+        // move that follows cannot trip the same off-screen correction that caused
+        // the problem — doing it the other way round can bounce it straight back.
+        Width = original;
+
+        if (origin is { } home && home != Position) Position = home;
     }
 
     private void AskConfirmEmptyTrash()

@@ -667,6 +667,9 @@ public sealed partial class ShellViewModel : ObservableObject
     /// that would not otherwise fit.</summary>
     public event EventHandler<double>? GrowRequested;
 
+    /// <summary>Put the window back to the width it had before it was grown.</summary>
+    public event EventHandler? ReleaseRequested;
+
     public event EventHandler? EmptyTrashRequested;
 
     [RelayCommand]
@@ -835,6 +838,21 @@ public sealed partial class ShellViewModel : ObservableObject
         // did not appear. Dividing by the share makes one resize enough.
         group.GrowRequested += (sender, needed) =>
             GrowRequested?.Invoke(this, needed / ShareOf(sender));
+
+        // Only give the width back when NEITHER side still needs it. In a split
+        // both panels can have grown the window, and restoring on the first close
+        // would pull the room out from under the one still open.
+        group.ReleaseRequested += (_, _) =>
+        {
+            if (Left.GrewForPanel || Right is { GrewForPanel: true })
+            {
+                PaneGroupViewModel.PanelDebug("[heimdall] panel: holding the width — the other side's panel "
+                    + "is still open");
+                return;
+            }
+
+            ReleaseRequested?.Invoke(this, EventArgs.Empty);
+        };
 
         // A split created later must get the provider too, or its panel would
         // silently have nothing to show.

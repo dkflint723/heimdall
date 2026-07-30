@@ -221,6 +221,26 @@ public sealed record ViewSettings
     /// </summary>
     public NarrowPanelBehaviour NarrowDetailsPanel { get; init; }
 
+    /// <summary>
+    /// Leave the window wide after the panel that needed the room is closed.
+    /// Default (false) hands the width back.
+    ///
+    /// **NAMED FOR ITS ZERO VALUE ON PURPOSE, AND THIS IS THE IMPORTANT PART.**
+    /// Deserialization here does NOT run property initializers: a key absent from
+    /// `settings.json` arrives as `default(T)`, not as the declared default —
+    /// PROVEN by a control that printed `restoreWidth=False` from the file while a
+    /// freshly constructed record printed `True`. So a `= true` default is
+    /// decorative for any file written before the property existed.
+    ///
+    /// The fix that does not depend on knowing why: phrase the setting so the
+    /// wanted behaviour IS the zero. `false` means "give the width back", which is
+    /// what should happen when nobody has said otherwise.
+    ///
+    /// Only meaningful alongside <see cref="NarrowPanelBehaviour.GrowWindow"/> —
+    /// nothing was grown otherwise, so there is nothing to give back.
+    /// </summary>
+    public bool KeepWidthAfterPanelClose { get; init; }
+
     /// <summary>Null means follow the desktop font from kdeglobals.</summary>
     public string? CustomFontFamily { get; init; }
 

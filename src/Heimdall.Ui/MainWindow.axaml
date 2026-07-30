@@ -359,6 +359,14 @@
                 <Setter Property="Background" Value="Transparent"/>
                 <Setter Property="CornerRadius" Value="6,6,0,0"/>
                 <Setter Property="Padding" Value="18,11"/>
+                <!-- The thickness is reserved HERE, transparent, so selecting a
+                     tab changes only the brush. Adding the border in the
+                     :selected style alone shifted that tab's label a pixel right
+                     and down — the standing rule is that a per-state style may
+                     change colour and the visibility of an overlaid element and
+                     nothing that affects layout. -->
+                <Setter Property="BorderThickness" Value="1,1,1,0"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
               </Style>
               <Style Selector="TabStripItem:pointerover /template/ ContentPresenter">
                 <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
@@ -369,7 +377,6 @@
               <Style Selector="TabStripItem:selected /template/ ContentPresenter">
                 <Setter Property="Background" Value="{DynamicResource ViewBackground}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource EdgeHighlight}"/>
-                <Setter Property="BorderThickness" Value="1,1,1,0"/>
               </Style>
             </TabStrip.Styles>
             <TabStrip.ItemTemplate>
