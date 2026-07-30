@@ -40,12 +40,16 @@
          instances of the same view, not a second code path — which is why
          PaneViewModel was built to own its own path, history and selection. -->
     <DataTemplate x:Key="PaneGroupTemplate" x:DataType="vm:PaneGroupViewModel">
-      <DockPanel>
+      <!-- The group measures ITSELF, rather than the details panel's fit being
+           derived from the listing's width. Deriving it was circular: the
+           listing's width already excludes the panel when the panel is shown,
+           and "is it shown" is the very thing being decided. -->
+      <DockPanel SizeChanged="OnGroupSizeChanged">
       <!-- One panel per split side. Docked inside the group so it describes
            THIS side's selection — a single window-level panel kept swapping
            content as focus moved between halves, which defeats the point of
            comparing two folders side by side. -->
-      <Border DockPanel.Dock="Right" IsVisible="{Binding IsInfoVisible}"
+      <Border DockPanel.Dock="Right" IsVisible="{Binding IsInfoUsable}"
               Width="{Binding InfoWidth}"
               Background="{DynamicResource PanelBackground}"
               BorderThickness="1,0,0,0" BorderBrush="{DynamicResource EdgeShadow}">
@@ -107,7 +111,7 @@
       </Border>
 
       <GridSplitter DockPanel.Dock="Right" Width="4" ResizeDirection="Columns"
-                    IsVisible="{Binding IsInfoVisible}"
+                    IsVisible="{Binding IsInfoUsable}"
                     Background="{DynamicResource BorderColour}"/>
 
 
@@ -143,7 +147,7 @@
 
           <ToggleButton DockPanel.Dock="Right" Margin="0,0,0,4"
                         VerticalAlignment="Center" Padding="7,3"
-                        IsChecked="{Binding IsInfoVisible}"
+                        IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
                         ToolTip.Tip="details panel for this side  (f11)">
             <Path Data="M0,0 H12 V12 H0 Z M8,0 V12"
                   Stroke="{DynamicResource ViewText}" StrokeThickness="1.4"
@@ -213,7 +217,7 @@
 
                   <CheckBox Content="Details panel  (f11)"
                             FontSize="{DynamicResource FontSizeSmall}"
-                            IsChecked="{Binding IsInfoVisible}"/>
+                            IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"/>
                   <CheckBox Content="Path columns above list"
                             FontSize="{DynamicResource FontSizeSmall}"
                             IsChecked="{Binding ActiveTab.ShowColumnStrip}"/>
@@ -322,6 +326,19 @@
               </Flyout>
             </Button.Flyout>
           </Button>
+          <!-- Scrolled, and that is the fix rather than a nicety.
+               A horizontal StackPanel measures its children with INFINITE width
+               and does not clip, so the strip grew past the space the DockPanel
+               gave it and painted straight over the layout buttons and the
+               details-panel toggle docked to its right. A ScrollViewer is
+               constrained by its parent and clips, so the tabs stop at the
+               toolbar instead of climbing over it.
+               The separator and + travel INSIDE it, so they stay adjacent to the
+               last tab rather than jumping to the far edge when few tabs are
+               open. Ctrl+T reaches the same command when they scroll out. -->
+          <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Disabled"
+                        ClipToBounds="True">
           <StackPanel Orientation="Horizontal">
           <TabStrip ItemsSource="{Binding Tabs}" SelectedItem="{Binding ActiveTab}">
             <TabStrip.Styles>
@@ -390,6 +407,7 @@
                   Command="{Binding NewTabHereCommand}"
                   ToolTip.Tip="new tab in this pane  (ctrl+t)"/>
           </StackPanel>
+          </ScrollViewer>
          </DockPanel>
         </Border>
 

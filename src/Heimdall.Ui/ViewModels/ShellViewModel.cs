@@ -600,6 +600,21 @@ public sealed partial class ShellViewModel : ObservableObject
         => IsSplit ? new GridLength(1 - Math.Clamp(SplitRatio, 0.1, 0.9), GridUnitType.Star)
                    : new GridLength(0);
 
+    /// <summary>
+    /// The fraction of the content width this group receives. 1 when not split.
+    ///
+    /// Clamped exactly as the column definitions clamp, so the answer matches
+    /// what the layout will actually do rather than what SplitRatio says.
+    /// </summary>
+    private double ShareOf(object? group)
+    {
+        if (!IsSplit) return 1.0;
+
+        var ratio = Math.Clamp(SplitRatio, 0.1, 0.9);
+
+        return ReferenceEquals(group, Left) ? ratio : 1 - ratio;
+    }
+
     private void NotifyColumns()
     {
         OnPropertyChanged(nameof(LeftColumnWidth));
@@ -648,6 +663,10 @@ public sealed partial class ShellViewModel : ObservableObject
     /// which is the only thing that owns real buttons. Same arrangement as
     /// properties and settings.
     /// </summary>
+    /// <summary>Widen the window by this many pixels, to make room for a panel
+    /// that would not otherwise fit.</summary>
+    public event EventHandler<double>? GrowRequested;
+
     public event EventHandler? EmptyTrashRequested;
 
     [RelayCommand]
@@ -760,6 +779,12 @@ public sealed partial class ShellViewModel : ObservableObject
                     tab.RefreshDecorations();
                 }
 
+        // The narrow-panel behaviour changes whether the toggle may be pressed,
+        // and that is computed rather than stored — so it has to be re-raised or
+        // a greyed button stays greyed until the next resize.
+        foreach (var group in new[] { Left, Right })
+            group?.RefreshInfoFit();
+
         OnPropertyChanged(nameof(ShowStatusBar));
         OnPropertyChanged(nameof(ShowFreeSpace));
 
@@ -799,6 +824,17 @@ public sealed partial class ShellViewModel : ObservableObject
         var group = new PaneGroupViewModel(NewPane);
 
         group.LocationChanged += (_, _) => SyncSidebarLocation();
+
+        // Forwarded rather than handled: only the window can change its own
+        // width, and the group has no business knowing a window exists.
+        //
+        // But the ARITHMETIC belongs here, because only the shell knows the
+        // window is split. The columns are STAR lengths driven by SplitRatio, so
+        // growing the window by the group's shortfall hands that side only its
+        // SHARE of the extra — which is why the window grew and the panel still
+        // did not appear. Dividing by the share makes one resize enough.
+        group.GrowRequested += (sender, needed) =>
+            GrowRequested?.Invoke(this, needed / ShareOf(sender));
 
         // A split created later must get the provider too, or its panel would
         // silently have nothing to show.

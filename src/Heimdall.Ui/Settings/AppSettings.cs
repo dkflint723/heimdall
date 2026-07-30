@@ -31,7 +31,51 @@ public static class AppSettings
 
     public static void Apply(SettingsState settings)
     {
-        _current = settings;
+        _current = Normalise(settings);
         Changed?.Invoke(null, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Guarantees every group is present, because the summary above promises it
+    /// and deserialization does not deliver it.
+    ///
+    /// **Observed, not theoretical:** a `settings.json` written before
+    /// `VcsSettings` existed produced `Current.Vcs == null` despite
+    /// `SettingsState` declaring `Vcs { get; init; } = new()`. That crashed the
+    /// listing, then the settings dialog, and would have crashed the save. Every
+    /// group is equally exposed the next time one is added, so this is fixed at
+    /// the boundary rather than at each of the dozens of read sites.
+    ///
+    /// **`ReferenceEquals(x, null)` rather than `x is null` or `x ?? new()`:**
+    /// these properties are non-nullable reference types, so the nullable
+    /// analyser may call the comparison redundant — and this project builds with
+    /// warnings as errors. A method call cannot be warned about.
+    /// </summary>
+    private static SettingsState Normalise(SettingsState settings) => settings with
+    {
+        General = ReferenceEquals(settings.General, null) ? new() : settings.General,
+        Startup = ReferenceEquals(settings.Startup, null) ? new() : settings.Startup,
+        Views = NormaliseViews(settings.Views),
+        Vcs = ReferenceEquals(settings.Vcs, null) ? new() : settings.Vcs,
+        Navigation = ReferenceEquals(settings.Navigation, null) ? new() : settings.Navigation,
+        ContextMenu = ReferenceEquals(settings.ContextMenu, null) ? new() : settings.ContextMenu,
+        Trash = ReferenceEquals(settings.Trash, null) ? new() : settings.Trash,
+    };
+
+    /// <summary>
+    /// `ViewSettings` nests three groups of its own, and they are exposed to
+    /// exactly the same problem. Normalising the outer one and stopping there
+    /// would look handled while `views.Icons.Spacing` still threw.
+    /// </summary>
+    private static ViewSettings NormaliseViews(ViewSettings views)
+    {
+        if (ReferenceEquals(views, null)) return new ViewSettings();
+
+        return views with
+        {
+            Icons = ReferenceEquals(views.Icons, null) ? new() : views.Icons,
+            Compact = ReferenceEquals(views.Compact, null) ? new() : views.Compact,
+            Details = ReferenceEquals(views.Details, null) ? new() : views.Details,
+        };
     }
 }

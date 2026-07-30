@@ -74,7 +74,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         // Blank rather than "0": the placeholder says what zero means, and an
         // empty box invites a value where a literal 0 looks like a setting
         // someone already made.
-        _showVcsDecorations = current.Vcs.ShowDecorations;
+        // `?? true` because the group is demonstrably null for a settings file
+        // written before it existed, and the DEFAULT is on. Guarding here as
+        // well as in the pane: the same dereference crashed the listing, I fixed
+        // that one site, and left this one to crash the dialog instead.
+        _showVcsDecorations = current.Vcs?.ShowDecorations ?? true;
+        _growWindowForPanel = views.NarrowDetailsPanel == NarrowPanelBehaviour.GrowWindow;
 
         _iconSpacing = views.Icons.Spacing > 0 ? views.Icons.Spacing.ToString() : "";
         _compactSpacing = views.Compact.Spacing > 0 ? views.Compact.Spacing.ToString() : "";
@@ -210,6 +215,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Marks modified, added, untracked and conflicted files in a
     /// repository. Only ever visible inside one.</summary>
     [ObservableProperty] private bool _showVcsDecorations;
+
+    /// <summary>
+    /// True: widen the window to fit the details panel. False: grey the toggle
+    /// out. A bool rather than the enum because the dialog binds checkboxes, and
+    /// two states do not need a picker.
+    /// </summary>
+    [ObservableProperty] private bool _growWindowForPanel;
 
     /// <summary>Extra gap between grid tiles, in pixels. Blank means none.</summary>
     [ObservableProperty] private string _iconSpacing;
@@ -360,10 +372,17 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
             },
 
-            Vcs = _original.Vcs with { ShowDecorations = ShowVcsDecorations },
+            // Also guarded: `with` on a null record throws, so saving would have
+            // crashed too even once the dialog opened.
+            Vcs = (_original.Vcs ?? new VcsSettings())
+                  with { ShowDecorations = ShowVcsDecorations },
 
             Views = _original.Views with
             {
+                NarrowDetailsPanel = GrowWindowForPanel
+                    ? NarrowPanelBehaviour.GrowWindow
+                    : NarrowPanelBehaviour.DisableToggle,
+
                 CustomFontFamily = SelectedFont is null || SelectedFont.IsFollowDesktop
                     ? null
                     : SelectedFont.Name,

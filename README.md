@@ -54,12 +54,12 @@ as diagnostics you can switch on.
 
 | | |
 |---|---|
-| **Four layouts** | list, details with sortable columns, compact, and an icon grid |
+| **Three layouts** | a list with sortable columns, a compact multi-column view, and an icon grid |
 | **Split view and tabs** | each side keeps its own selection, history and details panel |
 | **Grid at any folder size** | a custom virtualizing wrap panel — 100,000 items in ~20 ms with 48 realized containers, constant regardless of folder size |
 | **Recent files and locations** | Dolphin's two virtual listings, banded by day, with a Forget action |
 | **Trash** | browse, restore and empty, reading the `.trashinfo` sidecars so restore knows where things came from |
-| **Version control** | git status per folder, one subprocess per listing and never per row |
+| **Version control** | git status per folder — one subprocess per listing, never per row — marked `M A D ? !` in every layout, refreshed when you edit, commit or switch branch |
 | **Tags** | stored as xattrs, shared with Dolphin |
 | **Search** | streamed into the sidebar as results arrive |
 | **Type-ahead, tab completion** | jump-to-letter in any listing; path completion in the location bar |
@@ -143,8 +143,10 @@ the honest list, not a roadmap.
 - **Compact layout is not virtualized.** 100,000 items takes ~32 seconds there.
   It wraps into columns, so it needs an orientation mode on the panel. This is
   the only place Heimdall refuses something Dolphin does.
-- **Version-control decorations have no UI yet** — the git provider works and is
-  wired in, but nothing draws a badge.
+- **`git commit` and `git checkout` refresh the marks, but a submodule's does
+  not.** A submodule or linked worktree keeps its `.git` as a *file* holding a
+  gitdir pointer rather than a directory, so it is not watched and its marks wait
+  for F5.
 - Selection mode, configurable shortcuts and multi-window are unbuilt.
 - **Windows is deliberately last.** Most Core interfaces still have exactly one
   implementation, and the second is where you find out which abstractions were

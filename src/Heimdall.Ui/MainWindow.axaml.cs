@@ -152,6 +152,7 @@ public partial class MainWindow : Window
         _shell.PropertiesRequested += (_, _) => ShowProperties();
         _shell.SettingsRequested += (_, _) => ShowSettings();
         _shell.EmptyTrashRequested += (_, _) => AskConfirmEmptyTrash();
+        _shell.GrowRequested += (_, by) => GrowToFit(by);
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
         _shell.UseRemotes(platform.Remotes);
         _shell.UseDiscovery(platform.Discovery);
@@ -519,6 +520,21 @@ public partial class MainWindow : Window
 
         // Theme and metrics are application-scoped, so this inherits them.
         new PropertiesWindow(new PropertiesViewModel(_properties, paths, _accessEditor)).Show(this);
+    }
+
+    /// <summary>
+    /// Feeds the group its own width, which is what decides whether the details
+    /// panel fits.
+    ///
+    /// Measured rather than derived from the listing: the listing's width already
+    /// excludes the panel when the panel is shown, so testing it would have been
+    /// circular — and adding the panel's width back depended on knowing whether
+    /// it was shown, which is the question.
+    /// </summary>
+    private void OnGroupSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is Control { DataContext: PaneGroupViewModel group })
+            group.GroupWidth = e.NewSize.Width;
     }
 
     /// <summary>Feeds the pane its own width so columns can drop out in
@@ -1205,6 +1221,29 @@ public partial class MainWindow : Window
     /// review, so unlike trashing it is never unprompted — that is not a
     /// preference.
     /// </summary>
+    /// <summary>
+    /// Widens the window so a details panel has room.
+    ///
+    /// **The window manager has the final say and that is deliberate.** Asking
+    /// Avalonia which screen this is on and clamping to its working area would
+    /// mean an API this project has not verified, and getting it wrong is worse
+    /// than letting the WM do what it already does correctly. If the screen
+    /// cannot accommodate the request the window simply stops growing, and the
+    /// panel stays hidden — `IsInfoVisible` is still set, so it appears the
+    /// moment there is room.
+    /// </summary>
+    private void GrowToFit(double by)
+    {
+        if (by <= 0) return;
+
+        // Maximised or full-screen windows cannot usefully be widened, and
+        // trying would either do nothing or un-maximise them, which is a
+        // surprising thing for a panel toggle to do.
+        if (WindowState != WindowState.Normal) return;
+
+        Width += Math.Ceiling(by);
+    }
+
     private void AskConfirmEmptyTrash()
     {
         if (PromptBar is null) return;

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Heimdall.Core.Session;
+using Heimdall.Core.Settings;
 
 namespace Heimdall.Ui.ViewModels;
 
@@ -71,6 +72,161 @@ public sealed partial class PaneGroupViewModel : ObservableObject
 
     [ObservableProperty] private double _infoWidth = 280;
 
+    /// <summary>
+    /// Narrowest listing worth keeping once the panel has taken its share.
+    /// Below this the names truncate to two characters and the listing stops
+    /// being a listing — which is the state that prompted this.
+    /// </summary>
+    private const double MinimumListing = 420;
+
+    /// <summary>This side's full width, panel included. Fed by the view.</summary>
+    [ObservableProperty] private double _groupWidth;
+
+    /// <summary>
+    /// Whether this side is wide enough to spare the panel's width.
+    ///
+    /// **Measured from the GROUP, not derived from the listing.** The earlier
+    /// version added the panel's width back when `IsInfoVisible` was set — but
+    /// that is the WISH, not whether the panel is laid out, so with the wish set
+    /// and the panel suppressed it double-counted and reported room that was not
+    /// there. Measuring the group is not circular and cannot oscillate.
+    /// </summary>
+    public bool CanShowInfo
+    {
+        get
+        {
+            // Before the first measure, allow it. Refusing on no information
+            // would grey the toggle out at startup for no reason.
+            if (GroupWidth <= 0) return true;
+
+            var scale = ActiveTab?.TextScale ?? 1.0;
+
+            return GroupWidth - InfoWidth >= MinimumListing * scale;
+        }
+    }
+
+    /// <summary>
+    /// What the markup binds. The user's choice AND the room to honour it —
+    /// `IsInfoVisible` is left untouched when the window shrinks, so widening it
+    /// again brings the panel back rather than making them press F11 twice.
+    /// </summary>
+    public bool IsInfoUsable => IsInfoVisible && CanShowInfo;
+
+    /// <summary>
+    /// Whether the toggle may be pressed. Under
+    /// <see cref="NarrowPanelBehaviour.GrowWindow"/> it stays enabled even when
+    /// the panel does not currently fit, because pressing it is what makes room
+    /// — disabling it there would be the control lying about what it does.
+    /// </summary>
+    public bool IsInfoToggleEnabled =>
+        CanShowInfo
+        || Settings.AppSettings.Current.Views.NarrowDetailsPanel
+               == NarrowPanelBehaviour.GrowWindow;
+
+    /// <summary>
+    /// Asks the window to widen by this many pixels. The GROUP cannot resize a
+    /// window and should not learn how — the shell forwards it, exactly as it
+    /// does for the properties dialog and the trash prompt.
+    /// </summary>
+    public event EventHandler<double>? GrowRequested;
+
+    /// <summary>
+    /// Everything the panel appearing implies, in ONE place.
+    ///
+    /// It lives here rather than in `ToggleInfo` because the toolbar button and
+    /// the flyout checkbox bind `IsChecked` straight to this property and never
+    /// call the command — so logic in the command ran on F11 only, which is
+    /// exactly why "widen the window" appeared not to work.
+    /// </summary>
+    partial void OnIsInfoVisibleChanged(bool value)
+    {
+        NotifyInfoFit();
+
+        if (!value)
+        {
+            // Closing the panel cancels any request that was still waiting for a
+            // measurement, or it would fire the moment the width arrived and grow
+            // the window for a panel nobody wants any more.
+            _roomRequestPending = false;
+            return;
+        }
+
+        // Also moved here from the command, and it fixes a second thing: opening
+        // the panel from the button used to leave its contents stale until the
+        // next selection change.
+        RefreshInfo();
+
+        if (_restoringLayout) return;
+
+        // A group that has just appeared — the right-hand side of a fresh split —
+        // has not been measured yet, and `CanShowInfo` answers "yes, there is
+        // room" on no information rather than greying the toggle out at startup.
+        // Asking now would compute a shortfall from a width of zero, so the
+        // request WAITS for the first measure instead.
+        //
+        // This is what made it take several presses: press one showed the panel,
+        // the measure then hid it, press two turned the wish off, press three
+        // finally ran with a real width.
+        if (GroupWidth <= 0)
+        {
+            _roomRequestPending = true;
+            return;
+        }
+
+        AskForRoomIfNeeded();
+    }
+
+    /// <summary>
+    /// Set when the panel was asked for before this side had been measured.
+    /// **One-shot on purpose:** re-asking on every resize would fight someone
+    /// deliberately narrowing the window with the panel open, growing it back
+    /// under their hands.
+    /// </summary>
+    private bool _roomRequestPending;
+
+    partial void OnInfoWidthChanged(double value) => NotifyInfoFit();
+    partial void OnGroupWidthChanged(double value)
+    {
+        NotifyInfoFit();
+
+        if (!_roomRequestPending || value <= 0) return;
+
+        _roomRequestPending = false;
+
+        if (IsInfoVisible) AskForRoomIfNeeded();
+    }
+
+    /// <summary>
+    /// True only while a session restore is assigning layout state, so a restored
+    /// window does not resize itself on startup because a preference says the
+    /// panel was open.
+    /// </summary>
+    private bool _restoringLayout;
+
+    private void AskForRoomIfNeeded()
+    {
+        if (CanShowInfo) return;
+
+        if (Settings.AppSettings.Current.Views.NarrowDetailsPanel
+            != NarrowPanelBehaviour.GrowWindow) return;
+
+        // Shortfall, not a fixed step: a constant would overshoot on a nearly
+        // wide-enough window and fail to help on a very narrow one.
+        var needed = MinimumListing * (ActiveTab?.TextScale ?? 1.0) + InfoWidth;
+
+        if (needed > GroupWidth) GrowRequested?.Invoke(this, needed - GroupWidth);
+    }
+
+    /// <summary>Public so a settings save can re-evaluate the toggle.</summary>
+    public void RefreshInfoFit() => NotifyInfoFit();
+
+    private void NotifyInfoFit()
+    {
+        OnPropertyChanged(nameof(CanShowInfo));
+        OnPropertyChanged(nameof(IsInfoUsable));
+        OnPropertyChanged(nameof(IsInfoToggleEnabled));
+    }
+
     private IPropertiesProvider? _properties;
 
     public void UseProperties(IPropertiesProvider? properties)
@@ -81,18 +237,25 @@ public sealed partial class PaneGroupViewModel : ObservableObject
         RefreshInfo();
     }
 
+    /// <summary>
+    /// Just the flip. Refreshing and asking for room happen in
+    /// `OnIsInfoVisibleChanged`, so the button, the checkbox and F11 all behave
+    /// identically.
+    /// </summary>
     [RelayCommand]
-    private void ToggleInfo()
-    {
-        IsInfoVisible = !IsInfoVisible;
-        if (IsInfoVisible) RefreshInfo();
-    }
+    private void ToggleInfo() => IsInfoVisible = !IsInfoVisible;
 
     private void OnTabChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(PaneViewModel.SelectedEntry)
                            or nameof(PaneViewModel.Summary))
             RefreshInfo();
+
+        // The width is measured on the pane, but whether the panel fits is a
+        // question about the GROUP, so the group has to hear about resizes.
+        if (e.PropertyName is nameof(PaneViewModel.ViewportWidth)
+                           or nameof(PaneViewModel.TextScale))
+            NotifyInfoFit();
 
         if (e.PropertyName is nameof(PaneViewModel.CurrentPath))
             LocationChanged?.Invoke(this, EventArgs.Empty);
@@ -195,8 +358,19 @@ public sealed partial class PaneGroupViewModel : ObservableObject
 
     public void RestoreFrom(PaneState state)
     {
-        IsInfoVisible = state.IsInfoVisible;
-        InfoWidth = state.InfoWidth > 0 ? state.InfoWidth : 280;
+        // Guarded so a restored preference does not make the window resize itself
+        // during startup. The panel still appears once the group is measured and
+        // found wide enough; it just will not demand to be.
+        _restoringLayout = true;
+        try
+        {
+            IsInfoVisible = state.IsInfoVisible;
+            InfoWidth = state.InfoWidth > 0 ? state.InfoWidth : 280;
+        }
+        finally
+        {
+            _restoringLayout = false;
+        }
     }
 
     public void DisposeAll()

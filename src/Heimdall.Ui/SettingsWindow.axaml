@@ -360,6 +360,23 @@
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
+          <TextBlock Text="Details panel"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <CheckBox FontSize="{DynamicResource FontSizeSmall}"
+                    IsChecked="{Binding GrowWindowForPanel}">
+            <StackPanel>
+              <TextBlock Text="Widen the window to fit the details panel"/>
+              <TextBlock Text="Off: the toggle is greyed out when the pane is too narrow, and the window keeps the size you gave it. On: the window grows instead — your desktop still caps how far."
+                         FontSize="{DynamicResource FontSizeTiny}"
+                         Foreground="{DynamicResource ViewDimText}"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
+          </CheckBox>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
           <TextBlock Text="Version control"
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"/>

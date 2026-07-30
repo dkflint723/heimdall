@@ -198,8 +198,29 @@ public sealed record VcsSettings
     public bool ShowDecorations { get; init; } = true;
 }
 
+/// <summary>
+/// What to do when the details panel is asked for and there is not room.
+/// </summary>
+public enum NarrowPanelBehaviour
+{
+    /// <summary>Grey the toggle out. The window keeps the size you gave it.</summary>
+    DisableToggle,
+
+    /// <summary>Widen the window to make room. The window manager still has the
+    /// final say — it will clamp to the screen.</summary>
+    GrowWindow,
+}
+
 public sealed record ViewSettings
 {
+    /// <summary>
+    /// Default is <see cref="NarrowPanelBehaviour.DisableToggle"/>: a window
+    /// that resizes itself because you pressed a toggle is surprising, and the
+    /// less surprising option is the better default even though the other is
+    /// arguably more helpful.
+    /// </summary>
+    public NarrowPanelBehaviour NarrowDetailsPanel { get; init; }
+
     /// <summary>Null means follow the desktop font from kdeglobals.</summary>
     public string? CustomFontFamily { get; init; }
 
