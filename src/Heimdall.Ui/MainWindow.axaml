@@ -1038,6 +1038,18 @@
                              width to trim into. -->
                         <DockPanel Grid.Column="1" VerticalAlignment="Center"
                                    ClipToBounds="True">
+                          <!-- Version-control marker. The LETTER carries the meaning and
+                               the colour is decoration, same rule as the tag chips: hue
+                               alone would be invisible to a colourblind reader.
+                               Fixed width so names stay aligned whether or not a row is
+                               marked, and the whole column only exists inside a
+                               repository. -->
+                          <TextBlock DockPanel.Dock="Left" Width="11" Margin="0,0,5,0"
+                                     th:RowVcs.Entry="{Binding}"
+                                     IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).IsRepository}"
+                                     FontSize="{DynamicResource FontSizeSmall}"
+                                     FontWeight="Bold" TextAlignment="Center"
+                                     VerticalAlignment="Center"/>
                           <!-- Tag chips: always a name, with colour as decoration. A bare
                                swatch would put the whole meaning in hue. -->
                           <ItemsControl DockPanel.Dock="Right" Margin="8,0,0,0"

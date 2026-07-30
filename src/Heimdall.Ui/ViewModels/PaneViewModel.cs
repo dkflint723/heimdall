@@ -332,6 +332,17 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         = new Dictionary<string, Heimdall.Core.Vcs.VcsState>();
 
     /// <summary>
+    /// True when this folder is inside a repository, which is what reserves the
+    /// marker column.
+    ///
+    /// Gated rather than always-on for the same reason as the parent-path
+    /// column: most folders are not repositories, and a permanently reserved
+    /// strip of dead space before every filename would be a poor trade for
+    /// avoiding one binding.
+    /// </summary>
+    [ObservableProperty] private bool _isRepository;
+
+    /// <summary>
     /// Applied on arrival, before the listing is asked for, so the folder is
     /// enumerated and sorted once under its own rules rather than sorted twice.
     /// Silent when the preference is off or the folder has no opinion.
@@ -1233,6 +1244,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         if (Vcs is null || VirtualPaths.IsVirtual(path))
         {
             VcsStates = empty;
+
+            // Clear rather than skip: navigating from a repository into a
+            // virtual listing must not leave the previous folder's marks
+            // standing.
+            Thumbnails.RowVcs.Publish(path, null);
+            await Dispatcher.UIThread.InvokeAsync(() => IsRepository = false);
             return;
         }
 
@@ -1250,6 +1267,17 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 if (generation != _generation) return;
 
                 VcsStates = snapshot?.States ?? empty;
+
+                // A snapshot with a Root means we are in a repository even when
+                // every file is clean — the column should appear, empty, rather
+                // than flicker in only once something is modified.
+                IsRepository = snapshot is not null;
+
+                // Hand it to the row decorator. Rows are already on screen by
+                // now — status is fetched AFTER the listing deliberately — so
+                // publishing raises an event that makes the realized rows look
+                // again.
+                Thumbnails.RowVcs.Publish(path, snapshot?.States);
 
                 Console.Error.WriteLine(
                     $"[heimdall] vcs: {Vcs.Name} · {VcsStates.Count} decorated "
@@ -2300,6 +2328,46 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 _ = AddOrUpdateAsync(change.Path, generation);
                 break;
         }
+
+        // The row's size and timestamp are updated above, but its version
+        // control mark is not — that comes from a subprocess, and re-running it
+        // per event would be the per-row `git status` this design exists to
+        // avoid. Queue it instead.
+        QueueVcsRefresh();
+    }
+
+    private DispatcherTimer? _vcsRefresh;
+
+    /// <summary>
+    /// Re-reads version-control status a moment after the folder settles.
+    ///
+    /// **Debounced, and that is the whole point.** A build, a checkout or a
+    /// branch switch fires hundreds of watcher events in a second; one
+    /// `git status` each would be the same mistake as spawning `xdg-mime` per
+    /// row, which once turned a listing into 44 seconds. Each event restarts
+    /// the timer, so the subprocess runs once after the storm rather than once
+    /// per raindrop.
+    /// </summary>
+    private void QueueVcsRefresh()
+    {
+        if (Vcs is null || VirtualPaths.IsVirtual(CurrentPath)) return;
+
+        if (_vcsRefresh is null)
+        {
+            _vcsRefresh = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+
+            // Attached ONCE. Wiring it on every call would stack handlers and
+            // fire one refresh per event after all — the exact thing the
+            // debounce is here to prevent.
+            _vcsRefresh.Tick += (_, _) =>
+            {
+                _vcsRefresh!.Stop();
+                _ = RefreshVcsAsync(CurrentPath, _generation);
+            };
+        }
+
+        _vcsRefresh.Stop();
+        _vcsRefresh.Start();
     }
 
     private void RemoveByPath(string path)
@@ -2529,6 +2597,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _vcsRefresh?.Stop();
         _previewCts?.Cancel();
         _previewCts?.Dispose();
         _miller?.Clear();
