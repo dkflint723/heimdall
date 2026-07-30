@@ -4,19 +4,13 @@
 
 # Heimdall
 
-**A file manager for KDE that consumes the desktop instead of reimplementing it.**
+**A fast, keyboard-friendly file manager for Linux desktops.**
 
-Linux-first · C# · Avalonia 12 · .NET 10 · no runtime to install
+It looks like part of your desktop because it reads your desktop's own settings —
+colour scheme, accent, icon theme and font — and follows them as you change them,
+without a restart.
 
 </div>
-
----
-
-Heimdall aims at parity with Dolphin, and it gets there by using what Plasma
-already provides rather than building a parallel universe of settings. Your
-colour scheme, icon theme, font, single-click preference, trash, bookmarks and
-mounts are read from the same places KDE reads them. Change a theme and Heimdall
-changes with it, without a restart.
 
 ![Heimdall](docs/screenshot-grid.png)
 
@@ -24,147 +18,210 @@ changes with it, without a restart.
 
 ---
 
-## Why it exists
+## Getting around
 
-Dolphin is very good. This is not a complaint-driven project — it is an attempt
-to see whether a file manager can be built that is **fast at the sizes that
-actually hurt**, **honest about what it does not know**, and **a good citizen of
-the desktop it runs on**, without a settings dialog that reimplements the
-control panel.
+**Tabs and split view.** Open as many tabs as you like, and press `F3` to split
+the window in two. Each side keeps its own tabs, history, selection and zoom
+level, so you can compare two folders without either side forgetting where it was.
+Copy or move between them from the right-click menu.
 
-Three principles it has stuck to:
+**A path bar that works both ways.** Click any part of the breadcrumb to jump to
+that folder, or press `Ctrl+L` to type a path. Typing offers completions as you
+go, and `Tab` cycles through them.
 
-**Consume, do not reimplement.** Trash follows the freedesktop spec so files
-deleted here appear in Dolphin's trash and vice versa. Bookmarks are the same
-`user-places.xbel` Dolphin uses. Mime types come from `shared-mime-info`. Mounts
-go through `gio`. Nothing here maintains its own parallel copy of desktop state.
+**Column strip.** Turn on *Path columns above list* for a horizontal strip of
+parent folders above the listing, so you can step sideways through a deep tree
+without losing your place.
 
-**A wrong answer is worse than no answer.** The SVG icon renderer supports a
-documented subset and *declines* anything it cannot draw correctly, falling back
-to a generic icon rather than a mangled one. A failed version-control query
-draws nothing rather than claiming everything is clean.
+**Type to jump.** Start typing in any listing and the selection moves to the first
+matching name — no dialog, no search box.
 
-**Measure before believing.** Nearly every hard bug in this project was solved
-by an instrument and none by inference. That habit is written into the codebase
-as diagnostics you can switch on.
+**Back, forward, up** on `Alt+←`, `Alt+→`, `Alt+↑`, and `F5` to refresh.
 
----
+## Seeing your files
 
-## What works
+**Three layouts**, from the toolbar or `F8`:
+
+- **List** — one file per row, with sortable columns for size, type, permissions
+  and date. Columns drop out gracefully as the pane narrows rather than being
+  squeezed into uselessness.
+- **Compact** — names in vertical columns, for fitting a lot of files on screen.
+- **Grid** — large icons and thumbnails.
+
+**Independent zoom per layout and per pane.** `Ctrl` with the scroll wheel resizes
+text and icons in the pane under your pointer, and each layout remembers its own
+size, because a grid tile and a list row want different proportions. Add `Shift`
+for icons only; `Ctrl+0` resets.
+
+**Thumbnails** for images and video, cached so a folder you have visited draws
+instantly. A file too small to enlarge cleanly keeps its icon rather than being
+blown up into a blur.
+
+**Grouping** by name, size, type or date, from the right-click menu.
+
+**Details panel** (`F11`) — preview, full path, size, type, dates, permissions and
+tags for whatever is selected. In split view each side gets its own, so the panel
+always describes the side you are looking at. If the window is too narrow to show
+it usefully, Heimdall can widen the window to make room and shrink it back when
+you close it.
+
+**Quick preview** (`Space`) — a larger look at the selected file without opening
+anything.
+
+## Finding things
+
+**Search** from the sidebar, with results streaming in as they are found rather
+than all appearing at the end.
+
+**Filter** the current listing with `Ctrl+I` — type to narrow what is on screen,
+`Escape` to clear.
+
+**Recent files** and **recent locations**, banded by day. Any entry can be
+forgotten individually, which removes the record and never the file.
+
+**Tags.** Tag any file or folder, colour-coded, reachable from the sidebar. Tags
+live on the file itself as extended attributes, so they travel with it and other
+tools can read them.
+
+**Pin a folder** with `Ctrl+D` to keep it in the sidebar.
+
+## Working with files
+
+Copy, cut, paste, rename, duplicate and delete with the shortcuts you would
+expect. Beyond that:
+
+**Undo** (`Ctrl+Z`) for file operations.
+
+**Trash that can actually restore.** Deleted files go to your desktop's trash and
+appear in Heimdall's Trash view, each showing where it came from — so *Restore*
+puts it back where it belongs rather than guessing. Emptying always asks first.
+Heimdall can also sweep the trash after a number of days, or when it grows past a
+share of the disk.
+
+**Rename in bulk** (`Shift+F2`), with a live preview of every result before
+anything changes.
+
+**New file, new folder, new from template** — new items open straight into rename
+so you can name them without a second click. Templates come from your
+`~/Templates` folder, alongside a set of built-in file types.
+
+**Open with**, and **Open terminal here** (`F4`).
+
+**Checksums.** The properties window computes a file's hashes on request — only
+when you ask, since hashing a large file is not free — and the result is
+selectable so you can copy it.
+
+**Scripts.** Drop a script in Heimdall's scripts folder and it appears in the
+right-click menu, receiving the current folder and selection.
+
+## Version control
+
+Inside a git repository, files are marked with their status: **M** modified,
+**A** added, **D** deleted, **?** untracked, **!** conflicted. A folder shows the
+strongest state of anything inside it.
+
+The marks appear in every layout and keep up as you work — when you edit a file,
+and when you commit or switch branch. Status is read once per folder rather than
+once per file, so it stays cheap on a large repository. The letters carry the
+meaning and the colours are decoration, so the marks remain readable if you cannot
+tell the colours apart.
+
+## Network and sharing
+
+**Connect to a server** — SFTP, SMB and anything else your desktop can mount.
+Mounted shares appear in the sidebar and browse like local folders.
+
+**Discover shares** on your network without typing addresses.
+
+**Share a folder over HTTP** for another machine to fetch, with optional upload.
+This uses [copyparty](https://github.com/9001/copyparty) when you have it
+installed.
+
+## Fitting your desktop
+
+Heimdall reads your desktop's configuration rather than keeping its own copy:
 
 | | |
 |---|---|
-| **Three layouts** | a list with sortable columns, a compact multi-column view, and an icon grid |
-| **Split view and tabs** | each side keeps its own selection, history and details panel |
-| **Grid at any folder size** | a custom virtualizing wrap panel — 100,000 items in ~20 ms with 48 realized containers, constant regardless of folder size |
-| **Recent files and locations** | Dolphin's two virtual listings, banded by day, with a Forget action |
-| **Trash** | browse, restore and empty, reading the `.trashinfo` sidecars so restore knows where things came from |
-| **Version control** | git status per folder — one subprocess per listing, never per row — marked `M A D ? !` in every layout, refreshed when you edit, commit or switch branch |
-| **Tags** | stored as xattrs, shared with Dolphin |
-| **Search** | streamed into the sidebar as results arrive |
-| **Type-ahead, tab completion** | jump-to-letter in any listing; path completion in the location bar |
-| **Checksums, batch rename, file sharing** | over the network via copyparty, if installed |
-| **Themed** | colour scheme, accent, icon theme and font follow Plasma live |
+| **Colour scheme and accent** | follows your desktop, live |
+| **Icon theme** | your themed icons, with hand-drawn fallbacks where a theme has none |
+| **Font** | the desktop font, or pick your own with a live preview |
+| **Single or double click** | follows your desktop setting |
+| **Trash** | the standard desktop trash, shared with every other application |
+| **Bookmarks** | the same places list your other file manager uses |
+| **File types** | your system's own file-type database |
 
-Everything scales per pane — `Ctrl` with the wheel changes icon and font size on
-the side under the pointer, independently of the other.
+Change a theme and Heimdall changes with it. Nothing needs restarting.
 
----
+## Keyboard
 
-## Architecture
+| | | | |
+|---|---|---|---|
+| `Ctrl+T` | new tab | `F3` | split view |
+| `Ctrl+W` | close tab | `F8` | next layout |
+| `Ctrl+Tab` | next tab | `F11` | details panel |
+| `Alt+←` `Alt+→` | back, forward | `Space` | quick preview |
+| `Alt+↑` | up one folder | `F5` | refresh |
+| `Ctrl+L` | edit the path | `F2` | rename |
+| `Ctrl+F` | search | `Shift+F2` | rename in bulk |
+| `Ctrl+I` | filter the listing | `Ctrl+Shift+N` | new folder |
+| `Escape` | clear the filter | `Ctrl+Z` | undo |
+| `Ctrl+B` | show or hide the sidebar | `F4` | terminal here |
+| `Ctrl+D` | pin this folder | `Ctrl+Shift+,` | settings |
+| `Ctrl` `+` `−` `0` | zoom in, out, reset | | |
 
-![Architecture](docs/architecture.svg)
+## Settings
 
-The dependency rule is the whole design. `Heimdall.Core` holds contracts and
-logic that is genuinely platform-neutral. `Heimdall.Linux` holds everything that
-knows what a `.desktop` file is. `Heimdall.Ui` holds Avalonia and nothing else
-does.
+One dialog (`Ctrl+Shift+,`) covers sorting, what a click does, previews and their
+size limits, confirmations, the status bar, which entries appear in the
+right-click menu, per-layout spacing, date style, the font, version-control marks,
+the details panel's behaviour, and how the trash is swept.
 
-Git decorations live in **Core**, not in `Heimdall.Linux`, because they drive the
-`git` binary — which behaves the same on both target platforms. Putting them
-beside the XDG trash would mean writing them twice.
+Heimdall can also remember the view, sort order and zoom for each folder
+individually, if you would rather not set them again every time.
 
-### One shape for three sources
+## Installing
 
-![Virtual listings](docs/virtual-listing.svg)
-
-Recent files, recent locations and the trash are not directories, but they are
-listings. Giving each a virtual path and returning the *same* enumerable shape as
-the filesystem provider means sorting, filtering, grouping, all three layouts and
-the selection machinery work on them with no special cases at all.
-
----
-
-## Building
-
-Short version, on Fedora:
+Take the tarball from the
+[releases page](https://github.com/dkflint723/heimdall/releases):
 
 ```bash
-sudo dnf install dotnet-sdk-10.0
-git clone https://github.com/dkflint723/heimdall.git
-cd heimdall
-dotnet build && dotnet run --project src/Heimdall.Ui
+tar -xzf heimdall-linux-x64.tar.gz
+cd heimdall && ./install.sh
 ```
 
-Arch, prerequisites, the NativeAOT toolchain, the programs Heimdall shells out
-to and how to hand someone a build: **[BUILDING.md](BUILDING.md)**.
+It installs under `~/.local`, needs no root, and adds a menu entry. There is an
+RPM for Fedora on the same page.
 
-> **Note** — `publish/` is the deliverable, not the executable alone.
-> `libSkiaSharp.so` and `libHarfBuzzSharp.so` live beside the binary and are
-> loaded from its own directory. "Self-contained" means no .NET runtime to
-> install; it does not mean one file.
+**To build it yourself** you need the .NET 10 SDK:
 
----
+```bash
+git clone https://github.com/dkflint723/heimdall.git
+cd heimdall
+dotnet run --project src/Heimdall.Ui
+```
 
-## Diagnostics
-
-Off by default. Each prints to stderr.
-
-| Variable | Prints |
-|---|---|
-| `HEIMDALL_TILE_DEBUG=1` | realized container count, index range and viewport per measure |
-| `HEIMDALL_ICON_DEBUG=1` | per-shape bounds, brushes and gradient axes while rendering SVG icons |
-| `HEIMDALL_LOAD_DEBUG=1` | heap, GC and thread-pool counters per folder load |
-| `HEIMDALL_FONT_DEBUG=1` | font resolution |
-
-`HEIMDALL_TILE_DEBUG` is the one to reach for when a listing feels slow. The
-realized count is unambiguous in a way a timing figure is not — if it approaches
-the item count, nothing is being virtualized.
-
----
+Prerequisites, other distributions and packaging are in [BUILDING.md](BUILDING.md).
 
 ## Status
 
-Not released, and version numbers should not be trusted yet. The gaps below are
-the honest list, not a roadmap.
+Heimdall is used daily by its author, but there has been no stable release and
+version numbers should not be trusted yet. Known gaps:
 
-**Known and open:**
+- **Compact view slows down on enormous folders** — around a hundred thousand
+  files. List and grid handle that size without trouble.
+- **In a git submodule the marks wait for a refresh** after a commit rather than
+  updating on their own.
+- **Selection mode, configurable shortcuts and multiple windows** are not built.
+- **Linux only for now.** A Windows port is planned and partly designed.
 
-- **Compact layout is not virtualized.** 100,000 items takes ~32 seconds there.
-  It wraps into columns, so it needs an orientation mode on the panel. This is
-  the only place Heimdall refuses something Dolphin does.
-- **`git commit` and `git checkout` refresh the marks, but a submodule's does
-  not.** A submodule or linked worktree keeps its `.git` as a *file* holding a
-  gitdir pointer rather than a directory, so it is not watched and its marks wait
-  for F5.
-- Selection mode, configurable shortcuts and multi-window are unbuilt.
-- **Windows is deliberately last.** Most Core interfaces still have exactly one
-  implementation, and the second is where you find out which abstractions were
-  really about Linux rather than about file management.
-
----
+Bugs and ideas are welcome on the
+[issue tracker](https://github.com/dkflint723/heimdall/issues).
 
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
 
-Heimdall builds on [Avalonia](https://avaloniaui.net) (MIT) and
-[CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) (MIT), and
-its published binaries bundle SkiaSharp and HarfBuzzSharp (MIT) and the Inter
-typeface (SIL Open Font License 1.1).
-
----
-
-<div align="center">
-<sub>Named for the watchman who sees everything coming.</sub>
-</div>
+Built with [Avalonia](https://avaloniaui.net). Published binaries include
+SkiaSharp, HarfBuzzSharp and the Inter typeface; their licences travel with the
+release.
