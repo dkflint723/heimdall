@@ -29,3 +29,4 @@ Exec=heimdall
 [Desktop Action Home]
 Name=Open Home Folder
 Exec=heimdall %h
+StartupWMClass=Heimdall.Ui

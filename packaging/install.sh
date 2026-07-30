@@ -57,6 +57,12 @@ Comment=File manager
 Exec=heimdall %U
 Icon=heimdall
 Terminal=false
+# Belt and braces. Program.cs now sets WM_CLASS to "heimdall" so it matches this
+# file's basename and no override should be needed — but if that Avalonia option
+# is ever dropped, WM_CLASS falls back to the assembly name and this line keeps
+# the panel matching. Check with `xprop WM_CLASS`; both values are listed
+# because either may be what the window actually reports.
+StartupWMClass=heimdall;Heimdall.Ui;
 Categories=System;FileTools;FileManager;
 MimeType=inode/directory;
 EOF

@@ -1,0 +1,29 @@
+[1mdiff --git a/brand/heimdall.desktop b/brand/heimdall.desktop[m
+[1mindex 0f5144a..5e39637 100644[m
+[1m--- a/brand/heimdall.desktop[m
+[1m+++ b/brand/heimdall.desktop[m
+[36m@@ -29,3 +29,4 @@[m [mExec=heimdall[m
+ [Desktop Action Home][m
+ Name=Open Home Folder[m
+ Exec=heimdall %h[m
+[32m+[m[32mStartupWMClass=Heimdall.Ui[m
+[1mdiff --git a/src/Heimdall.Ui/Program.cs b/src/Heimdall.Ui/Program.cs[m
+[1mindex 6845d94..4b17891 100644[m
+[1m--- a/src/Heimdall.Ui/Program.cs[m
+[1m+++ b/src/Heimdall.Ui/Program.cs[m
+[36m@@ -3,6 +3,7 @@[m [musing System.Linq;[m
+ using System.Threading;[m
+ using System.Threading.Tasks;[m
+ using Avalonia;[m
+[32m+[m[32musing Avalonia.X11;[m
+ [m
+ namespace Heimdall.Ui;[m
+ [m
+[36m@@ -78,6 +79,7 @@[m [minternal sealed class Program[m
+     public static AppBuilder BuildAvaloniaApp()[m
+         => AppBuilder.Configure<App>()[m
+             .UsePlatformDetect()[m
+[32m+[m[32m            .With(new X11PlatformOptions { WmClass = "heimdall" })[m
+             .WithInterFont()[m
+             .LogToTrace();[m
+ }[m

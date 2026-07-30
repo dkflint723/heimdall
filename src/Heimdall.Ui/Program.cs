@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.X11;
 
 namespace Heimdall.Ui;
 
@@ -78,6 +79,19 @@ internal sealed class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+
+            // WM_CLASS is how the desktop matches a running window back to its
+            // .desktop file. Avalonia's default derives from the assembly name
+            // — "Heimdall.Ui" — while the entry is "heimdall.desktop", so the
+            // panel could not associate the two and showed a placeholder icon
+            // until the window published its own embedded one.
+            //
+            // Setting it here rather than adding StartupWMClass= to the desktop
+            // entry, because there are TWO desktop entries (brand/ and
+            // packaging/) and this fixes both, plus any distro package that
+            // writes its own.
+            .With(new X11PlatformOptions { WmClass = "heimdall" })
+
             .WithInterFont()
             .LogToTrace();
 }
