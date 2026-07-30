@@ -57,12 +57,15 @@ Comment=File manager
 Exec=heimdall %U
 Icon=heimdall
 Terminal=false
-# Belt and braces. Program.cs now sets WM_CLASS to "heimdall" so it matches this
-# file's basename and no override should be needed — but if that Avalonia option
-# is ever dropped, WM_CLASS falls back to the assembly name and this line keeps
-# the panel matching. Check with `xprop WM_CLASS`; both values are listed
-# because either may be what the window actually reports.
-StartupWMClass=heimdall;Heimdall.Ui;
+# StartupWMClass is a SINGLE STRING, not a semicolon-separated list — the
+# desktop-entry spec types it as `string`, and desktop-file-validate accepts a
+# list happily because "a;b;" is a valid string that simply matches nothing.
+#
+# Program.cs sets WM_CLASS to "heimdall" so it already matches this file's
+# basename, which is the default association rule and needs no override at all.
+# This line only helps a binary built BEFORE that change, where WM_CLASS is
+# still the assembly name. Confirm with `xprop WM_CLASS` before trusting it.
+StartupWMClass=Heimdall.Ui
 Categories=System;FileTools;FileManager;
 MimeType=inode/directory;
 EOF

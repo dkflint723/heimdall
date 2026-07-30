@@ -61,6 +61,26 @@ done
 install -D -m644 %{_sourcedir}/icons/hicolor/scalable/apps/heimdall.svg \
     %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/heimdall.svg
 
+# Refresh the desktop and icon caches. Fedora 30+ has RPM file triggers that do
+# this automatically, so these are belt-and-braces there — but the spec should
+# not depend on the host distribution having them, and `|| :` means a machine
+# without the tools installed still upgrades cleanly.
+%post
+/usr/bin/update-desktop-database &>/dev/null || :
+/usr/bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null || :
+
+%postun
+/usr/bin/update-desktop-database &>/dev/null || :
+# $1 is the number of remaining copies: 0 means this was an uninstall rather
+# than the old half of an upgrade, and only then should the cache be rebuilt.
+if [ $1 -eq 0 ]; then
+    /usr/bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null || :
+    /usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+fi
+
+%posttrans
+/usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
+
 %files
 %license LICENSE
 %doc README.md
