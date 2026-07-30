@@ -106,9 +106,13 @@ public sealed record WindowSession
     /// </summary>
     public PaneState? RememberedRightPane { get; init; }
 
-    // Re-added in v3 now that the sidebar exists. These were removed in v2
-    // precisely because nothing read or wrote them.
-    public string ActiveSidebarPanel { get; init; } = "places";
+    // ActiveSidebarPanel was here, and this is the SECOND time it has been
+    // removed for the same reason. Its own comment recorded the first: "removed
+    // in v2 precisely because nothing read or wrote them", then re-added in v3
+    // "now that the sidebar exists" — at which point still nothing read it.
+    // A QA sweep on 30 July 2026 found it persisted and restored with no way for
+    // anyone to change it. If a third attempt is ever made, give it a consumer in
+    // the same commit.
     public double SidebarWidth { get; init; } = 210;
     public RailState Rail { get; init; } = RailState.Full;
 }

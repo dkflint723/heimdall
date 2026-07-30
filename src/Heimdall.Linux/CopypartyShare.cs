@@ -5,6 +5,8 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Heimdall.Core.Sharing;
 
+using Heimdall.Core;
+
 namespace Heimdall.Linux;
 
 /// <summary>
@@ -134,7 +136,7 @@ public sealed class CopypartyShare : IFileSharing
                 // Was returning -1 and walking away, leaving the child running.
                 // Capture below already killed on timeout; same situation, so
                 // same behaviour.
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("sharing", ex); }
                 return -1;
             }
 
@@ -243,7 +245,7 @@ public sealed class CopypartyShare : IFileSharing
             // stops a pip download part-way.
             using var cancellation = ct.Register(() =>
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("sharing", ex); }
             });
 
             // Concurrently, not one after the other — see Run. This is the path
@@ -256,7 +258,7 @@ public sealed class CopypartyShare : IFileSharing
             // while on a slow connection.
             if (!process.WaitForExit(300_000))
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("sharing", ex); }
                 return (-1, "timed out");
             }
 

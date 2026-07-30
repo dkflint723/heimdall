@@ -109,8 +109,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         Sidebar.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(SidebarViewModel.ActivePanel)
-                               or nameof(SidebarViewModel.Rail)
+            if (e.PropertyName is nameof(SidebarViewModel.Rail)
                                or nameof(SidebarViewModel.Width))
                 MarkDirty();
         };
@@ -1110,7 +1109,6 @@ public sealed partial class ShellViewModel : ObservableObject
         ActiveGroup.CloseTab(pane);
     }
 
-    [RelayCommand] private void SelectTab(PaneViewModel? pane) { if (pane is not null) ActiveGroup.ActiveTab = pane; }
     [RelayCommand] private void NextTab() => ActiveGroup.Cycle(1);
     [RelayCommand] private void PreviousTab() => ActiveGroup.Cycle(-1);
     [RelayCommand] private void CancelOperation() => ActiveOperation?.Cancel();
@@ -1189,7 +1187,6 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (window is not null)
         {
-            Sidebar.ActivePanel = window.ActiveSidebarPanel;
             Sidebar.Width = window.SidebarWidth;
             Sidebar.Rail = window.Rail;
             SplitRatio = window.SplitRatio;
@@ -1261,7 +1258,6 @@ public sealed partial class ShellViewModel : ObservableObject
             [
                 geometry with
                 {
-                    ActiveSidebarPanel = Sidebar.ActivePanel,
                     SidebarWidth = Sidebar.Width,
                     Rail = Sidebar.Rail,
                     SplitRatio = SplitRatio,

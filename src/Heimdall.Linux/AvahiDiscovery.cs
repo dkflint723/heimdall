@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Heimdall.Core.Places;
 
+using Heimdall.Core;
+
 namespace Heimdall.Linux;
 
 /// <summary>
@@ -115,7 +117,7 @@ public sealed class AvahiDiscovery : INetworkDiscovery
 
             if (!process.WaitForExit(8000))
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("avahi", ex); }
                 return [];
             }
 

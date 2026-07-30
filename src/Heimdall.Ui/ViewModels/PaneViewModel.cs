@@ -97,8 +97,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// <summary>Asks the view to prompt for a new tag name.</summary>
     public event EventHandler? NewTagRequested;
 
-    [RelayCommand]
-    public void RefreshTags()
+        public void RefreshTags()
     {
         KnownTags.Clear();
         if (_tags is null) return;
@@ -220,8 +219,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     public bool HasScripts => Scripts.Count > 0;
 
-    [RelayCommand]
-    public void RefreshScripts()
+        public void RefreshScripts()
     {
         Scripts.Clear();
         if (_scripts is null) return;
@@ -985,9 +983,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    public void ToggleColumnStrip() => ShowColumnStrip = !ShowColumnStrip;
-
-    [RelayCommand]
     public void ShowAsDetails() => View = ViewMode.Details;
 
     [RelayCommand]
@@ -1144,8 +1139,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                            && !VirtualPaths.IsVirtual(CurrentPath)
                            && !string.IsNullOrEmpty(_fs.GetParent(CurrentPath));
 
-    [RelayCommand]
-    public async Task NavigateAsync(string path)
+        public async Task NavigateAsync(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
 
@@ -1953,9 +1947,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         IsPathEditing = true;
     }
 
-    [RelayCommand]
-    public void EndEditPath() => IsPathEditing = false;
-
     private void RebuildBreadcrumbs()
     {
         Breadcrumbs.Clear();
@@ -2086,8 +2077,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     /// <summary>Re-read on every menu open: a template is a file the user drops
     /// into a folder, and needing a restart to see it would be baffling.</summary>
-    [RelayCommand]
-    public void RefreshTemplates()
+        public void RefreshTemplates()
     {
         Templates.Clear();
         if (_templates is null) return;

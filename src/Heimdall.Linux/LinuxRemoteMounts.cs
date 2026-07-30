@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Heimdall.Core.Places;
 
+using Heimdall.Core;
+
 namespace Heimdall.Linux;
 
 /// <summary>
@@ -212,7 +214,7 @@ public sealed partial class LinuxRemoteMounts : IRemoteMounts
             // it needs one it fails fast rather than hanging.
             if (!process.WaitForExit(20_000))
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("mounts", ex); }
                 return -1;
             }
 

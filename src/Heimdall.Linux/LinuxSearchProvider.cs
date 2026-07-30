@@ -4,6 +4,8 @@ using System.Runtime.CompilerServices;
 using Heimdall.Core.FileSystem;
 using Heimdall.Core.Search;
 
+using Heimdall.Core;
+
 namespace Heimdall.Linux;
 
 /// <summary>
@@ -76,7 +78,7 @@ public sealed class LinuxSearchProvider : ISearchProvider
         // the index for a query nobody is listening to any more.
         using var cancellation = ct.Register(() =>
         {
-            try { process.Kill(entireProcessTree: true); } catch { }
+            try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("search", ex); }
         });
 
         using (process)
@@ -107,7 +109,7 @@ public sealed class LinuxSearchProvider : ISearchProvider
             // nobody is reading, so nothing should still be searching.
             if (!process.HasExited)
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("search", ex); }
             }
         }
     }

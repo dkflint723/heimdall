@@ -61,12 +61,6 @@ public sealed record GeneralSettings
 
     public bool ShowTooltips { get; init; } = true;
 
-    /// <summary>
-    /// Renaming happens in the prompt bar rather than a modal dialog. The
-    /// setting exists for parity; Dolphin's alternative is a dialog per item.
-    /// </summary>
-    public bool RenameInline { get; init; } = true;
-
     /// <summary>Already the behaviour — Tab moves between split halves.</summary>
     public bool TabSwitchesSplitPanes { get; init; } = true;
 
@@ -124,16 +118,6 @@ public sealed record StartupSettings
 
     public bool LocationBarEditable { get; init; }
 
-    /// <summary>
-    /// A folder opened from outside becomes a tab in the running window rather
-    /// than a second process. Single-instance is already enforced by a file
-    /// lock; this decides what the running instance does with the request.
-    /// </summary>
-    public bool OpenNewFoldersInTabs { get; init; } = true;
-
-    /// <summary>Otherwise the path is shortened against the Places entries.</summary>
-    public bool ShowFullPathInLocationBar { get; init; }
-
     public bool ShowFullPathInTitleBar { get; init; }
 }
 
@@ -166,12 +150,6 @@ public sealed record CompactViewSettings
 public sealed record DetailsViewSettings
 {
     public FolderSizeMode FolderSize { get; init; } = FolderSizeMode.ItemCount;
-
-    /// <summary>
-    /// Depth limit for ContentSize. Unbounded recursion on a deep tree or a
-    /// network mount is how a listing stops being fast.
-    /// </summary>
-    public int FolderSizeRecursionLimit { get; init; } = 3;
 
     /// <summary>AgeConverters renders relative dates today.</summary>
     public DateStyle DateStyle { get; init; } = DateStyle.Relative;
@@ -253,11 +231,6 @@ public sealed record NavigationSettings
 {
     public ActivationClick OpenItemsWith { get; init; } = ActivationClick.System;
 
-    /// <summary>
-    /// Spring-loaded folders: hovering a folder mid-drag opens it. Not built
-    /// yet; the setting arrives with the feature.
-    /// </summary>
-    public bool OpenFoldersDuringDrag { get; init; }
 }
 
 /// <summary>
@@ -272,9 +245,7 @@ public sealed record ContextMenuSettings
     public bool ShowMoveTo { get; init; } = true;
     public bool ShowAddToPlaces { get; init; } = true;
     public bool ShowSortBy { get; init; } = true;
-    public bool ShowViewMode { get; init; } = true;
     public bool ShowOpenInNewTab { get; init; } = true;
-    public bool ShowOpenInNewWindow { get; init; } = true;
     public bool ShowCopyLocation { get; init; } = true;
     public bool ShowDuplicate { get; init; } = true;
 }

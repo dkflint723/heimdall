@@ -1,6 +1,8 @@
 using System.Net.Sockets;
 using System.Text;
 
+using Heimdall.Core;
+
 namespace Heimdall.Ui;
 
 /// <summary>
@@ -143,10 +145,10 @@ public sealed class SingleInstance : IDisposable
 
     public void Dispose()
     {
-        try { _stopping?.Cancel(); } catch { }
-        try { _listener?.Dispose(); } catch { }
-        try { _lock?.Dispose(); } catch { }
+        try { _stopping?.Cancel(); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
+        try { _listener?.Dispose(); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
+        try { _lock?.Dispose(); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
 
-        try { if (File.Exists(SocketPath)) File.Delete(SocketPath); } catch { }
+        try { if (File.Exists(SocketPath)) File.Delete(SocketPath); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
     }
 }

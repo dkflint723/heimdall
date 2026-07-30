@@ -130,7 +130,7 @@ public sealed class GitVersionControl : IVersionControl
 
             if (!process.WaitForExit(2000))
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("vcs", ex); }
                 return null;
             }
 

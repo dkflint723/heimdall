@@ -68,13 +68,15 @@ public sealed partial class SidebarViewModel : ObservableObject
     }
     public SearchViewModel Search { get; }
 
-    [ObservableProperty] private string _activePanel = "places";
     [ObservableProperty] private RailState _rail = RailState.Full;
     [ObservableProperty] private double _width = 210;
 
     // One sidebar, all sections visible at once — the point of the workspace
     // layout is that the things you organise by are never behind a toggle.
-    // ActivePanel survives only as "which section is expanded".
+    //
+    // An `ActivePanel` used to sit beside this, persisted in the session and
+    // restored, with `ShowPanel` as its only mutator — and nothing ever called
+    // that. Removed 30 July 2026: state that cannot be changed is not state.
     public bool IsPanelVisible => Rail != RailState.Hidden;
 
     /// <summary>The folder tree is the one section worth collapsing: it is tall,
@@ -168,8 +170,7 @@ public sealed partial class SidebarViewModel : ObservableObject
         RefreshRemotes();
     }
 
-    [RelayCommand]
-    public void RefreshRemotes()
+        public void RefreshRemotes()
     {
         Remotes.Clear();
 
@@ -194,7 +195,6 @@ public sealed partial class SidebarViewModel : ObservableObject
     }
 
 
-    partial void OnActivePanelChanged(string value) => NotifyVisibility();
     partial void OnRailChanged(RailState value) => NotifyVisibility();
 
     private void NotifyVisibility() => OnPropertyChanged(nameof(IsPanelVisible));
@@ -203,19 +203,6 @@ public sealed partial class SidebarViewModel : ObservableObject
     /// meaningful between "shown" and "hidden".</summary>
     [RelayCommand]
     public void CycleRail() => Rail = Rail == RailState.Hidden ? RailState.Full : RailState.Hidden;
-
-    [RelayCommand]
-    public void ShowPanel(string? panel)
-    {
-        if (string.IsNullOrEmpty(panel)) return;
-
-        // Selecting the panel already showing expands a collapsed sidebar
-        // rather than doing nothing.
-        if (ActivePanel == panel && Rail == RailState.Full) return;
-
-        ActivePanel = panel;
-        Rail = RailState.Full;
-    }
 
     public async Task InitializeAsync()
     {

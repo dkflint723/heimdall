@@ -128,7 +128,7 @@ public sealed class LinuxScriptRunner : IScriptRunner
         // reach it from the application.
         using var cancellation = ct.Register(() =>
         {
-            try { process.Kill(entireProcessTree: true); } catch { }
+            try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("scripts", ex); }
         });
 
         var stdout = process.StandardOutput.ReadToEndAsync(ct);

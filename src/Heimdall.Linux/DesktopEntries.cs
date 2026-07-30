@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Heimdall.Core.FileSystem;
 
+using Heimdall.Core;
+
 namespace Heimdall.Linux;
 
 /// <summary>
@@ -96,7 +98,7 @@ public static class DesktopEntries
 
             if (!process.WaitForExit(2000))
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("desktop-entries", ex); }
                 return "";
             }
 
