@@ -53,6 +53,12 @@ jobs:
           mkdir -p dist/heimdall
           cp -a "$P"/. dist/heimdall/
           cp packaging/install.sh dist/heimdall/
+
+          # MIT requires the notice to travel with "all copies or substantial
+          # portions", so a binary tarball without it does not satisfy the
+          # licence the project ships under. The distro tarballs already carried
+          # these; this one did not.
+          cp LICENSE README.md dist/heimdall/
           chmod +x dist/heimdall/install.sh dist/heimdall/Heimdall.Ui
 
           tar -czf heimdall-linux-x64.tar.gz -C dist heimdall
