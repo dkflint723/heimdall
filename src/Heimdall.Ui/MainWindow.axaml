@@ -1160,7 +1160,7 @@
                     <Panel Width="{DynamicResource CompactCellWidth}"
                            Height="{DynamicResource CompactCellHeight}">
                       <Panel Width="{DynamicResource CompactWidth}"
-                             Height="{DynamicResource RowHeight}"
+                             Height="{DynamicResource CompactRowHeight}"
                              HorizontalAlignment="Left" VerticalAlignment="Top">
                         <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
                                 Margin="1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
@@ -1169,11 +1169,18 @@
                         <Border Width="3" HorizontalAlignment="Left" Margin="1"
                                 Background="{DynamicResource AccentColour}"
                                 IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                        <StackPanel Orientation="Horizontal" Spacing="6"
-                                    VerticalAlignment="Center" Margin="8,0,6,0">
-                          <Panel Width="{DynamicResource IconSize}"
-                                 Height="{DynamicResource IconSize}">
-                            <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="24"
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    VerticalAlignment="Center" Margin="6,0,6,0">
+                          <!-- Compact's OWN icon metric, not the details one.
+                               Measured against Dolphin, a compact icon is about
+                               double the text line height and the row hugs it.
+                               Borrowing ThumbSize gave a details-shaped row with
+                               an undersized icon in it — neither mode's
+                               proportions. Requested at 48 so the source is never
+                               smaller than the box. -->
+                          <Panel Width="{DynamicResource CompactIconSize}"
+                                 Height="{DynamicResource CompactIconSize}">
+                            <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="48"
                                    Stretch="Uniform"/>
                           </Panel>
                           <TextBlock Text="{Binding Name}" VerticalAlignment="Center"

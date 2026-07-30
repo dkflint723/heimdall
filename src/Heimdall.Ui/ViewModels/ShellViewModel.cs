@@ -747,6 +747,16 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public void OnSettingsChanged()
     {
+        // The tile and cell metrics are computed from the pane's scale AND the
+        // global spacing settings, but only the scale raises a notification.
+        // Without this, a spacing change would reach only the panes that
+        // happened to rescale afterwards — which is the trap the old
+        // application-level filter was trying to avoid, solved at the right end.
+        foreach (var group in new[] { Left, Right })
+            if (group is not null)
+                foreach (var tab in group.Tabs)
+                    tab.RefreshScale();
+
         OnPropertyChanged(nameof(ShowStatusBar));
         OnPropertyChanged(nameof(ShowFreeSpace));
 

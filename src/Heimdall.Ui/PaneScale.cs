@@ -53,7 +53,34 @@ public static class PaneScale
         var thumb = 26 * iconScale;
         var tile = 84 * iconScale;
 
-        var rowHeight = Math.Round(Math.Max(body * 2.1, thumb + 8), 1);
+        // ---- one breathing-room constant, used by all three modes ----------
+        //
+        // [stated] "the spacing between icons ... feels too tight." It was 8,
+        // unscaled — so at 150% zoom the icons grew and the gap between them did
+        // not, which is why it tightened the further you zoomed in rather than
+        // staying proportional.
+        //
+        // Scaled with the ICON axis, because that is the axis it separates.
+        // The per-mode settings in the dialog are still ADDED on top of this;
+        // this is the floor, not a replacement for them.
+        var pad = Math.Round(12 * iconScale, 1);
+
+        var rowHeight = Math.Round(Math.Max(body * 2.1, thumb + pad), 1);
+
+        // ---- compact has its OWN proportions, and that is the point ---------
+        //
+        // Reusing the details row's metrics was a mistake: the two modes want
+        // different shapes. Measured against Dolphin, a compact icon is roughly
+        // DOUBLE the text line height and the row hugs it; a details row is a
+        // line of text with a smaller icon beside it. Sharing `RowHeight` and
+        // `ThumbSize` produced something that was neither — a details-shaped row
+        // with an undersized icon floating in it.
+        //
+        // The row still cannot be set independently: it has to fit the taller of
+        // the icon and the label, which is why this is a max rather than a
+        // constant.
+        var compactIcon = Math.Round(36 * iconScale, 1);
+        var compactRow = Math.Round(Math.Max(body * 1.9, compactIcon + pad), 1);
 
         // Icons.MaximumLines and the two text-width settings are NOT wired, and
         // the reason is structural rather than laziness. Every metric here is a
@@ -65,8 +92,8 @@ public static class PaneScale
         // Tile height would also have to follow: label lines are not free, and a
         // tile that does not grow to fit them just clips the label.
         yield return ("RowHeight", rowHeight);
-        yield return ("TileWidth", Math.Round(tile + 24, 1));
-        yield return ("TileHeight", Math.Round(tile + body * 2.9, 1));
+        yield return ("TileWidth", Math.Round(tile + 24 + pad, 1));
+        yield return ("TileHeight", Math.Round(tile + body * 2.9 + pad, 1));
 
         // ---- user-adjustable spacing ----------------------------------------
         //
@@ -83,6 +110,10 @@ public static class PaneScale
         var icons = Settings.AppSettings.Current.Views.Icons.Spacing;
         var compact = Settings.AppSettings.Current.Views.Compact.Spacing;
 
+        // The 6 is not spacing — it is the grid template's Margin="3" on each
+        // side, and a cell exactly TileWidth clips every tile without it. The
+        // breathing room lives in TileWidth/TileHeight rather than here, so the
+        // cell and the tile inside it are computed from the same numbers.
         yield return ("TileSpacing", Math.Round(6 + Math.Max(0, icons) * iconScale, 1));
 
         // Compact gets a CELL larger than its row, and the row is drawn inside
@@ -91,12 +122,14 @@ public static class PaneScale
         yield return ("CompactCellWidth",
             Math.Round(210 * fontScale + Math.Max(0, compact) * iconScale, 1));
         yield return ("CompactCellHeight",
-            Math.Round(rowHeight + Math.Max(0, compact) * iconScale, 1));
+            Math.Round(compactRow + Math.Max(0, compact) * iconScale, 1));
         yield return ("RailWidth", Math.Round(44 * fontScale, 1));
 
         // Compact columns are sized by the text they hold, not by the icons —
         // the mode exists to fit names on screen.
         yield return ("CompactWidth", Math.Round(210 * fontScale, 1));
+        yield return ("CompactIconSize", compactIcon);
+        yield return ("CompactRowHeight", compactRow);
 
         // Three rows of chain, preserved at any combination of the two scales.
         yield return ("ColumnStripHeight", Math.Round(rowHeight * 3 + 6, 1));
@@ -153,25 +186,21 @@ public static class PaneScale
     }
 
     /// <summary>
-    /// Spacing is a GLOBAL preference, not a per-pane metric, so it is
-    /// deliberately not written into a pane's own dictionary.
+    /// **Nothing is global any more, and that reversal was the bug.**
     ///
-    /// A DynamicResource resolves nearest-outward. If a pane wrote its own
-    /// copy, a settings change would only reach the panes that happened to
-    /// rescale afterwards — every other pane would keep the old spacing with
-    /// nothing to indicate why. Leaving these keys out makes the lookup fall
-    /// through to the application dictionary, which the save handler updates.
+    /// Spacing began as a purely global preference, so writing it once at
+    /// application level was right. Then breathing room that scales with
+    /// `iconScale` moved into the same resources — and a per-pane value
+    /// published only at application scale meant a pane at 188% drew its
+    /// compact rows 90px tall inside 48px cells, which overlapped.
+    ///
+    /// The settings-change problem that motivated the filter is now solved at
+    /// the other end: `PaneViewModel.RefreshScale()` re-raises the scale
+    /// notification, and the shell calls it for every pane on save.
     /// </summary>
-    private static readonly string[] GlobalOnly =
-        ["TileSpacing", "CompactCellWidth", "CompactCellHeight"];
-
     private static void Apply(Control control, PaneViewModel pane)
     {
         foreach (var (key, value) in Compute(pane.FontScale, pane.IconScale))
-        {
-            if (Array.IndexOf(GlobalOnly, key) >= 0) continue;
-
             control.Resources[key] = value;
-        }
     }
 }

@@ -362,6 +362,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // folder must not be able to shrink someone's text.
         if (view.FontScale > 0) FontScale = view.FontScale;
         if (view.IconScale > 0) IconScale = view.IconScale;
+
+        // A folder's opinion is about the pane, not about one layout.
+        if (view.FontScale > 0 || view.IconScale > 0) SeedScales(FontScale, IconScale);
     }
 
     /// <summary>
@@ -660,6 +663,44 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [ObservableProperty] private double _iconScale = 1.0;
 
     /// <summary>
+    /// Scale per LAYOUT, not per pane.
+    ///
+    /// The three modes want genuinely different proportions — a grid tile and a
+    /// details row are not the same object at different zooms — so one shared
+    /// pair meant enlarging the grid also enlarged the details rows, and the
+    /// size readout showed a number that did not describe what was on screen.
+    ///
+    /// `FontScale` and `IconScale` remain the ACTIVE pair, because everything
+    /// downstream reads them: the metric pipeline, the column thresholds, the
+    /// typed-size flyout. This dictionary is only what the inactive modes are
+    /// holding while they wait.
+    /// </summary>
+    private readonly Dictionary<ViewMode, (double Font, double Icon)> _scales = new()
+    {
+        [ViewMode.Details] = (1.0, 1.0),
+        [ViewMode.Grid]    = (1.0, 1.0),
+        [ViewMode.Compact] = (1.0, 1.0),
+    };
+
+    /// <summary>
+    /// True only while a mode switch is loading the incoming mode's pair.
+    /// Without it the assignment would immediately record itself back into the
+    /// slot it just came from, and every mode would converge on one value again
+    /// — the bug this exists to fix, reintroduced by its own fix.
+    /// </summary>
+    private bool _swappingScales;
+
+    /// <summary>
+    /// Gives every mode the same starting pair. Used when a session or a folder
+    /// supplies one scale: it expressed an opinion about the pane, not about a
+    /// particular layout, so no mode should be left at a stale 1.0.
+    /// </summary>
+    private void SeedScales(double font, double icon)
+    {
+        foreach (var mode in _scales.Keys.ToList()) _scales[mode] = (font, icon);
+    }
+
+    /// <summary>
     /// The bases the scales multiply. Exposed as real sizes rather than as a
     /// multiplier, because "14" is something a person can reason about and
     /// "1.15" is not.
@@ -701,6 +742,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnFontScaleChanged(double value)
     {
+        if (!_swappingScales) _scales[View] = (value, IconScale);
+
         OnPropertyChanged(nameof(FontPoints));
         // Column thresholds are measured in text width, so they follow the font
         // axis of the pane they belong to.
@@ -710,12 +753,24 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnIconScaleChanged(double value)
     {
+        if (!_swappingScales) _scales[View] = (FontScale, value);
+
         OnPropertyChanged(nameof(IconPixels));
         ScaleChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Raised so the shell can persist the change.</summary>
     public event EventHandler? ScaleChanged;
+
+    /// <summary>
+    /// Forces every pane-level metric to be recomputed and rewritten.
+    ///
+    /// Needed because the metrics now mix two sources — this pane's scale and
+    /// the global spacing settings — and only the first of those raises a
+    /// property change. Without this a spacing change would reach only the panes
+    /// that happened to rescale afterwards.
+    /// </summary>
+    public void RefreshScale() => OnPropertyChanged(nameof(IconScale));
 
     public bool ShowSize => ViewportWidth >= 340 * TextScale;
     public bool ShowModified => ViewportWidth >= 520 * TextScale;
@@ -1001,6 +1056,27 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnViewChanged(ViewMode oldValue, ViewMode newValue)
     {
+        // The outgoing mode keeps whatever it was left at, and the incoming one
+        // restores its own. `_swappingScales` stops these two assignments being
+        // recorded against the mode we are arriving in.
+        _scales[oldValue] = (FontScale, IconScale);
+
+        var (font, icon) = _scales[newValue];
+
+        _swappingScales = true;
+        try
+        {
+            // Assigned, not suppressed: the metric pipeline, the column
+            // thresholds and the size readout all have to follow. Only the
+            // bookkeeping above is skipped.
+            FontScale = font;
+            IconScale = icon;
+        }
+        finally
+        {
+            _swappingScales = false;
+        }
+
         // Timed because the un-virtualized layouts realize a container per
         // item, and how bad that is at a given count is the one number the
         // guard above should be set from.
@@ -1659,6 +1735,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             // 0, which would restore an invisible pane.
             FontScale = tab.FontScale > 0 ? tab.FontScale : 1.0;
             IconScale = tab.IconScale > 0 ? tab.IconScale : 1.0;
+
+            // The session stores ONE pair per tab, so a restored tab starts
+            // every mode at it rather than leaving two of them at 1.0 and
+            // surprising the user the first time they switch layout.
+            SeedScales(FontScale, IconScale);
 
             _back.Clear();
             foreach (var p in tab.BackStack) _back.Push(p);

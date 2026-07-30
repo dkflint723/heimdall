@@ -82,6 +82,23 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         EffectiveViewportChanged += OnEffectiveViewportChanged;
     }
 
+    /// <summary>
+    /// **These three change the layout, and Avalonia has to be told.**
+    ///
+    /// Registered as plain styled properties, they were changing without ever
+    /// invalidating measure — so the panel kept arranging children into cells
+    /// sized by the PREVIOUS values. Shrinking looked survivable, because a
+    /// child smaller than its cell just leaves a gap; growing overlapped, because
+    /// a child larger than its cell spills into the next one. Switching layout
+    /// and back forced a fresh measure and "fixed" it, which is what made the
+    /// bug look intermittent rather than absent.
+    /// </summary>
+    static VirtualizingWrapPanel()
+    {
+        AffectsMeasure<VirtualizingWrapPanel>(
+            ItemWidthProperty, ItemHeightProperty, ItemSpacingProperty);
+    }
+
     public double ItemWidth
     {
         get => GetValue(ItemWidthProperty);
@@ -158,6 +175,12 @@ public class VirtualizingWrapPanel : VirtualizingPanel
             Console.Error.WriteLine(
                 $"[heimdall] wrap: items={items.Count:N0} realized={_realized.Count} "
                 + $"range={first}..{last} cols={_columns} "
+                // The INPUTS to the column count, not just its result. Without
+                // them the line can show reflow failing and say nothing about
+                // why — and cell size is exactly where a per-pane metric and a
+                // global one disagree.
+                + $"item={ItemWidth:F0}x{ItemHeight:F0} gap={ItemSpacing:F0} "
+                + $"cell={ItemWidth + ItemSpacing:F0}x{ItemHeight + ItemSpacing:F0} "
                 + $"viewport={_viewport.Top:F0}..{_viewport.Bottom:F0} "
                 + $"avail={availableSize.Width:F0}x{availableSize.Height:F0} "
                 + $"extent={extent.Width:F0}x{extent.Height:F0}");
