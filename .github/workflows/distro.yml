@@ -48,8 +48,16 @@ jobs:
 
       - name: Build the RPM
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          VERSION="${VERSION:-0.0.0}"
+          # `${VAR:-default}` substitutes only when VAR is EMPTY or UNSET. On a
+          # branch run GITHUB_REF_NAME is "main", which is neither — so the old
+          # form produced `heimdall-main-1.fc44.rpm` rather than falling back.
+          # Match the shape of a tag instead of testing for emptiness.
+          case "$GITHUB_REF_NAME" in
+            v[0-9]*) VERSION="${GITHUB_REF_NAME#v}" ;;
+            *)       VERSION="0.0.0" ;;
+          esac
+
+          echo "building version $VERSION from ref $GITHUB_REF_NAME"
 
           mkdir -p ~/rpmbuild/{SOURCES,SPECS}
           cp heimdall-linux-x64-fedora.tar.gz ~/rpmbuild/SOURCES/heimdall-linux-x64.tar.gz
@@ -57,14 +65,22 @@ jobs:
           cp -a brand/icons ~/rpmbuild/SOURCES/
 
           rpmbuild -bb packaging/heimdall.spec --define "version $VERSION"
-          find ~/rpmbuild/RPMS -name '*.rpm' -exec cp {} . \;
+
+          BUILT=$(find ~/rpmbuild/RPMS -name "heimdall-$VERSION-*.rpm" | head -1)
+          test -n "$BUILT" || { echo "rpmbuild produced no heimdall-$VERSION rpm"; exit 1; }
+
+          cp "$BUILT" .
+          echo "RPM=$(basename "$BUILT")" >> "$GITHUB_ENV"
 
       # An RPM that installs is the only proof that matters. `rpm -i` runs the
       # dependency solver, so a missing Requires fails here rather than on
       # somebody's machine.
       - name: Install it, then run it
         run: |
-          dnf -y install ./*.rpm
+          # By name. A bare ./*.rpm also matched an RPM that had been committed
+          # to the repository by accident, and dnf refused the pair as a
+          # conflict — a confusing way to learn about a stray file.
+          dnf -y install "./$RPM"
           test -x /usr/bin/heimdall
           heimdall --version || true   # no display in CI; it must merely load
 
@@ -145,6 +161,9 @@ jobs:
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
 
+          # Scoped to the artifact directories this workflow uploaded, so a file
+          # that happens to sit in the workspace cannot be published by accident.
           gh release upload "$GITHUB_REF_NAME" \
-            $(find artifacts -type f \( -name '*.rpm' -o -name '*.tar.gz' \)) \
+            $(find artifacts/fedora artifacts/arch -type f \
+                \( -name 'heimdall-*.rpm' -o -name 'heimdall-*.tar.gz' \)) \
             --clobber
