@@ -103,6 +103,24 @@ public static class RowVcs
         _                   => ("", ""),
     };
 
+    /// <summary>
+    /// For a container that must DISAPPEAR when there is no mark, rather than
+    /// merely holding an empty string.
+    ///
+    /// Details and compact reserve a fixed-width slot so names stay aligned, and
+    /// there the empty marker is the point. A grid tile has no column to keep
+    /// aligned — an empty chip sitting on every clean thumbnail would be litter.
+    /// Two properties rather than one guessing from its parent, following
+    /// `RowMetadata`, which carries `Entry` and `Access` for the same reason.
+    /// </summary>
+    public static readonly AttachedProperty<FileEntry?> BadgeProperty =
+        AvaloniaProperty.RegisterAttached<Control, FileEntry?>("Badge", typeof(RowVcs));
+
+    public static void SetBadge(Control target, FileEntry? value)
+        => target.SetValue(BadgeProperty, value);
+
+    public static FileEntry? GetBadge(Control target) => target.GetValue(BadgeProperty);
+
     public static readonly AttachedProperty<FileEntry?> EntryProperty =
         AvaloniaProperty.RegisterAttached<TextBlock, FileEntry?>("Entry", typeof(RowVcs));
 
@@ -115,23 +133,29 @@ public static class RowVcs
     {
         EntryProperty.Changed.AddClassHandler<TextBlock>((text, e) =>
         {
-            Attach(text);
+            Attach(text, () => Apply(text, GetEntry(text)));
             Apply(text, e.NewValue as FileEntry?);
+        });
+
+        BadgeProperty.Changed.AddClassHandler<Control>((control, e) =>
+        {
+            Attach(control, () => ApplyBadge(control, GetBadge(control)));
+            ApplyBadge(control, e.NewValue as FileEntry?);
         });
     }
 
     /// <summary>Set once per control, so a recycled row does not stack handlers.</summary>
     private static readonly AttachedProperty<bool> WiredProperty =
-        AvaloniaProperty.RegisterAttached<TextBlock, bool>("Wired", typeof(RowVcs));
+        AvaloniaProperty.RegisterAttached<Control, bool>("Wired", typeof(RowVcs));
 
-    private static void Attach(TextBlock text)
+    private static void Attach(Control control, Action reapply)
     {
-        if (text.GetValue(WiredProperty)) return;
+        if (control.GetValue(WiredProperty)) return;
 
-        text.SetValue(WiredProperty, true);
+        control.SetValue(WiredProperty, true);
 
         void OnChanged(object? _, EventArgs __) =>
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => Apply(text, GetEntry(text)));
+            Avalonia.Threading.Dispatcher.UIThread.Post(reapply);
 
         Changed += OnChanged;
 
@@ -139,12 +163,15 @@ public static class RowVcs
         // every row ever realized alive for the life of the process. Detaching
         // is what makes this safe, and it is why the handler is a named local
         // rather than a lambda written twice.
-        text.DetachedFromVisualTree += (_, _) =>
+        control.DetachedFromVisualTree += (_, _) =>
         {
             Changed -= OnChanged;
-            text.SetValue(WiredProperty, false);
+            control.SetValue(WiredProperty, false);
         };
     }
+
+    private static void ApplyBadge(Control control, FileEntry? entry)
+        => control.IsVisible = entry is { } e && Mark(StateFor(e.FullPath)).Glyph.Length > 0;
 
     private static void Apply(TextBlock text, FileEntry? entry)
     {

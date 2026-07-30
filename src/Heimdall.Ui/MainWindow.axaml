@@ -856,7 +856,7 @@
                                   <Border Width="3" HorizontalAlignment="Left" CornerRadius="2"
                                           Margin="4,3" Background="{DynamicResource AccentColour}"
                                           IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                                  <Grid ColumnDefinitions="*,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,8,0">
+                                  <Grid ColumnDefinitions="*,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,18,0">
                                     <TextBlock Grid.Column="0" Text="{Binding Name}"
                                                FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"/>
@@ -875,6 +875,30 @@
               </ScrollViewer>
               </Border>
 
+              <!-- Trash actions. Docked ABOVE the column header so it shows in
+                   every layout, not just details — the header itself is bound to
+                   IsDetailsView and would have hidden these in grid and compact.
+                   The whole band only exists in the trash listing. -->
+              <Border DockPanel.Dock="Top" Padding="12,6"
+                      Background="{DynamicResource ChromeBrush}"
+                      BorderThickness="0,0,0,1" BorderBrush="{DynamicResource EdgeShadow}"
+                      IsVisible="{Binding IsTrashListing}">
+                <StackPanel Orientation="Horizontal" Spacing="8"
+                            HorizontalAlignment="Right">
+                  <Button Content="Restore"
+                          Command="{Binding RestoreFromTrashCommand}"
+                          FontSize="{DynamicResource FontSizeSmall}" Padding="10,3"
+                          ToolTip.Tip="put the selected items back where they came from"/>
+                  <!-- The ellipsis is a promise: this one asks first. It is the
+                       only action in the application with neither an undo nor a
+                       per-item review, so it never fires straight from a click. -->
+                  <Button Content="Empty trash…"
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"
+                          FontSize="{DynamicResource FontSizeSmall}" Padding="10,3"
+                          ToolTip.Tip="permanently delete everything in the trash"/>
+                </StackPanel>
+              </Border>
+
               <!-- Below the chain, because it labels the listing rather than
                    the strip. Column widths and margin match the row template so
                    the headings actually sit over their columns. -->
@@ -886,7 +910,7 @@
                       IsVisible="{Binding IsDetailsView}">
                 <!-- Headings sort. The sort state existed, was persisted per
                      tab, and had no control anywhere that could set it. -->
-                <Grid Margin="12,0,8,0">
+                <Grid Margin="12,0,18,0">
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -1007,7 +1031,7 @@
                       <Border Width="3" HorizontalAlignment="Left"
                               Background="{DynamicResource AccentColour}"
                               IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
-                      <Grid Height="{DynamicResource RowHeight}" Margin="12,0,8,0" ClipToBounds="True">
+                      <Grid Height="{DynamicResource RowHeight}" Margin="12,0,18,0" ClipToBounds="True">
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <!-- The name takes all slack so the metadata block sits
@@ -1171,6 +1195,14 @@
                                 IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
                         <StackPanel Orientation="Horizontal" Spacing="8"
                                     VerticalAlignment="Center" Margin="6,0,6,0">
+                          <!-- Same slot and same rules as the details column:
+                               fixed width so names stay aligned marked or not,
+                               and the whole slot only exists in a repository. -->
+                          <TextBlock Width="11" th:RowVcs.Entry="{Binding}"
+                                     IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).IsRepository}"
+                                     FontSize="{DynamicResource FontSizeSmall}"
+                                     FontWeight="Bold" TextAlignment="Center"
+                                     VerticalAlignment="Center"/>
                           <!-- Compact's OWN icon metric, not the details one.
                                Measured against Dolphin, a compact icon is about
                                double the text line height and the row hugs it.
@@ -1251,6 +1283,22 @@
                           <Image th:ThumbnailImage.Path="{Binding FullPath}"
                                  th:ThumbnailImage.Size="256" Stretch="Uniform"
                                  VerticalAlignment="Bottom"/>
+                          <!-- A tile has no column to keep aligned, so unlike
+                               details and compact this DISAPPEARS when the file
+                               is clean rather than reserving an empty slot —
+                               `RowVcs.Badge` on the border, `RowVcs.Entry` on
+                               the letter inside it.
+                               The filled background is not decoration: the mark
+                               sits on top of a thumbnail, and a bare glyph over
+                               a photograph is unreadable at any colour. -->
+                          <Border th:RowVcs.Badge="{Binding}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                  Background="{DynamicResource ViewBackground}"
+                                  CornerRadius="3" Padding="4,0" Margin="0,0,2,2">
+                            <TextBlock th:RowVcs.Entry="{Binding}"
+                                       FontSize="{DynamicResource FontSizeSmall}"
+                                       FontWeight="Bold"/>
+                          </Border>
                         </Panel>
                         <TextBlock Text="{Binding Name}" TextAlignment="Center"
                                    FontSize="{DynamicResource FontSizeSmall}"
