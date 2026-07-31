@@ -9,9 +9,37 @@ namespace Heimdall.Ui;
 
 internal sealed class Program
 {
+    /// <summary>
+    /// The build, and the file it is running from.
+    ///
+    /// **This exists because a stale `~/.local` install shadowed an RPM for
+    /// three days** and every diagnosis went looking at the code instead. rpm
+    /// answers "what is installed"; only the running process can answer "what is
+    /// running", and until now it could not answer either.
+    ///
+    /// `GetName().Version` rather than reflecting over assembly attributes:
+    /// AssemblyName metadata survives trimming and NativeAOT, which is how this
+    /// ships.
+    /// </summary>
+    private static string Describe()
+    {
+        var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+
+        return $"heimdall {version}\n{Environment.ProcessPath ?? "(unknown path)"}";
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
+        // Answered BEFORE anything else — no window, no settings, no theme. It
+        // has to work with no display attached, because CI is exactly where a
+        // binary that cannot start needs to say so.
+        if (args.Any(a => a is "--version" or "-V"))
+        {
+            Console.WriteLine(Describe());
+            return;
+        }
+
         // An unhandled exception on a pool thread terminates the process with
         // nothing but a core dump. Logging first turns "it vanished" into
         // something diagnosable.

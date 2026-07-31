@@ -274,10 +274,19 @@ public partial class MainWindow : Window
 
         StartTrashMaintenance(platform.TrashMaintenance);
 
-        // Build stamp. When a symptom and the code disagree, this is the one
-        // line that says whether the running binary contains the fix.
+        // Build stamp AND the binary it came from. When a symptom and the code
+        // disagree, these two lines say whether the running program contains the
+        // fix — and, just as often, whether it is the program you think it is.
+        //
+        // **The path earns its place.** A `~/.local` install from `install.sh`
+        // and an RPM coexist happily: nothing is shared, and `~/.local/bin`
+        // precedes `/usr/bin`, so a stale user install silently wins over every
+        // package upgrade. That cost a round of "the new feature is missing from
+        // the RPM" when the RPM was never the thing running.
         Console.Error.WriteLine(
             $"[heimdall] build {BuildStamp()}  clipboard=yes  split={_shell.IsSplit}");
+
+        Console.Error.WriteLine($"[heimdall] running {Environment.ProcessPath ?? "(unknown)"}");
     }
 
     private static string BuildStamp()

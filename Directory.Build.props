@@ -3,6 +3,13 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
+
+    <!-- Overridden by CI from the tag (`-p:Version=0.3.1`). The default marks a
+         local build as exactly that: a binary reporting 0.0.0-dev is one nobody
+         released, which is the useful thing to know when a machine has more than
+         one install. -->
+    <Version Condition="'$(Version)' == ''">0.0.0</Version>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)-dev</InformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>

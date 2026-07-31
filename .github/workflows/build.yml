@@ -39,7 +39,19 @@ jobs:
         run: dotnet build -c Debug
 
       - name: Publish
-        run: dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true
+        run: |
+          # Same tag-shaped test the distro workflow uses: `${VAR:-default}`
+          # does not fire for a branch name, so a push to main would otherwise
+          # stamp the binary with the literal string "main".
+          case "$GITHUB_REF_NAME" in
+            v[0-9]*) VERSION_NUMBER="${GITHUB_REF_NAME#v}" ;;
+            *)       VERSION_NUMBER="0.0.0" ;;
+          esac
+
+          echo "stamping version $VERSION_NUMBER"
+
+          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true \
+            -p:Version="$VERSION_NUMBER"
 
       # The publish DIRECTORY is the deliverable, not the executable.
       # libSkiaSharp.so and libHarfBuzzSharp.so sit beside the binary and are

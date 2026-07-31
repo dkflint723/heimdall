@@ -207,6 +207,11 @@ cd heimdall && ./install.sh
 It installs under `~/.local`, needs no root, and adds a menu entry. There is an
 RPM for Fedora on the same page.
 
+**Pick one or the other.** `~/.local/bin` comes before `/usr/bin` on most
+systems, so a copy installed this way keeps running even after you upgrade the
+package — `heimdall --version` prints the version and the file it came from, which
+is the quickest way to tell which one you have.
+
 **To build it yourself** you need the .NET 10 SDK:
 
 ```bash

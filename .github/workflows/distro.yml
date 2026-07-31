@@ -35,7 +35,19 @@ jobs:
       - name: Build
         run: |
           dotnet --version
-          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true
+
+          # Same tag-shaped test as the RPM step, and for the same reason:
+          # `${VAR:-default}` does not fire for a branch name, so a dispatch run
+          # would otherwise stamp the binary with the literal string "main".
+          case "$GITHUB_REF_NAME" in
+            v[0-9]*) VERSION_NUMBER="${GITHUB_REF_NAME#v}" ;;
+            *)       VERSION_NUMBER="0.0.0" ;;
+          esac
+
+          echo "stamping version $VERSION_NUMBER"
+
+          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true \
+            -p:Version="$VERSION_NUMBER"
 
       - name: Stage the publish tree
         run: |
@@ -87,7 +99,11 @@ jobs:
           # conflict — a confusing way to learn about a stray file.
           dnf -y install "./$RPM"
           test -x /usr/bin/heimdall
-          heimdall --version || true   # no display in CI; it must merely load
+          # NOT `|| true` any more. `--version` is answered before any window is
+          # created, so it works with no display — and a binary that cannot print
+          # its own version is one nobody should be shipping. This is now a real
+          # check rather than a comment claiming to be one.
+          heimdall --version
 
       - uses: actions/upload-artifact@v7
         with:
@@ -115,7 +131,19 @@ jobs:
       - name: Build
         run: |
           dotnet --version
-          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true
+
+          # Same tag-shaped test as the RPM step, and for the same reason:
+          # `${VAR:-default}` does not fire for a branch name, so a dispatch run
+          # would otherwise stamp the binary with the literal string "main".
+          case "$GITHUB_REF_NAME" in
+            v[0-9]*) VERSION_NUMBER="${GITHUB_REF_NAME#v}" ;;
+            *)       VERSION_NUMBER="0.0.0" ;;
+          esac
+
+          echo "stamping version $VERSION_NUMBER"
+
+          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true \
+            -p:Version="$VERSION_NUMBER"
 
       - name: Stage the publish tree
         run: |

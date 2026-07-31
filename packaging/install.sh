@@ -17,6 +17,23 @@ LIB="$HOME/.local/lib/heimdall"
 APPS="$HOME/.local/share/applications"
 ICONS="$HOME/.local/share/icons/hicolor/128x128/apps"
 
+# A system package and this installer do not collide — different prefixes, and
+# rpm knows nothing about $HOME — but `~/.local/bin` comes FIRST on PATH, so
+# what lands here wins over every future package upgrade. Silently.
+if [[ -e /usr/bin/heimdall ]]; then
+    echo "note: a system-wide Heimdall is already installed at /usr/bin/heimdall."
+    echo "      This installs to ~/.local, which takes precedence on PATH — so"
+    echo "      this copy will run instead of the packaged one, including after"
+    echo "      you upgrade the package."
+    echo "      To use the package instead, stop now and run:"
+    echo "          rm -f  ~/.local/bin/heimdall"
+    echo "          rm -rf ~/.local/lib/heimdall"
+    echo "          rm -f  ~/.local/share/applications/heimdall.desktop"
+    echo
+    read -r -p "Continue with the user install anyway? [y/N] " reply
+    [[ "$reply" =~ ^[Yy] ]] || exit 0
+fi
+
 # The whole point of this script. NativeAOT does NOT produce a single file:
 # SkiaSharp and HarfBuzz stay beside the executable and are loaded from its own
 # directory. Copying out the binary alone gives a program that aborts at startup

@@ -291,6 +291,7 @@ Environment variables, all off by default:
 
 | Variable | Prints |
 |---|---|
+| `heimdall --version` | the version and the file it is running from — **check this first when a feature seems missing** |
 | `HEIMDALL_LOAD_DEBUG=1` | heap, GC and thread-pool counters per folder load |
 | `HEIMDALL_TILE_DEBUG=1` | realized container count, index range and viewport per measure |
 | `HEIMDALL_ICON_DEBUG=1` | per-shape bounds, brushes and gradient axes while rendering SVG icons |
