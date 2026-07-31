@@ -38,6 +38,12 @@ jobs:
       - name: Build
         run: dotnet build -c Debug
 
+      # After the Debug build (which is where the analysers run) and before the
+      # publish, so a broken assumption fails in seconds rather than after a
+      # 55-second AOT link.
+      - name: Test
+        run: dotnet test tests/Heimdall.Core.Tests --configuration Debug
+
       - name: Publish
         run: |
           # Same tag-shaped test the distro workflow uses: `${VAR:-default}`

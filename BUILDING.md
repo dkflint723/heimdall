@@ -161,6 +161,28 @@ session are still required, which any desktop already has.
 
 ---
 
+## 4a. Tests
+
+```bash
+dotnet test tests/Heimdall.Core.Tests
+```
+
+**Only the pure pieces of `Heimdall.Core` are covered** — `PathRules`,
+`ByteSize`, `NaturalOrder` and `BatchRename`. Those are the parts with real
+logic, no filesystem and no UI, so a test is cheap and a failure is unambiguous.
+They run in CI on every push, after the Debug build and before the AOT publish,
+so a broken assumption fails in seconds rather than after a 55-second link.
+
+**The test project switches OFF the trim and AOT analysers** that
+`Directory.Build.props` turns on everywhere else. xunit and the test host use
+reflection by design, and with warnings-as-errors inherited those analysers would
+fail the build over code that is never published. **Switched off in the test
+project rather than loosened in the shared props** — the application's guarantees
+must not weaken to accommodate its tests.
+
+Deliberately not covered: `PathCompleter` (needs real directories on disk),
+`Checksums` (needs real files), and anything in `Heimdall.Ui` (needs a display).
+
 ## 5. Giving someone else a build
 
 `.github/workflows/build.yml` builds on every push to `main` and publishes a

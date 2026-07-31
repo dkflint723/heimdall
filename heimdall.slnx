@@ -4,4 +4,7 @@
     <Project Path="src/Heimdall.Linux/Heimdall.Linux.csproj" />
     <Project Path="src/Heimdall.Ui/Heimdall.Ui.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Heimdall.Core.Tests/Heimdall.Core.Tests.csproj" />
+  </Folder>
 </Solution>
