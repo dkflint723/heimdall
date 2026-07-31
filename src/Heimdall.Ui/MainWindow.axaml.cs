@@ -213,6 +213,7 @@ public partial class MainWindow : Window
         // the first click on an inactive side only moves focus.
         AddHandler(PointerPressedEvent, OnPointerPressedAnywhere, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, OnPointerMovedAnywhere, RoutingStrategies.Tunnel);
+        AddHandler(PointerReleasedEvent, (_, _) => EndBand(), RoutingStrategies.Tunnel);
 
         // Tunnel, so the gesture is claimed before the listing's ScrollViewer
         // sees it — otherwise the view zooms and scrolls at the same time.
@@ -317,20 +318,55 @@ public partial class MainWindow : Window
     /// never reached the panel at all. The three listing ListBoxes now carry
     /// `Focusable="True"` explicitly, which is what makes this work.
     /// </summary>
-    private static void FocusListIfEmptySpace(object? source)
+    /// <summary>
+    /// The list a press landed in, but ONLY if it landed on empty space rather
+    /// than on a row. Null for a press on a row, or outside any list.
+    ///
+    /// The upward walk is the same one `FocusListIfEmptySpace` needed, and for
+    /// the same reason: a press on templated content has no logical path back to
+    /// the list, so the visual tree is the only route.
+    /// </summary>
+    private static ListBox? ListForEmptySpace(object? source)
     {
-        ListBox? list = null;
+        ListBoxItem? row = null;
 
         for (var visual = source as Visual; visual is not null;
              visual = visual.GetVisualParent())
         {
-            // Landed on a row — it will take focus itself.
-            if (visual is ListBoxItem) return;
+            // Content, not background: the name, the icon, a tag chip's label.
+            // Grabbing one of these means "take this file", so a band must not
+            // start here or dragging a file out would become impossible.
+            if (row is null && visual is TextBlock or Image or Avalonia.Controls.Shapes.Path)
+                return null;
 
-            if (visual is ListBox found) { list = found; break; }
+            if (visual is ListBoxItem hit) { row = hit; continue; }
+
+            if (visual is not ListBox found) continue;
+
+            // Not every list can hold a multiple selection — the column strip is
+            // SelectionMode="None", and a band there would draw a rectangle that
+            // selects nothing.
+            if (!found.SelectionMode.HasFlag(SelectionMode.Multiple)) return null;
+
+            // Nothing under the pointer but the list itself: always a band.
+            if (row is null) return found;
+
+            // The press landed on a row's BACKGROUND. Allow a band only where the
+            // row spans the list, because then there is no empty space beside it
+            // and the background is the only place left to start one. A tile
+            // leaves gaps of its own, and stealing its background would make
+            // dragging a file out of the grid needlessly fiddly.
+            return row.Bounds.Width >= found.Bounds.Width * 0.9 ? found : null;
         }
 
-        if (list is { IsFocused: false }) list.Focus();
+        return null;
+    }
+
+    private static void FocusListIfEmptySpace(object? source)
+    {
+        // Without this, pressing Home or End after clicking below the tiles did
+        // nothing: keyboard navigation begins at the focused element.
+        if (ListForEmptySpace(source) is { IsFocused: false } list) list.Focus();
     }
 
     private void OnPointerPressedAnywhere(object? sender, Avalonia.Input.PointerPressedEventArgs e)
@@ -374,7 +410,17 @@ public partial class MainWindow : Window
         // Recorded here so a drag can start on the first move past the
         // threshold rather than on the press itself.
         _dragOrigin = e.GetPosition(this);
-        _dragSource = e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
+
+        // **A drag from empty space is a SELECTION, not a file drag.** Both
+        // begin with a left press inside a pane, so the only thing separating
+        // them is what sat under the pointer — and arming both would race.
+        _bandList = properties.IsLeftButtonPressed ? ListForEmptySpace(e.Source) : null;
+        _bandOrigin = e.GetPosition(BandLayer);
+        _bandAdditive = e.KeyModifiers.HasFlag(KeyModifiers.Control)
+                        || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        _bandKept = null;
+
+        _dragSource = properties.IsLeftButtonPressed && _bandList is null
             ? PaneAt(e.Source)
             : null;
         _dragTrigger = _dragSource is null ? null : e;
@@ -548,6 +594,28 @@ public partial class MainWindow : Window
 
     // ---- drag and drop -------------------------------------------------
 
+    // ---- rubber-band selection --------------------------------------------
+
+    /// <summary>The list a band is being drawn in, or null when none is.</summary>
+    private ListBox? _bandList;
+
+    /// <summary>Where the drag began, in the overlay's coordinates.</summary>
+    private Point _bandOrigin;
+
+    /// <summary>Ctrl or Shift was held, so the band ADDS to the selection.</summary>
+    private bool _bandAdditive;
+
+    /// <summary>
+    /// The selection as it stood when an additive band began.
+    ///
+    /// Snapshotted rather than read live, because the band rewrites the
+    /// selection on every move — without a fixed baseline, shrinking the
+    /// rectangle could not give back what it had already taken.
+    /// Null until the band actually starts, so a click that never moves leaves
+    /// the selection alone.
+    /// </summary>
+    private List<object>? _bandKept;
+
     private Point _dragOrigin;
     private PaneViewModel? _dragSource;
     private bool _dragging;
@@ -638,6 +706,12 @@ public partial class MainWindow : Window
 
     private void OnPointerMovedAnywhere(object? sender, PointerEventArgs e)
     {
+        if (_bandList is not null)
+        {
+            UpdateBand(e);
+            return;
+        }
+
         if (_dragging || _dragSource is null) return;
 
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
@@ -654,6 +728,106 @@ public partial class MainWindow : Window
             Math.Abs(position.Y - _dragOrigin.Y) < 6) return;
 
         if (_dragTrigger is not null) _ = BeginDragAsync(_dragSource, _dragTrigger);
+    }
+
+    private void UpdateBand(PointerEventArgs e)
+    {
+        if (_bandList is not ListBox list) return;
+
+        // The button can be released outside the window, where no release event
+        // arrives — so the live button state is what ends the band, not just the
+        // event that ought to have come.
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            EndBand();
+            return;
+        }
+
+        var here = e.GetPosition(BandLayer);
+
+        var rect = new Rect(
+            Math.Min(_bandOrigin.X, here.X), Math.Min(_bandOrigin.Y, here.Y),
+            Math.Abs(here.X - _bandOrigin.X), Math.Abs(here.Y - _bandOrigin.Y));
+
+        // The same six-pixel threshold the file drag uses. Below it this is a
+        // click that happened to wobble, and rewriting the selection would make
+        // clicking empty space feel unreliable.
+        if (rect.Width < 6 && rect.Height < 6) return;
+
+        _bandKept ??= _bandAdditive
+            ? list.SelectedItems?.Cast<object>().ToList() ?? []
+            : [];
+
+        Canvas.SetLeft(SelectionBand, rect.X);
+        Canvas.SetTop(SelectionBand, rect.Y);
+        SelectionBand.Width = rect.Width;
+        SelectionBand.Height = rect.Height;
+        SelectionBand.IsVisible = true;
+
+        ApplyBand(list, rect);
+    }
+
+    /// <summary>
+    /// Selects every realized row the rectangle touches.
+    ///
+    /// **Realized rows only, and that is not a limitation to apologise for:** the
+    /// listings virtualize, so a row outside the viewport has no container and no
+    /// bounds. A band can only be drawn across what is on screen anyway.
+    /// </summary>
+    private void ApplyBand(ListBox list, Rect rect)
+    {
+        if (list.SelectedItems is not { } selected) return;
+
+        var wanted = new List<object>(_bandKept ?? []);
+
+        foreach (var container in Rows(list))
+        {
+            if (container.DataContext is not { } item) continue;
+
+            // TranslatePoint rather than a stored offset: rows move as the list
+            // scrolls, and a cached position would select the wrong ones the
+            // moment it did.
+            if (container.TranslatePoint(default, BandLayer) is not { } origin) continue;
+
+            var bounds = new Rect(origin, container.Bounds.Size);
+
+            if (bounds.Intersects(rect) && !wanted.Contains(item)) wanted.Add(item);
+        }
+
+        // Diffed rather than cleared and refilled. Every change to this
+        // collection refreshes the details panel and the status line, and a
+        // clear-then-add would do that twice per pointer move.
+        for (var i = selected.Count - 1; i >= 0; i--)
+            if (selected[i] is { } existing && !wanted.Contains(existing))
+                selected.RemoveAt(i);
+
+        foreach (var item in wanted)
+            if (!selected.Contains(item))
+                selected.Add(item);
+    }
+
+    /// <summary>
+    /// Every ListBoxItem beneath a control.
+    ///
+    /// Written with `GetVisualChildren` — the sibling of the `GetVisualParent`
+    /// this file already relies on — rather than an items-control API whose shape
+    /// varies between Avalonia versions.
+    /// </summary>
+    private static IEnumerable<ListBoxItem> Rows(Visual root)
+    {
+        foreach (var child in root.GetVisualChildren())
+        {
+            if (child is ListBoxItem row) yield return row;
+
+            foreach (var nested in Rows(child)) yield return nested;
+        }
+    }
+
+    private void EndBand()
+    {
+        _bandList = null;
+        _bandKept = null;
+        SelectionBand.IsVisible = false;
     }
 
     private async Task BeginDragAsync(PaneViewModel pane, PointerPressedEventArgs trigger)

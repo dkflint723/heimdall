@@ -1116,7 +1116,13 @@
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-                          <TextBlock Text="{Binding Name}"
+                          <!-- Left, not stretched. As the DockPanel's fill child this
+                               claimed the entire name column, so the gap beside a short
+                               filename was still the label — there was nothing in a row
+                               to grab for a rubber band. Trimming still fires: a
+                               Left-aligned child is measured against the available width
+                               and clamped to it. -->
+                          <TextBlock Text="{Binding Name}" HorizontalAlignment="Left"
                                      FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
                                      TextTrimming="CharacterEllipsis"/>
                         </DockPanel>
@@ -1421,6 +1427,8 @@
     <!-- KDE's standard "Configure" gesture, so it is where a Plasma user reaches. -->
     <KeyBinding Gesture="Ctrl+Shift+OemComma" Command="{Binding OpenSettingsCommand}"/>
   </Window.KeyBindings>
+
+  <Grid>
 
   <DockPanel>
 
@@ -1920,4 +1928,18 @@
     </Grid>
 
   </DockPanel>
+
+    <!-- Rubber-band selection. A single overlay for the whole window rather than
+         one per pane: only one band can be dragged at a time, and a window-level
+         layer needs no coordinate translation between split sides.
+         IsHitTestVisible=False so the band never swallows the drag that draws it. -->
+    <Canvas x:Name="BandLayer" IsHitTestVisible="False">
+      <Border x:Name="SelectionBand" IsVisible="False"
+              Background="{DynamicResource AccentDim}"
+              BorderBrush="{DynamicResource AccentColour}"
+              BorderThickness="1" CornerRadius="1" Opacity="0.45"/>
+    </Canvas>
+
+  </Grid>
+
 </Window>
