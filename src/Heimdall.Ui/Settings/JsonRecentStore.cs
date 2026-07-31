@@ -157,7 +157,7 @@ public sealed class JsonRecentStore : IRecentStore
     }
 
     private static string Normalise(string path)
-        => path.Length > 1 ? path.TrimEnd('/') : path;
+        => PathRules.Normalise(path);
 }
 
 public sealed record RecentFile

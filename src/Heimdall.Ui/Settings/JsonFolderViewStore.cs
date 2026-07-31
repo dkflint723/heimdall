@@ -110,7 +110,7 @@ public sealed class JsonFolderViewStore : IFolderViewStore
     }
 
     private static string Normalise(string path)
-        => path.Length > 1 ? path.TrimEnd('/') : path;
+        => PathRules.Normalise(path);
 
     /// <summary>
     /// Dolphin's own per-folder file. Read only — never created, never

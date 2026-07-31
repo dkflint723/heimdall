@@ -44,6 +44,11 @@ jobs:
           mkdir -p dist/heimdall
           cp -a "$P"/. dist/heimdall/
           cp LICENSE README.md dist/heimdall/
+
+          # So install.sh can offer the symbolic icon; the RPM takes its copy
+          # straight from brand/ instead.
+          cp brand/icons/hicolor/symbolic/apps/heimdall-symbolic.svg dist/heimdall/ || true
+
           tar -czf heimdall-linux-x64-fedora.tar.gz -C dist heimdall
 
       - name: Build the RPM
@@ -159,7 +164,7 @@ jobs:
           # Same reasoning as build.yml: create only if the other workflow has
           # not got here first.
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --prerelease
 
           # Scoped to the artifact directories this workflow uploaded, so a file
           # that happens to sit in the workspace cannot be published by accident.

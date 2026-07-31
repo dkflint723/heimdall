@@ -11,9 +11,7 @@ public sealed record ShareSession
     /// <summary>Opaque handle the provider uses to stop this share.</summary>
     public required object Handle { get; init; }
 
-    public string Label => System.IO.Path.GetFileName(Path.TrimEnd('/')) is { Length: > 0 } name
-        ? name
-        : Path;
+    public string Label => Heimdall.Core.FileSystem.PathRules.LeafName(Path);
 }
 
 /// <summary>

@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.VisualTree;
 
 namespace Heimdall.Ui;
 
@@ -11,7 +12,7 @@ namespace Heimdall.Ui;
 ///
 /// This is the last real gap against Dolphin: `WrapPanel` realizes a container
 /// for every item it is given, so the tile layouts refuse anything over
-/// `UnvirtualizedLimit` (5,000) while Dolphin shows a 200,000-item folder in
+/// a five-thousand-item ceiling while other managers show 200,000 without one.
 /// icon view without complaint.
 ///
 /// **Uniform tile size is the whole trick.** Every tile is exactly
@@ -50,6 +51,29 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     /// margin — a quiet, uniform wrongness that is hard to spot and easy to
     /// misread as a styling problem.
     /// </summary>
+    /// <summary>
+    /// Which way items flow before wrapping.
+    ///
+    /// **Horizontal** — the grid: items run left to right, wrap onto a new ROW,
+    /// and the view scrolls DOWN.
+    /// **Vertical** — compact: items run top to bottom, wrap into a new COLUMN,
+    /// and the view scrolls ACROSS. That is what `WrapPanel Orientation` means
+    /// too, so the compact template keeps the word it already used.
+    ///
+    /// Everything below is written in LANES and SLOTS rather than rows and
+    /// columns, because the arithmetic is identical either way and only the axes
+    /// swap: a lane is one row or one column, a slot is a position within it.
+    /// </summary>
+    public static readonly StyledProperty<Orientation> OrientationProperty =
+        AvaloniaProperty.Register<VirtualizingWrapPanel, Orientation>(
+            nameof(Orientation), Orientation.Horizontal);
+
+    public Orientation Orientation
+    {
+        get => GetValue(OrientationProperty);
+        set => SetValue(OrientationProperty, value);
+    }
+
     public static readonly StyledProperty<double> ItemSpacingProperty =
         AvaloniaProperty.Register<VirtualizingWrapPanel, double>(nameof(ItemSpacing), 6);
 
@@ -66,7 +90,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     private readonly Dictionary<object, Stack<Control>> _pool = [];
 
     private Rect _viewport;
-    private int _columns = 1;
+    /// <summary>Items per lane — columns when horizontal, rows when vertical.</summary>
+    private int _slots = 1;
 
     /// <summary>Set HEIMDALL_TILE_DEBUG=1 to print realized count, index range
     /// and viewport on every measure. This is the ground truth for "is this
@@ -96,7 +121,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     static VirtualizingWrapPanel()
     {
         AffectsMeasure<VirtualizingWrapPanel>(
-            ItemWidthProperty, ItemHeightProperty, ItemSpacingProperty);
+            ItemWidthProperty, ItemHeightProperty, ItemSpacingProperty,
+            OrientationProperty);
     }
 
     public double ItemWidth
@@ -132,6 +158,60 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         InvalidateMeasure();
     }
 
+    /// <summary>
+    /// Turns a wheel notch into HORIZONTAL movement when the panel is laid out in
+    /// columns.
+    ///
+    /// **A wheel is a vertical gesture and this layout scrolls sideways.** The
+    /// compact listing sets `VerticalScrollBarVisibility="Disabled"`, so the
+    /// ScrollViewer has nothing to do with a vertical delta and swallows it — the
+    /// listing simply did not move. Home and End worked throughout, because they
+    /// go through `BringIntoView` rather than the wheel, which is what proves the
+    /// extent was right all along and only the gesture was missing.
+    ///
+    /// `delta.Y` is used even though the movement is horizontal: an ordinary
+    /// mouse only reports Y, and a trackpad's sideways scroll arrives as X, so
+    /// both are honoured and whichever is larger wins.
+    /// </summary>
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        if (Orientation != Orientation.Vertical || Scroller() is not { } scroller)
+        {
+            base.OnPointerWheelChanged(e);
+            return;
+        }
+
+        var delta = Math.Abs(e.Delta.X) > Math.Abs(e.Delta.Y) ? e.Delta.X : e.Delta.Y;
+
+        if (delta == 0)
+        {
+            base.OnPointerWheelChanged(e);
+            return;
+        }
+
+        // One notch moves one lane, so a wheel click steps a whole column rather
+        // than a fraction of one — the same unit the layout is built from.
+        var step = CellWidth * -delta;
+
+        var limit = Math.Max(0, scroller.Extent.Width - scroller.Viewport.Width);
+        var next = Math.Clamp(scroller.Offset.X + step, 0, limit);
+
+        if (Math.Abs(next - scroller.Offset.X) < 0.01) return;
+
+        scroller.Offset = scroller.Offset.WithX(next);
+        e.Handled = true;
+    }
+
+    /// <summary>The ScrollViewer this panel sits inside, if any.</summary>
+    private ScrollViewer? Scroller()
+    {
+        for (var visual = this.GetVisualParent(); visual is not null;
+             visual = visual.GetVisualParent())
+            if (visual is ScrollViewer found) return found;
+
+        return null;
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var items = Items;
@@ -145,24 +225,40 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         var itemWidth = CellWidth;
         var itemHeight = CellHeight;
 
-        _columns = Math.Max(1, (int)(availableSize.Width / itemWidth));
+        var vertical = Orientation == Orientation.Vertical;
 
-        var rows = (items.Count + _columns - 1) / _columns;
-        var extent = new Size(_columns * itemWidth, rows * itemHeight);
+        // Along a lane vs. between lanes. Swapping these two is the whole of the
+        // orientation change; every count below is the same arithmetic.
+        var alongStep = vertical ? itemHeight : itemWidth;
+        var laneStep = vertical ? itemWidth : itemHeight;
+        var alongSpace = vertical ? availableSize.Height : availableSize.Width;
+
+        _slots = Math.Max(1, (int)(alongSpace / alongStep));
+
+        var lanes = (items.Count + _slots - 1) / _slots;
+
+        var extent = vertical
+            ? new Size(lanes * laneStep, _slots * alongStep)
+            : new Size(_slots * alongStep, lanes * laneStep);
 
         // On the first pass the viewport is still empty, so fall back to the
         // space offered. Without this nothing is realized and the panel reports
-        // an extent it never fills.
-        var top = _viewport.Height > 0 ? _viewport.Top : 0;
-        var bottom = _viewport.Height > 0 ? _viewport.Bottom : availableSize.Height;
+        // an extent it never fills. **The measured side is the one lanes stack
+        // along** — height when scrolling down, width when scrolling across.
+        var known = vertical ? _viewport.Width > 0 : _viewport.Height > 0;
 
-        // A row of slack either side, so scrolling does not expose a blank band
+        var near = known ? (vertical ? _viewport.Left : _viewport.Top) : 0;
+        var far = known
+            ? (vertical ? _viewport.Right : _viewport.Bottom)
+            : (vertical ? availableSize.Width : availableSize.Height);
+
+        // A lane of slack either side, so scrolling does not expose a blank band
         // before the next measure catches up.
-        var firstRow = Math.Max(0, (int)(top / itemHeight) - 1);
-        var lastRow = Math.Min(rows - 1, (int)(bottom / itemHeight) + 1);
+        var firstLane = Math.Max(0, (int)(near / laneStep) - 1);
+        var lastLane = Math.Min(lanes - 1, (int)(far / laneStep) + 1);
 
-        var first = firstRow * _columns;
-        var last = Math.Min(items.Count - 1, ((lastRow + 1) * _columns) - 1);
+        var first = firstLane * _slots;
+        var last = Math.Min(items.Count - 1, ((lastLane + 1) * _slots) - 1);
 
         Realize(first, last, items);
 
@@ -174,14 +270,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         {
             Console.Error.WriteLine(
                 $"[heimdall] wrap: items={items.Count:N0} realized={_realized.Count} "
-                + $"range={first}..{last} cols={_columns} "
+                + $"range={first}..{last} {(vertical ? "rows" : "cols")}={_slots} "
                 // The INPUTS to the column count, not just its result. Without
                 // them the line can show reflow failing and say nothing about
                 // why — and cell size is exactly where a per-pane metric and a
                 // global one disagree.
                 + $"item={ItemWidth:F0}x{ItemHeight:F0} gap={ItemSpacing:F0} "
                 + $"cell={ItemWidth + ItemSpacing:F0}x{ItemHeight + ItemSpacing:F0} "
-                + $"viewport={_viewport.Top:F0}..{_viewport.Bottom:F0} "
+                + $"viewport={near:F0}..{far:F0} "
                 + $"avail={availableSize.Width:F0}x{availableSize.Height:F0} "
                 + $"extent={extent.Width:F0}x{extent.Height:F0}");
         }
@@ -194,13 +290,18 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         var itemWidth = CellWidth;
         var itemHeight = CellHeight;
 
+        var vertical = Orientation == Orientation.Vertical;
+
         foreach (var (index, container) in _realized)
         {
-            var row = index / _columns;
-            var column = index % _columns;
+            var lane = index / _slots;
+            var slot = index % _slots;
 
-            container.Arrange(new Rect(
-                column * itemWidth, row * itemHeight, itemWidth, itemHeight));
+            // Vertical fills a column downwards then steps right; horizontal
+            // fills a row rightwards then steps down.
+            container.Arrange(vertical
+                ? new Rect(lane * itemWidth, slot * itemHeight, itemWidth, itemHeight)
+                : new Rect(slot * itemWidth, lane * itemHeight, itemWidth, itemHeight));
         }
 
         return finalSize;
@@ -392,9 +493,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         var itemWidth = CellWidth;
         var itemHeight = CellHeight;
-        var row = index / Math.Max(1, _columns);
+        var vertical = Orientation == Orientation.Vertical;
+        var lane = index / Math.Max(1, _slots);
 
-        this.BringIntoView(new Rect(0, row * itemHeight, itemWidth, itemHeight));
+        // Bring the LANE into view, not the item: the lane is the scrolling
+        // axis, and the other axis is fully visible by construction.
+        this.BringIntoView(vertical
+            ? new Rect(lane * itemWidth, 0, itemWidth, itemHeight)
+            : new Rect(0, lane * itemHeight, itemWidth, itemHeight));
 
         // Realize the target NOW rather than waiting for the layout pass that
         // BringIntoView merely schedules.
@@ -417,10 +523,11 @@ public class VirtualizingWrapPanel : VirtualizingPanel
                 _realized[index] = container;
                 container.Measure(new Size(itemWidth, itemHeight));
 
-                var column = index % Math.Max(1, _columns);
+                var slot = index % Math.Max(1, _slots);
 
-                container.Arrange(new Rect(
-                    column * itemWidth, row * itemHeight, itemWidth, itemHeight));
+                container.Arrange(vertical
+                    ? new Rect(lane * itemWidth, slot * itemHeight, itemWidth, itemHeight)
+                    : new Rect(slot * itemWidth, lane * itemHeight, itemWidth, itemHeight));
             }
 
             InvalidateMeasure();
@@ -463,8 +570,16 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         {
             NavigationDirection.First => 0,
             NavigationDirection.Last => count - 1,
-            NavigationDirection.Left or NavigationDirection.Previous => current - 1,
-            NavigationDirection.Right or NavigationDirection.Next => current + 1,
+            // Previous/Next are index order in both layouts — Tab and type-ahead
+            // mean "the next item", not "the item to the right". Only the
+            // ARROW keys care which way the lanes run.
+            NavigationDirection.Previous => current - 1,
+            NavigationDirection.Next => current + 1,
+
+            NavigationDirection.Left
+                => current - (Orientation == Orientation.Vertical ? _slots : 1),
+            NavigationDirection.Right
+                => current + (Orientation == Orientation.Vertical ? _slots : 1),
             // PageUp/PageDown are MEASURED to be nearly dead here. Once a row
             // has focus the ScrollViewer claims them and pages the viewport by
             // its own height (viewport 635..1275, then 1275..1916, …) with no
@@ -474,8 +589,22 @@ public class VirtualizingWrapPanel : VirtualizingPanel
             // handled above. Left mapped rather than removed because nothing
             // has measured what happens in a folder short enough not to
             // scroll.
-            NavigationDirection.Up or NavigationDirection.PageUp => current - _columns,
-            NavigationDirection.Down or NavigationDirection.PageDown => current + _columns,
+            // **The axes swap with the orientation.** In a column layout the
+            // next item DOWN is the next index, and the next item RIGHT is a
+            // whole lane away — the exact opposite of the grid.
+            NavigationDirection.Up
+                => current - (Orientation == Orientation.Vertical ? 1 : _slots),
+            NavigationDirection.Down
+                => current + (Orientation == Orientation.Vertical ? 1 : _slots),
+
+            // **Page never arrives here.** In the grid the ScrollViewer claims
+            // it and pages the viewport; in compact `MainWindow` claims it on the
+            // tunnel phase and scrolls sideways, because mapping it here changed
+            // nothing — the key was being swallowed before the panel saw it.
+            // Left mapped for the case nothing has measured: a folder short
+            // enough not to scroll at all.
+            NavigationDirection.PageUp => current - _slots,
+            NavigationDirection.PageDown => current + _slots,
             _ => -1,
         };
 

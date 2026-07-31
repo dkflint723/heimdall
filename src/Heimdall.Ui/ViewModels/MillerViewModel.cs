@@ -29,9 +29,9 @@ public sealed partial class MillerColumnViewModel : ObservableObject, IDisposabl
 
     public string Path { get; }
 
-    public string Label => System.IO.Path.GetFileName(Path.TrimEnd('/')) is { Length: > 0 } n
-        ? n
-        : "/";
+    // LeafName already returns the path itself for a root, which is what the
+    // hardcoded "/" was standing in for — and is right on any platform.
+    public string Label => PathRules.LeafName(Path);
 
     public BulkObservableCollection<FileEntry> Entries { get; } = new();
 
@@ -140,16 +140,11 @@ public sealed partial class MillerViewModel : ObservableObject
 
             // Every ancestor becomes a column, so you can step sideways out of
             // a deep path without navigating back up first.
-            var levels = new List<string>();
-            for (var current = path; !string.IsNullOrEmpty(current);
-                 current = System.IO.Path.GetDirectoryName(current) ?? "")
-            {
-                levels.Add(current);
-                if (current == "/") break;
-            }
-
-            levels.Reverse();
-            if (levels.Count == 0 || levels[0] != "/") levels.Insert(0, "/");
+            // Was an inline walk terminating on `current == "/"`. On a Windows
+            // path that comparison is never true, so it relied on
+            // GetDirectoryName eventually returning empty — and then inserted
+            // "/" as a first column, a place that does not exist there.
+            var levels = PathRules.Ancestors(path);
 
             foreach (var level in levels)
             {

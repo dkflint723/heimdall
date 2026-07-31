@@ -139,7 +139,7 @@ public sealed partial class SidebarViewModel : ObservableObject
     }
 
     private static string Normalise(string? path)
-        => path is null ? "" : path.Length > 1 ? path.TrimEnd('/') : path;
+        => PathRules.Normalise(path);
 
     /// <summary>The active path, for the fixed entries that are not in Groups.</summary>
     public string CurrentPath { get; private set; } = "";

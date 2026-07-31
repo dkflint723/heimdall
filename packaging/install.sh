@@ -49,6 +49,14 @@ ln -sfn "$LIB/Heimdall.Ui" "$BIN/heimdall"
 
 [[ -f "$LIB/heimdall.png" ]] && cp -f "$LIB/heimdall.png" "$ICONS/heimdall.png"
 
+# The symbolic variant if the release carries one. A dark panel wants a
+# single-colour glyph, not the full-colour plate.
+if [[ -f "$LIB/heimdall-symbolic.svg" ]]; then
+    mkdir -p "$HOME/.local/share/icons/hicolor/symbolic/apps"
+    cp -f "$LIB/heimdall-symbolic.svg" \
+          "$HOME/.local/share/icons/hicolor/symbolic/apps/heimdall-symbolic.svg"
+fi
+
 cat > "$APPS/heimdall.desktop" <<EOF
 [Desktop Entry]
 Type=Application

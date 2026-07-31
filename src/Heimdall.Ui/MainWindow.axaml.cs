@@ -602,6 +602,10 @@ public partial class MainWindow : Window
     /// <summary>Where the drag began, in the overlay's coordinates.</summary>
     private Point _bandOrigin;
 
+    /// <summary>The band as last drawn, so the scroll timer can re-test against
+    /// it without a pointer event.</summary>
+    private Rect _bandRect;
+
     /// <summary>Ctrl or Shift was held, so the band ADDS to the selection.</summary>
     private bool _bandAdditive;
 
@@ -758,11 +762,15 @@ public partial class MainWindow : Window
             ? list.SelectedItems?.Cast<object>().ToList() ?? []
             : [];
 
+        AutoScroll(list, here);
+
         Canvas.SetLeft(SelectionBand, rect.X);
         Canvas.SetTop(SelectionBand, rect.Y);
         SelectionBand.Width = rect.Width;
         SelectionBand.Height = rect.Height;
         SelectionBand.IsVisible = true;
+
+        _bandRect = rect;
 
         ApplyBand(list, rect);
     }
@@ -813,6 +821,79 @@ public partial class MainWindow : Window
     /// this file already relies on — rather than an items-control API whose shape
     /// varies between Avalonia versions.
     /// </summary>
+    /// <summary>
+    /// The listing the user is actually looking at: visible, showing the active
+    /// tab, and able to hold more than one selection.
+    ///
+    /// Three layout lists exist per pane and all stay alive when hidden, so
+    /// identity alone is not enough — `IsVisible` is what distinguishes them,
+    /// and it is bound to the view mode.
+    /// </summary>
+    /// <summary>
+    /// Pages the compact listing sideways.
+    ///
+    /// **On the TUNNEL phase, because something else was claiming these keys and
+    /// doing nothing with them.** Compact disables vertical scrolling, so the
+    /// ScrollViewer cannot act on PageUp/PageDown — yet mapping them inside the
+    /// panel changed nothing, so the key was never reaching it. Tunnelling
+    /// settles it without needing to know who was eating them: nothing
+    /// downstream gets the chance.
+    ///
+    /// **Moves the VIEW, not the selection**, which is what Page already does in
+    /// the grid — there the ScrollViewer pages the viewport and leaves the cursor
+    /// where it was, and the user has said that feels right. Compact behaving
+    /// differently would be the odd one out.
+    /// </summary>
+    private bool PageCompactListing(KeyEventArgs e)
+    {
+        if (e.Key is not (Key.PageUp or Key.PageDown)) return false;
+        if (e.KeyModifiers != KeyModifiers.None) return false;
+
+        // Never while typing — a path box or the rename prompt owns its own keys.
+        if (FocusManager?.GetFocusedElement() is TextBox) return false;
+
+        if (_shell.ActiveTab is not { View: ViewMode.Compact }) return false;
+        if (ActiveListing() is not { } list || Scroller(list) is not { } scroller)
+            return false;
+
+        // A viewport less a sliver, so the column you were reading stays on
+        // screen as an anchor rather than vanishing off the edge.
+        var page = Math.Max(1, scroller.Viewport.Width - 48);
+        var step = e.Key == Key.PageDown ? page : -page;
+
+        var limit = Math.Max(0, scroller.Extent.Width - scroller.Viewport.Width);
+
+        scroller.Offset = scroller.Offset.WithX(
+            Math.Clamp(scroller.Offset.X + step, 0, limit));
+
+        // Claimed either way. At the end of the extent the key has still been
+        // dealt with, and letting it fall through hands it back to whatever was
+        // silently swallowing it before.
+        e.Handled = true;
+        return true;
+    }
+
+    private ListBox? ActiveListing()
+    {
+        foreach (var list in Lists(this))
+            if (list.IsVisible
+                && ReferenceEquals(list.DataContext, _shell.ActiveTab)
+                && list.SelectionMode.HasFlag(SelectionMode.Multiple))
+                return list;
+
+        return null;
+    }
+
+    private static IEnumerable<ListBox> Lists(Visual root)
+    {
+        foreach (var child in root.GetVisualChildren())
+        {
+            if (child is ListBox list) yield return list;
+
+            foreach (var nested in Lists(child)) yield return nested;
+        }
+    }
+
     private static IEnumerable<ListBoxItem> Rows(Visual root)
     {
         foreach (var child in root.GetVisualChildren())
@@ -823,8 +904,96 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>How close to an edge starts scrolling, and how fast.</summary>
+    private const double EdgeZone = 28;
+
+    private DispatcherTimer? _bandScroll;
+    private double _bandScrollBy;
+
+    /// <summary>
+    /// Scrolls the listing while the pointer sits near its top or bottom edge.
+    ///
+    /// **A timer, not a nudge per pointer-move.** Move events only arrive while
+    /// the pointer is moving, so scrolling on them alone means the band stops the
+    /// instant you hold still at the edge — which is exactly when you want it to
+    /// keep going.
+    /// </summary>
+    private void AutoScroll(ListBox list, Point pointer)
+    {
+        if (Scroller(list) is not { } scroller)
+        {
+            StopBandScroll();
+            return;
+        }
+
+        // The list's own box, in the overlay's coordinates — the band and the
+        // pointer are already measured there.
+        if (list.TranslatePoint(default, BandLayer) is not { } origin)
+        {
+            StopBandScroll();
+            return;
+        }
+
+        var top = origin.Y;
+        var bottom = origin.Y + list.Bounds.Height;
+
+        // Proportional to how far into the zone the pointer is, so easing toward
+        // the edge eases the speed rather than switching it on.
+        _bandScrollBy =
+            pointer.Y < top + EdgeZone ? -(EdgeZone - (pointer.Y - top)) / EdgeZone * 24
+            : pointer.Y > bottom - EdgeZone ? (EdgeZone - (bottom - pointer.Y)) / EdgeZone * 24
+            : 0;
+
+        if (Math.Abs(_bandScrollBy) < 0.5) { StopBandScroll(); return; }
+
+        if (_bandScroll is not null) return;
+
+        _bandScroll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _bandScroll.Tick += (_, _) =>
+        {
+            if (_bandList is not { } live || Scroller(live) is not { } view)
+            {
+                StopBandScroll();
+                return;
+            }
+
+            var next = Math.Clamp(view.Offset.Y + _bandScrollBy, 0,
+                                  Math.Max(0, view.Extent.Height - view.Viewport.Height));
+
+            if (Math.Abs(next - view.Offset.Y) < 0.01) return;
+
+            view.Offset = view.Offset.WithY(next);
+
+            // The rows under the band have moved, so the selection has to be
+            // recomputed against the rectangle as it now stands.
+            ApplyBand(live, _bandRect);
+        };
+
+        _bandScroll.Start();
+    }
+
+    private void StopBandScroll()
+    {
+        _bandScroll?.Stop();
+        _bandScroll = null;
+    }
+
+    private static ScrollViewer? Scroller(Visual root)
+    {
+        foreach (var child in root.GetVisualChildren())
+        {
+            if (child is ScrollViewer found) return found;
+
+            if (Scroller(child) is { } nested) return nested;
+        }
+
+        return null;
+    }
+
     private void EndBand()
     {
+        StopBandScroll();
+
         _bandList = null;
         _bandKept = null;
         SelectionBand.IsVisible = false;
@@ -1744,6 +1913,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnTunnelKeyDown(object? sender, KeyEventArgs e)
     {
+        if (PageCompactListing(e)) return;
+
         if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.None) return;
 
         // Only while the path box is open and focused. Tab keeps its ordinary
@@ -1895,6 +2066,19 @@ public partial class MainWindow : Window
             // irreversible. Both prompts are now preferences, but they default
             // the way they always behaved: trash silently, confirm the
             // permanent one.
+            // Ctrl+A had no equivalent anywhere in the application — a file
+            // manager with rubber-band selection and no select-all. Routed
+            // through the ListBox rather than the view model so the framework's
+            // bulk path does the work: filling the bound collection item by item
+            // would fire CollectionChanged once per file, and each one refreshes
+            // the details panel and recomputes the summary.
+            case Key.A when e.KeyModifiers.HasFlag(KeyModifiers.Control):
+                if (FocusManager?.GetFocusedElement() is TextBox) break;
+
+                ActiveListing()?.SelectAll();
+                e.Handled = true;
+                break;
+
             case Key.Delete when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
                 e.Handled = true;
 

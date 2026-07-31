@@ -128,6 +128,23 @@ public static class PaneScale
         // Compact columns are sized by the text they hold, not by the icons —
         // the mode exists to fit names on screen.
         yield return ("CompactWidth", Math.Round(210 * fontScale, 1));
+        // ---- the metadata columns -------------------------------------------
+        //
+        // These were literal pixels in BOTH the details header and the row
+        // template — matching each other, so they aligned, but pinned. Scale the
+        // text up and the date grew while its 150 px column did not, so the
+        // columns most affected by a larger font were the only ones that could
+        // not grow. Every other size in this file already derives from the
+        // scale; these were the exception, and the accessibility case is exactly
+        // the one that breaks.
+        //
+        // fontScale, not iconScale: they hold text.
+        yield return ("ColPathNarrow", Math.Round(120 * fontScale, 1));
+        yield return ("ColPathWide", Math.Round(200 * fontScale, 1));
+        yield return ("ColPermissions", Math.Round(100 * fontScale, 1));
+        yield return ("ColSize", Math.Round(100 * fontScale, 1));
+        yield return ("ColModified", Math.Round(150 * fontScale, 1));
+
         yield return ("CompactIconSize", compactIcon);
         yield return ("CompactRowHeight", compactRow);
 

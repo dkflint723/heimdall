@@ -49,9 +49,9 @@ matching name — no dialog, no search box.
 - **Grid** — large icons and thumbnails.
 
 **Independent zoom per layout and per pane.** `Ctrl` with the scroll wheel resizes
-text and icons in the pane under your pointer, and each layout remembers its own
-size, because a grid tile and a list row want different proportions. Add `Shift`
-for icons only; `Ctrl+0` resets.
+text and icons in the pane under your pointer, and each layout keeps its own
+size — a grid tile and a list row want different proportions — and remembers it
+between sessions. Add `Shift` for icons only; `Ctrl+0` resets.
 
 **Thumbnails** for images and video, cached so a folder you have visited draws
 instantly. A file too small to enlarge cleanly keeps its icon rather than being
@@ -84,6 +84,16 @@ live on the file itself as extended attributes, so they travel with it and other
 tools can read them.
 
 **Pin a folder** with `Ctrl+D` to keep it in the sidebar.
+
+## Selecting
+
+**Drag a box** across empty space to select everything it touches — in any
+layout, including the list, where you can start the drag from the blank part of
+a row. Hold `Ctrl` or `Shift` to add to what is already selected, and drag past
+the edge to keep going as the view scrolls.
+
+`Ctrl+A` takes everything, `Ctrl` and `Shift` clicking work as you would expect,
+and the status bar keeps a running count and total size of what you have picked.
 
 ## Working with files
 
@@ -157,18 +167,22 @@ Change a theme and Heimdall changes with it. Nothing needs restarting.
 
 | | | | |
 |---|---|---|---|
-| `Ctrl+T` | new tab | `F3` | split view |
-| `Ctrl+W` | close tab | `F8` | next layout |
-| `Ctrl+Tab` | next tab | `F11` | details panel |
-| `Alt+←` `Alt+→` | back, forward | `Space` | quick preview |
-| `Alt+↑` | up one folder | `F5` | refresh |
-| `Ctrl+L` | edit the path | `F2` | rename |
-| `Ctrl+F` | search | `Shift+F2` | rename in bulk |
-| `Ctrl+I` | filter the listing | `Ctrl+Shift+N` | new folder |
-| `Escape` | clear the filter | `Ctrl+Z` | undo |
-| `Ctrl+B` | show or hide the sidebar | `F4` | terminal here |
-| `Ctrl+D` | pin this folder | `Ctrl+Shift+,` | settings |
-| `Ctrl` `+` `−` `0` | zoom in, out, reset | | |
+| `Enter` | open | `Ctrl+C` `Ctrl+X` `Ctrl+V` | copy, cut, paste |
+| `Backspace` | up one folder | `Delete` | move to trash |
+| `Alt+←` `Alt+→` | back, forward | `Shift+Delete` | delete permanently |
+| `Alt+↑` | up one folder | `Ctrl+Z` | undo |
+| `Ctrl+A` | select everything | `F2` | rename |
+| `Ctrl+T` | new tab | `Shift+F2` | rename in bulk |
+| `Ctrl+W` | close tab | `Ctrl+Shift+N` | new folder |
+| `Ctrl+Tab` `Ctrl+Shift+Tab` | next, previous tab | `Alt+Enter` | properties |
+| `F3` | split view | `F4` | terminal here |
+| `Tab` | switch split side | `F5` | refresh |
+| `F8` | next layout | `Space` | quick preview |
+| `F11` | details panel | `Ctrl+H` | show hidden files |
+| `Ctrl+L` | edit the path | `Ctrl+D` | pin this folder |
+| `Ctrl+F` | search | `Ctrl+B` | show or hide the sidebar |
+| `Ctrl+I` | filter the listing | `Ctrl+Shift+,` | settings |
+| `Escape` | clear the filter | `Ctrl` `+` `−` `0` | zoom in, out, reset |
 
 ## Settings
 
@@ -208,12 +222,11 @@ Prerequisites, other distributions and packaging are in [BUILDING.md](BUILDING.m
 Heimdall is used daily by its author, but there has been no stable release and
 version numbers should not be trusted yet. Known gaps:
 
-- **Compact view slows down on enormous folders** — around a hundred thousand
-  files. List and grid handle that size without trouble.
 - **In a git submodule the marks wait for a refresh** after a commit rather than
   updating on their own.
 - **Selection mode, configurable shortcuts and multiple windows** are not built.
-- **Linux only for now.** A Windows port is planned and partly designed.
+- **Linux only for now.** The Windows port is designed and its platform-neutral
+  groundwork is done; nothing Windows-specific is built yet.
 
 Bugs and ideas are welcome on the
 [issue tracker](https://github.com/dkflint723/heimdall/issues).

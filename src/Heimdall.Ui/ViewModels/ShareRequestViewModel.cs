@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Heimdall.Core.FileSystem;
 
 namespace Heimdall.Ui.ViewModels;
 
@@ -36,7 +37,7 @@ public sealed partial class ShareRequestViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<string> Folders { get; } = new();
 
-    public bool CanGoUp => Directory.GetParent(Path.Trim().TrimEnd('/')) is not null;
+    public bool CanGoUp => PathRules.Parent(Path.Trim()) is not null;
 
     private void Refresh()
     {
@@ -74,8 +75,11 @@ public sealed partial class ShareRequestViewModel : ObservableObject
     [RelayCommand]
     private void GoUp()
     {
-        if (Directory.GetParent(Path.Trim().TrimEnd('/')) is { } parent)
-            Path = parent.FullName;
+        // PathRules.Parent, not Directory.GetParent: the latter returns a
+        // DirectoryInfo whose FullName touches the current working directory for
+        // a relative path, and this dialog only ever asks a question about the
+        // shape of the string it holds.
+        if (PathRules.Parent(Path.Trim()) is { } parent) Path = parent;
     }
 
     [ObservableProperty] private string _path = "";

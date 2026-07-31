@@ -148,7 +148,7 @@
           <ToggleButton DockPanel.Dock="Right" Margin="0,0,0,4"
                         VerticalAlignment="Center" Padding="7,3"
                         IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
-                        ToolTip.Tip="details panel for this side  (f11)">
+                        AutomationProperties.Name="details panel for this side  (f11)" ToolTip.Tip="details panel for this side  (f11)">
             <Path Data="M0,0 H12 V12 H0 Z M8,0 V12"
                   Stroke="{DynamicResource ViewText}" StrokeThickness="1.4"
                   Fill="Transparent" Width="12" Height="12" Stretch="Uniform"/>
@@ -163,7 +163,7 @@
                         VerticalAlignment="Center" Padding="7,3"
                         IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
                         Command="{Binding ActiveTab.ShowAsGridCommand}"
-                        ToolTip.Tip="large grid">
+                        AutomationProperties.Name="large grid" ToolTip.Tip="large grid">
             <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
                   Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
           </ToggleButton>
@@ -173,7 +173,7 @@
                         IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
                         IsEnabled="{Binding ActiveTab.CanUseCompact}"
                         Command="{Binding ActiveTab.ShowAsCompactCommand}"
-                        ToolTip.Tip="small grid">
+                        AutomationProperties.Name="small grid" ToolTip.Tip="small grid">
             <!-- Two short columns: the shape of the layout itself. -->
             <Path Data="M0,0 H5 V2 H0 Z M0,4 H5 V6 H0 Z M0,8 H5 V10 H0 Z M7,0 H12 V2 H7 Z M7,4 H12 V6 H7 Z M7,8 H12 V10 H7 Z"
                   Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
@@ -183,7 +183,7 @@
                         VerticalAlignment="Center" Padding="7,3"
                         IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
                         Command="{Binding ActiveTab.ShowAsDetailsCommand}"
-                        ToolTip.Tip="list">
+                        AutomationProperties.Name="list" ToolTip.Tip="list">
             <Path Data="M0,0 H12 V2 H0 Z M0,5 H12 V7 H0 Z M0,10 H12 V12 H0 Z"
                   Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
           </ToggleButton>
@@ -192,7 +192,7 @@
                   FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
                   Margin="6,0,0,4" VerticalAlignment="Center"
                   Background="Transparent" BorderThickness="0"
-                  ToolTip.Tip="view options">
+                  AutomationProperties.Name="view options" ToolTip.Tip="view options">
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight">
                 <StackPanel Width="230" Spacing="10" Margin="4">
@@ -250,7 +250,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
-                                ToolTip.Tip="smaller text in this pane"
+                                AutomationProperties.Name="smaller text in this pane" ToolTip.Tip="smaller text in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontSmallerCommand}"/>
                         <!-- LostFocus, not per keystroke: committing mid-type
                              would apply "1" on the way to "14". -->
@@ -265,7 +265,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
-                                ToolTip.Tip="larger text in this pane"
+                                AutomationProperties.Name="larger text in this pane" ToolTip.Tip="larger text in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).FontLargerCommand}"/>
                       </StackPanel>
                     </Border>
@@ -284,7 +284,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
-                                ToolTip.Tip="smaller icons in this pane"
+                                AutomationProperties.Name="smaller icons in this pane" ToolTip.Tip="smaller icons in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsSmallerCommand}"/>
                         <TextBox local:FocusBehavior.CommitOnEnter="True"
                                  Text="{Binding ActiveTab.IconPixels, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
@@ -297,7 +297,7 @@
                                 FontSize="{DynamicResource FontSizeBase}"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
-                                ToolTip.Tip="larger icons in this pane"
+                                AutomationProperties.Name="larger icons in this pane" ToolTip.Tip="larger icons in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsLargerCommand}"/>
                       </StackPanel>
                     </Border>
@@ -320,7 +320,7 @@
                        can change back, the other is a preference that persists. -->
                   <Button Content="Settings…" HorizontalAlignment="Stretch"
                           FontSize="{DynamicResource FontSizeSmall}"
-                          ToolTip.Tip="application settings  (ctrl+shift+,)"
+                          AutomationProperties.Name="application settings  (ctrl+shift+,)" ToolTip.Tip="application settings  (ctrl+shift+,)"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenSettingsCommand}"/>
                 </StackPanel>
               </Flyout>
@@ -396,7 +396,7 @@
                           Foreground="{DynamicResource ViewDimText}"
                           Background="Transparent" BorderThickness="0"
                           Padding="6,3" VerticalAlignment="Center"
-                          ToolTip.Tip="close tab  (ctrl+w)"
+                          AutomationProperties.Name="close tab  (ctrl+w)" ToolTip.Tip="close tab  (ctrl+w)"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CloseTabCommand}"
                           CommandParameter="{Binding}"/>
                 </StackPanel>
@@ -412,7 +412,7 @@
                   Background="Transparent" BorderThickness="0"
                   Padding="10,2" Margin="6,0,0,4" VerticalAlignment="Center"
                   Command="{Binding NewTabHereCommand}"
-                  ToolTip.Tip="new tab in this pane  (ctrl+t)"/>
+                  AutomationProperties.Name="new tab in this pane  (ctrl+t)" ToolTip.Tip="new tab in this pane  (ctrl+t)"/>
           </StackPanel>
           </ScrollViewer>
          </DockPanel>
@@ -427,17 +427,17 @@
           <DockPanel>
             <Button DockPanel.Dock="Left" Content="&#x2190;" Width="30" Margin="0,0,2,0"
                     Background="Transparent" BorderThickness="0"
-                    ToolTip.Tip="back  (alt+left)"
+                    AutomationProperties.Name="back  (alt+left)" ToolTip.Tip="back  (alt+left)"
                     Command="{Binding ActiveTab.GoBackCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoBack}"/>
             <Button DockPanel.Dock="Left" Content="&#x2192;" Width="30" Margin="0,0,2,0"
                     Background="Transparent" BorderThickness="0"
-                    ToolTip.Tip="forward  (alt+right)"
+                    AutomationProperties.Name="forward  (alt+right)" ToolTip.Tip="forward  (alt+right)"
                     Command="{Binding ActiveTab.GoForwardCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoForward}"/>
             <Button DockPanel.Dock="Left" Content="&#x2191;" Width="30" Margin="0,0,6,0"
                     Background="Transparent" BorderThickness="0"
-                    ToolTip.Tip="up one folder  (alt+up)"
+                    AutomationProperties.Name="up one folder  (alt+up)" ToolTip.Tip="up one folder  (alt+up)"
                     Command="{Binding ActiveTab.GoUpCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoUp}"/>
 
@@ -913,14 +913,14 @@
                   <Button Content="Restore"
                           Command="{Binding RestoreFromTrashCommand}"
                           FontSize="{DynamicResource FontSizeSmall}" Padding="10,3"
-                          ToolTip.Tip="put the selected items back where they came from"/>
+                          AutomationProperties.Name="put the selected items back where they came from" ToolTip.Tip="put the selected items back where they came from"/>
                   <!-- The ellipsis is a promise: this one asks first. It is the
                        only action in the application with neither an undo nor a
                        per-item review, so it never fires straight from a click. -->
                   <Button Content="Empty trash…"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"
                           FontSize="{DynamicResource FontSizeSmall}" Padding="10,3"
-                          ToolTip.Tip="permanently delete everything in the trash"/>
+                          AutomationProperties.Name="permanently delete everything in the trash" ToolTip.Tip="permanently delete everything in the trash"/>
                 </StackPanel>
               </Border>
 
@@ -953,22 +953,22 @@
                       <Run Text="name"/><Run Text="{Binding NameSortGlyph}"/>
                     </TextBlock>
                   </Button>
-                  <TextBlock Grid.Column="2" Width="120" Margin="8,0,0,0" Text="info"
+                  <TextBlock Grid.Column="2" Width="{DynamicResource ColPathNarrow}" Margin="8,0,0,0" Text="info"
                              IsVisible="{Binding ShowMetadata}"
                              FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <!-- Shares column 2 with "info": the two are mutually
                        exclusive, because ShowMetadata is false in a recent
                        listing and ShowParentPath is only true there. -->
-                  <TextBlock Grid.Column="2" Width="200" Margin="8,0,0,0" Text="path"
+                  <TextBlock Grid.Column="2" Width="{DynamicResource ColPathWide}" Margin="8,0,0,0" Text="path"
                              IsVisible="{Binding ShowParentPath}"
                              FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
-                  <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" Text="permissions" TextAlignment="Right"
+                  <TextBlock Grid.Column="3" Width="{DynamicResource ColPermissions}" Margin="8,0,0,0" Text="permissions" TextAlignment="Right"
                              IsVisible="{Binding ShowPermissions}"
                              FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
-                  <Button Grid.Column="4" Width="100" Command="{Binding SortByCommand}" CommandParameter="size"
+                  <Button Grid.Column="4" Width="{DynamicResource ColSize}" Command="{Binding SortByCommand}" CommandParameter="size"
                           IsVisible="{Binding ShowSize}"
                           Background="Transparent" BorderThickness="0" Padding="0"
                           HorizontalContentAlignment="Right">
@@ -977,7 +977,7 @@
                       <Run Text="size"/><Run Text="{Binding SizeSortGlyph}"/>
                     </TextBlock>
                   </Button>
-                  <Button Grid.Column="5" Width="150" Command="{Binding SortByCommand}" CommandParameter="modified"
+                  <Button Grid.Column="5" Width="{DynamicResource ColModified}" Command="{Binding SortByCommand}" CommandParameter="modified"
                           IsVisible="{Binding ShowModified}"
                           Background="Transparent" BorderThickness="0" Padding="0"
                           HorizontalContentAlignment="Right">
@@ -1128,7 +1128,7 @@
                         </DockPanel>
                         <!-- Type-specific fact: pixel dimensions for images, child count
                              for folders. First to drop when space runs out. -->
-                        <TextBlock Grid.Column="2" Width="120" Margin="8,0,0,0"
+                        <TextBlock Grid.Column="2" Width="{DynamicResource ColPathNarrow}" Margin="8,0,0,0"
                                    th:RowMetadata.Entry="{Binding}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowMetadata}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Foreground="{DynamicResource ViewDimText}"
@@ -1136,7 +1136,7 @@
                         <!-- Where the row actually lives. Only in a recent
                              listing, where entries span the filesystem and the
                              name alone identifies nothing. -->
-                        <TextBlock Grid.Column="2" Width="200" Margin="8,0,0,0"
+                        <TextBlock Grid.Column="2" Width="{DynamicResource ColPathWide}" Margin="8,0,0,0"
                                    Text="{Binding Converter={x:Static vm:FileConverters.ParentPath}}"
                                    ToolTip.Tip="{Binding FullPath}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowParentPath}"
@@ -1144,19 +1144,19 @@
                                    Foreground="{DynamicResource ViewDimText}"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         <!-- POSIX mode, formatted as ls -l prints it. -->
-                        <TextBlock Grid.Column="3" Width="100" Margin="8,0,0,0" TextAlignment="Right"
+                        <TextBlock Grid.Column="3" Width="{DynamicResource ColPermissions}" Margin="8,0,0,0" TextAlignment="Right"
                                    th:RowMetadata.Access="{Binding}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowPermissions}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.5"
                                    VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="4" Width="100" Text="{Binding Converter={x:Static vm:FileConverters.Size}}" TextAlignment="Right"
+                        <TextBlock Grid.Column="4" Width="{DynamicResource ColSize}" Text="{Binding Converter={x:Static vm:FileConverters.Size}}" TextAlignment="Right"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowSize}"
                                    FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Foreground="{DynamicResource ViewDimText}"
                                    VerticalAlignment="Center"/>
                         <!-- Shaded by age: a single-hue lightness ramp, and the date itself
                              is still right there, so the colour is a shortcut rather than
                              the only signal. -->
-                        <TextBlock Grid.Column="5" Width="150" Text="{Binding LastWriteTime, Converter={x:Static vm:FileConverters.Modified}}" TextAlignment="Right"
+                        <TextBlock Grid.Column="5" Width="{DynamicResource ColModified}" Text="{Binding LastWriteTime, Converter={x:Static vm:FileConverters.Modified}}" TextAlignment="Right"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowModified}"
                                    Foreground="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Brush}}"
                                    ToolTip.Tip="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Description}}"
@@ -1202,9 +1202,19 @@
                 <ListBox.ItemsPanel>
                   <ItemsPanelTemplate>
                     <!-- Vertical wrap is what makes it columns rather than rows.
-                         Not virtualized: WrapPanel has no virtualizing form, and
-                         this mode exists for folders you want to see at once. -->
-                    <WrapPanel Orientation="Vertical"/>
+                         **Now the SAME panel the grid uses**, in its vertical
+                         orientation — items run down a column and wrap across,
+                         and only the visible columns are realized. The plain
+                         WrapPanel it replaces took 32 seconds on 100,000 items
+                         because it realized every one of them.
+                         ItemWidth/ItemHeight are the CELL, which already carries
+                         the user's spacing, so ItemSpacing stays at its default
+                         and the row inside keeps its own size. -->
+                    <local:VirtualizingWrapPanel
+                        Orientation="Vertical"
+                        ItemWidth="{DynamicResource CompactCellWidth}"
+                        ItemHeight="{DynamicResource CompactCellHeight}"
+                        ItemSpacing="0"/>
                   </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
@@ -1419,6 +1429,9 @@
     <KeyBinding Gesture="Ctrl+OemMinus"  Command="{Binding ZoomOutCommand}"/>
     <KeyBinding Gesture="Ctrl+D0"        Command="{Binding ZoomResetCommand}"/>
     <KeyBinding Gesture="Ctrl+B"         Command="{Binding Sidebar.CycleRailCommand}"/>
+    <!-- Ctrl+H is what every file manager on this desktop uses for hidden files;
+         it existed only as a checkbox in the layout flyout. -->
+    <KeyBinding Gesture="Ctrl+H"         Command="{Binding ActiveTab.ToggleHiddenCommand}"/>
     <KeyBinding Gesture="Ctrl+D"         Command="{Binding PinCurrentCommand}"/>
     <!-- Alt rather than Ctrl for panels: Ctrl+1..9 already switches tabs,
          browser-style, and that convention is the stronger one. -->
@@ -1499,7 +1512,7 @@
                           Content="&#x25EB;" FontSize="{DynamicResource FontSizeBase}"
                           IsChecked="{Binding IsSplit, Mode=OneWay}"
                           Command="{Binding ToggleSplitCommand}"
-                          ToolTip.Tip="split view  (f3)"/>
+                          AutomationProperties.Name="split view  (f3)" ToolTip.Tip="split view  (f3)"/>
             <TextBox Text="{Binding Sidebar.Search.Query}"
                      PlaceholderText="Search files"
                      FontSize="{DynamicResource FontSizeBase}"/>
@@ -1615,13 +1628,13 @@
                     <Button DockPanel.Dock="Right" Content="scan" Padding="4,0"
                             Background="Transparent" BorderThickness="0"
                             FontSize="{DynamicResource FontSizeTiny}"
-                            ToolTip.Tip="look for servers on the network"
+                            AutomationProperties.Name="look for servers on the network" ToolTip.Tip="look for servers on the network"
                             IsEnabled="{Binding CanBrowseNetwork}"
                             Command="{Binding BrowseNetworkCommand}"/>
                     <Button DockPanel.Dock="Right" Content="share" Padding="4,0" Margin="0,0,6,0"
                             Background="Transparent" BorderThickness="0"
                             FontSize="{DynamicResource FontSizeTiny}"
-                            ToolTip.Tip="share a folder from this machine"
+                            AutomationProperties.Name="share a folder from this machine" ToolTip.Tip="share a folder from this machine"
                             IsVisible="{Binding CanShare}"
                             Command="{Binding RequestShareCommand}"/>
                     <TextBlock Text="network" FontSize="{DynamicResource FontSizeSmall}"
@@ -1633,7 +1646,7 @@
                       <DataTemplate x:DataType="pl:DiscoveredService">
                         <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Background="Transparent" BorderThickness="0" Padding="12,7"
-                                ToolTip.Tip="{Binding MountUri}"
+                                AutomationProperties.Name="{Binding MountUri}" ToolTip.Tip="{Binding MountUri}"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenDiscoveredCommand}"
                                 CommandParameter="{Binding}">
                           <!-- Every Style inside a ContextMenu needs its own
@@ -1682,7 +1695,7 @@
                     <Button DockPanel.Dock="Right" Content="+" Padding="4,0"
                             Background="Transparent" BorderThickness="0"
                             FontSize="{DynamicResource FontSizeTiny}"
-                            ToolTip.Tip="connect to a server"
+                            AutomationProperties.Name="connect to a server" ToolTip.Tip="connect to a server"
                             Command="{Binding ConnectCommand}"/>
                     <TextBlock Text="remote" FontSize="{DynamicResource FontSizeSmall}"
                                Foreground="{DynamicResource ViewDimText}"/>
@@ -1777,13 +1790,13 @@
                             <Button DockPanel.Dock="Right" Content="&#x2715;" Padding="4,0"
                                     Background="Transparent" BorderThickness="0"
                                     FontSize="{DynamicResource FontSizeTiny}"
-                                    ToolTip.Tip="stop sharing"
+                                    AutomationProperties.Name="stop sharing" ToolTip.Tip="stop sharing"
                                     Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).StopShareCommand}"
                                     CommandParameter="{Binding}"/>
                             <Button DockPanel.Dock="Right" Content="copy" Padding="6,0"
                                     Background="Transparent" BorderThickness="0"
                                     FontSize="{DynamicResource FontSizeTiny}"
-                                    ToolTip.Tip="copy the address"
+                                    AutomationProperties.Name="copy the address" ToolTip.Tip="copy the address"
                                     Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyShareUrlCommand}"
                                     CommandParameter="{Binding}"/>
                             <StackPanel>

@@ -44,6 +44,22 @@ public sealed record TabState
     public double FontScale { get; init; } = 1.0;
     public double IconScale { get; init; } = 1.0;
 
+    /// <summary>
+    /// The other two layouts' scales. Details keeps the pair above, so an older
+    /// session restores its details size and the rest start from it.
+    ///
+    /// **Zero means "never set", and that is deliberate rather than lazy.**
+    /// Deserialization here does not run property initializers — an absent key
+    /// arrives as `default(T)`, so the `= 1.0` on the fields above is decorative
+    /// for any file written before they existed. Every reader must therefore
+    /// treat 0 as absent, which is what `> 0 ? x : fallback` is doing at the
+    /// restore site.
+    /// </summary>
+    public double GridFontScale { get; init; }
+    public double GridIconScale { get; init; }
+    public double CompactFontScale { get; init; }
+    public double CompactIconScale { get; init; }
+
     /// <summary>Grouping is a view setting, so it belongs to the tab.</summary>
     public GroupMode GroupBy { get; init; } = GroupMode.None;
 
@@ -96,6 +112,22 @@ public sealed record WindowSession
     public double FontScale { get; init; } = 1.0;
     public double IconScale { get; init; } = 1.0;
 
+    /// <summary>
+    /// The other two layouts' scales. Details keeps the pair above, so an older
+    /// session restores its details size and the rest start from it.
+    ///
+    /// **Zero means "never set", and that is deliberate rather than lazy.**
+    /// Deserialization here does not run property initializers — an absent key
+    /// arrives as `default(T)`, so the `= 1.0` on the fields above is decorative
+    /// for any file written before they existed. Every reader must therefore
+    /// treat 0 as absent, which is what `> 0 ? x : fallback` is doing at the
+    /// restore site.
+    /// </summary>
+    public double GridFontScale { get; init; }
+    public double GridIconScale { get; init; }
+    public double CompactFontScale { get; init; }
+    public double CompactIconScale { get; init; }
+
     /// <summary>Grouping is a view setting, so it belongs to the tab.</summary>
     public GroupMode GroupBy { get; init; } = GroupMode.None;
 
@@ -132,7 +164,7 @@ public sealed record SessionState
     /// An unrecognised version is ignored rather than migrated or thrown on —
     /// a session file must never prevent startup.
     /// </summary>
-    public const int CurrentVersion = 12;
+    public const int CurrentVersion = 13;   // v13: per-layout scales
 
     public int Version { get; init; } = CurrentVersion;
     public IReadOnlyList<WindowSession> Windows { get; init; } = [];

@@ -448,8 +448,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // selection somewhere arbitrary either.
     }
 
-    public const int UnvirtualizedLimit = 5000;
-
     /// <summary>
     /// Grid is virtualized now, so it has no limit. Measured 100,000 items in
     /// 46 ms with 48 containers realized, against 6,841 ms for 20,000 before —
@@ -458,32 +456,26 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public bool CanUseGrid => true;
 
     /// <summary>
-    /// Compact still uses a plain `WrapPanel`, which realizes a container per
-    /// item, so it keeps the limit. It wraps into COLUMNS rather than rows, so
-    /// the virtualizing panel cannot simply be swapped in — the row arithmetic
-    /// has to become column arithmetic first.
+    /// **The limit is gone — compact virtualizes too, 31 July 2026.**
+    /// `VirtualizingWrapPanel` gained an `Orientation`, so the same panel the
+    /// grid uses now fills columns instead of rows: the row arithmetic became
+    /// lane arithmetic, and only the axes differ.
+    ///
+    /// The old comment here said the panel "cannot simply be swapped in", and
+    /// that was true — it needed the orientation first. It has it.
+    /// **This was the last layout that refused a folder for being too large.**
     /// </summary>
-    public bool CanUseCompact => Entries.Count <= EffectiveTileLimit;
+    public bool CanUseCompact => true;
 
-    /// <summary>True when neither tile layout is refused. Kept for the
-    /// drop-back check, which only ever concerns compact now.</summary>
+    /// <summary>True when neither tile layout is refused. Both are unconditional
+    /// now; kept because the drop-back check and the menu still ask.</summary>
     public bool CanUseTileLayouts => CanUseCompact;
 
-    /// <summary>
-    /// 5,000 was a stopgap guess and has never been measured. Override it to
-    /// find the real threshold on this machine:
-    ///
-    ///   HEIMDALL_TILE_LIMIT=20000 dotnet run --project src/Heimdall.Ui
-    ///
-    /// then switch to grid in a folder of that size and watch the
-    /// `[heimdall] tiles:` line for how long realization actually took. The
-    /// limit should be a number somebody measured, not one somebody feared.
-    /// </summary>
-    private static readonly int EffectiveTileLimit =
-        int.TryParse(Environment.GetEnvironmentVariable("HEIMDALL_TILE_LIMIT"), out var limit)
-        && limit > 0
-            ? limit
-            : UnvirtualizedLimit;
+    // `EffectiveTileLimit` and `HEIMDALL_TILE_LIMIT` were here. The limit was a
+    // stopgap for un-virtualized tile layouts and both of them virtualize now, so
+    // an override that enforces nothing is worse than no override: it invites
+    // someone to raise a ceiling that is not there. `HEIMDALL_TILE_DEBUG=1` is
+    // still the way to watch realization.
 
     private void NotifyLayoutEntries()
     {
@@ -720,7 +712,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         {
             var name = SelectedEntry is { IsDirectory: true } selected
                 ? selected.Name
-                : Path.GetFileName(CurrentPath.TrimEnd('/'));
+                : PathRules.LeafName(CurrentPath);
 
             return string.IsNullOrEmpty(name) ? "this folder" : name;
         }
@@ -949,18 +941,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanUseGrid));
         OnPropertyChanged(nameof(CanUseCompact));
 
-        // Only COMPACT can still hang on a huge folder; grid is virtualized and
-        // is left alone. Dropping grid back would now be a regression rather
-        // than a rescue.
-        if (!CanUseCompact && View == ViewMode.Compact)
-        {
-            View = ViewMode.Details;
-            // EffectiveTileLimit, not the constant: with HEIMDALL_TILE_LIMIT set
-            // this message otherwise reports a limit that is not the one being
-            // enforced, which is worse than saying nothing.
-            Status = $"switched to list view — {Entries.Count:N0} items is beyond "
-                   + $"the {EffectiveTileLimit:N0} limit for the compact layout";
-        }
+        // The drop-back to list view lived here: entering a folder past the
+        // compact limit switched layout and said so. Both tile layouts virtualize
+        // now, so there is nothing left to rescue anyone from.
 
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(Summary));
@@ -1003,12 +986,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     private void TrySetTileLayout(ViewMode mode, string label)
     {
-        if (mode == ViewMode.Compact && !CanUseCompact)
-        {
-            Status = $"{label} view is limited to {EffectiveTileLimit:N0} items "
-                   + $"— this folder has {Entries.Count:N0}. Use grid or list.";
-            return;
-        }
+        // Kept as the single entry point for both tile layouts even though it no
+        // longer refuses anything — `label` is now unused, and the method stays
+        // only because a future layout might need to.
+        _ = label;
 
         View = mode;
     }
@@ -1089,8 +1070,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 realizeWatch.Stop();
                 Console.Error.WriteLine(
                     $"[heimdall] tiles: {newValue} with {Entries.Count:N0} items "
-                    + $"realized in {realizeWatch.ElapsedMilliseconds} ms "
-                    + $"(limit {EffectiveTileLimit:N0})");
+                    + $"realized in {realizeWatch.ElapsedMilliseconds} ms");
             }, DispatcherPriority.Background);
 
         // Populate the incoming layout FIRST. Its ListBox cannot hold a
@@ -1729,8 +1709,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var name = Path.GetFileName(value.TrimEnd('/'));
-        Title = string.IsNullOrEmpty(name) ? "/" : name;
+        // LeafName gives the root back as itself, so the "/" fallback is no
+        // longer a Linux-shaped guess about what a root looks like.
+        Title = PathRules.LeafName(value);
     }
 
     /// <summary>
@@ -1741,7 +1722,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     partial void OnIsActiveChanged(bool value)
     {
         if (value && !IsLoaded && !IsLoading && !string.IsNullOrEmpty(CurrentPath))
-            _ = LoadAsync(CurrentPath);
+            Detached(LoadAsync(CurrentPath), "load");
     }
 
     /// <summary>
@@ -1768,10 +1749,29 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             FontScale = tab.FontScale > 0 ? tab.FontScale : 1.0;
             IconScale = tab.IconScale > 0 ? tab.IconScale : 1.0;
 
-            // The session stores ONE pair per tab, so a restored tab starts
-            // every mode at it rather than leaving two of them at 1.0 and
-            // surprising the user the first time they switch layout.
+            // Details keeps the original pair; the other two restore their own
+            // and fall back to it. **Zero means absent** — deserialization does
+            // not run property initializers here, so a session written before
+            // v13 has no grid or compact keys at all and every layout should
+            // start where details was left.
             SeedScales(FontScale, IconScale);
+
+            _scales[ViewMode.Grid] = (
+                tab.GridFontScale > 0 ? tab.GridFontScale : FontScale,
+                tab.GridIconScale > 0 ? tab.GridIconScale : IconScale);
+
+            _scales[ViewMode.Compact] = (
+                tab.CompactFontScale > 0 ? tab.CompactFontScale : FontScale,
+                tab.CompactIconScale > 0 ? tab.CompactIconScale : IconScale);
+
+            // The active layout's pair has to become the live one, or a tab
+            // restored into grid would show the details size until the next
+            // switch.
+            var (font, icon) = _scales[View];
+
+            _swappingScales = true;
+            try { FontScale = font; IconScale = icon; }
+            finally { _swappingScales = false; }
 
             _back.Clear();
             foreach (var p in tab.BackStack) _back.Push(p);
@@ -1797,7 +1797,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public void RefreshIfUnloaded()
     {
         if (!IsLoaded && !IsLoading && !string.IsNullOrEmpty(CurrentPath))
-            _ = LoadAsync(CurrentPath);
+            Detached(LoadAsync(CurrentPath), "load");
     }
 
     public TabState ToTabState() => new()
@@ -1809,8 +1809,19 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         View = View,
         ShowColumnStrip = ShowColumnStrip,
         GroupBy = GroupBy,
-        FontScale = FontScale,
-        IconScale = IconScale,
+        // **All three read from `_scales`, including details.** The live
+        // `FontScale`/`IconScale` hold whichever layout is ON SCREEN, so writing
+        // them into the details slot would have saved the grid's size as the
+        // details size whenever the tab was left in grid. `_scales[View]` is kept
+        // current by `OnFontScaleChanged`, so the dictionary is the honest source.
+        FontScale = _scales[ViewMode.Details].Font,
+        IconScale = _scales[ViewMode.Details].Icon,
+
+        GridFontScale = _scales[ViewMode.Grid].Font,
+        GridIconScale = _scales[ViewMode.Grid].Icon,
+        CompactFontScale = _scales[ViewMode.Compact].Font,
+        CompactIconScale = _scales[ViewMode.Compact].Icon,
+
         // Stacks serialise oldest-first so RestoreFrom can push in order.
         BackStack = _back.Reverse().ToList(),
         ForwardStack = _forward.Reverse().ToList(),
@@ -1818,8 +1829,37 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnShowHiddenChanged(bool value)
     {
-        if (!_suppressReload) _ = LoadAsync(CurrentPath);
+        if (!_suppressReload) Detached(LoadAsync(CurrentPath), "load");
     }
+
+    /// <summary>
+    /// Starts work nobody is going to await, and reports what it throws.
+    ///
+    /// **`_ = SomeAsync()` discards the Task and with it the exception**, which
+    /// then surfaces — if at all — as an unobserved-task crash long after the
+    /// call that caused it. `async void` here is deliberate and safe precisely
+    /// because it carries a catch; that is the rule this project already applies
+    /// to its event handlers.
+    /// </summary>
+    private static async void Detached(Task work, string area)
+    {
+        try
+        {
+            await work.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Heimdall.Core.Quiet.Swallowed(area, ex);
+        }
+    }
+
+    /// <summary>
+    /// Flips hidden-file visibility. Exists for the keyboard route only — the
+    /// settings flyout binds `ShowHidden` directly, so this must stay a plain
+    /// flip with no extra behaviour, or the two paths would diverge.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleHidden() => ShowHidden = !ShowHidden;
 
     partial void OnIsLoadedChanged(bool value) => NotifyListingState();
     partial void OnIsLoadingChanged(bool value) => NotifyListingState();
@@ -1967,7 +2007,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         var accumulated = "";
 
         Breadcrumbs.Add(new PathSegment(
-            "/", "/", new RelayCommand(() => _ = NavigateAsync("/")), parts.Length == 0));
+            "/", "/", new RelayCommand(() => Detached(NavigateAsync("/"), "navigate")), parts.Length == 0));
 
         for (var i = 0; i < parts.Length; i++)
         {
@@ -1975,7 +2015,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             var target = accumulated;
 
             Breadcrumbs.Add(new PathSegment(parts[i], target,
-                new RelayCommand(() => _ = NavigateAsync(target)),
+                new RelayCommand(() => Detached(NavigateAsync(target), "navigate")),
                 i == parts.Length - 1));
         }
     }
@@ -2204,8 +2244,20 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // The column strip walks a folder hierarchy, and a recent listing has
         // none. Guarded here rather than inside Miller, because this is the
         // only caller that can know the path is virtual.
+        // Guarded separately from the listing, and not merely for tidiness: the
+        // strip is context and the listing is the point. A folder whose parents
+        // cannot be walked must still open.
         if (ShowColumnStrip && !VirtualPaths.IsVirtual(path))
-            await Miller.ShowAsync(path).ConfigureAwait(false);
+        {
+            try
+            {
+                await Miller.ShowAsync(path).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Heimdall.Core.Quiet.Swallowed("columns", ex);
+            }
+        }
 
         await LoadListingAsync(path).ConfigureAwait(false);
     }
@@ -2554,7 +2606,23 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         var name = Path.GetFileName(path);
         if (!ShowHidden && name.StartsWith('.')) return;
 
-        var entry = await _fs.GetEntryAsync(path, CancellationToken.None).ConfigureAwait(false);
+        FileEntry? entry;
+
+        try
+        {
+            entry = await _fs.GetEntryAsync(path, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // **This runs on every filesystem event, and it is fire-and-forget.**
+            // A file created and deleted between the notification and the stat is
+            // ordinary — a build writing temporaries does it constantly — but
+            // without this the throw became an unobserved task exception rather
+            // than a shrug.
+            Heimdall.Core.Quiet.Swallowed("watch", ex);
+            return;
+        }
+
         if (entry is not { } value) return;
 
         await Dispatcher.UIThread.InvokeAsync(() =>

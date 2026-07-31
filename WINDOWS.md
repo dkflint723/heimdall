@@ -151,38 +151,43 @@ are path assumptions, not APIs — see §5.
 
 ---
 
-## 5. The path assumptions that will bite
+## 5. The path assumptions — DONE
 
-**15 sites in `Heimdall.Ui` assume POSIX paths.** They are not hard to fix but
-they are scattered, and most will *appear* to work on Windows while being subtly
-wrong. Found with:
+**All fifteen POSIX assumptions in `Heimdall.Ui` now route through
+`Heimdall.Core.FileSystem.PathRules`** (31 July 2026): `IsRoot`, `Normalise`,
+`Parent`, `LeafName`, `Same`, `Ancestors`. Pure string shape — it never touches
+the filesystem, so anything needing the disk stays on `IFileSystemProvider`.
 
-```bash
-grep -rn "StartsWith('/')\|TrimEnd('/')\|Split('/')\|== \"/\"" src/Heimdall.Ui
-```
+**Linux behaviour is unchanged**, verified by porting both the new rules and the
+inline code they replaced to Python and comparing case by case. The one
+deliberate difference: `"//"` used to normalise to `""` — an empty path, a latent
+bug — and now gives `/`.
 
-The important ones:
+What the port gets for free:
 
-- **`MillerViewModel.cs:148` — `if (current == "/") break;`** This is the
-  loop-termination condition when walking up to the root. On Windows the root is
-  `C:\`, and **this loop will not terminate correctly.** Highest-priority fix.
-- **`PaneViewModel.RebuildBreadcrumbs`** splits on the path separator to build
-  crumbs. Needs `Path.DirectorySeparatorChar` and a drive-letter-aware root.
-- **`TrimEnd('/')` in seven places** (`ShellViewModel`, `SidebarViewModel`,
-  `JsonRecentStore`, `JsonFolderViewStore`, `PaneViewModel`, `MillerViewModel`) —
-  these normalise trailing separators before comparing paths. On Windows they
-  silently fail to normalise `C:\Users\flint\`, so **place highlighting and
-  duplicate-tab detection will misbehave in ways that look random.**
-- **`FileClipboard.cs:130`** parses `file://` URIs by splitting on `/`. Windows
-  drag-and-drop uses a different clipboard format entirely (`CF_HDROP`).
-- **`VirtualPaths`** uses `heimdall:` prefixes. **These are safe** — the comment
-  claims no collision because real paths start with `/`, which stops being true
-  on Windows, but `heimdall:` still cannot collide with `C:\`.
+- **`IsRoot` asks `Path.GetPathRoot`** rather than comparing to `"/"`. A path
+  equal to its own root IS the root, so `C:\` and UNC share roots work with no
+  platform check.
+- **A root keeps its trailing separator.** Trimming `/` leaves `""`; trimming
+  `C:\` leaves `C:`, which on Windows means "the current directory on drive C" —
+  a different place.
+- **`Parent` returns null at a root, not empty.** `Path.GetDirectoryName` returns
+  an empty string for a bare name, which had already caused a live bug where the
+  Up button enabled itself on a virtual path and then did nothing.
+- **`Same` compares `OrdinalIgnoreCase` on Windows and `Ordinal` on Linux**, so
+  place highlighting and duplicate-tab detection are right on both: two paths
+  differing only in case are one folder on NTFS and two on ext4.
+- **`Ancestors`** replaced the column-strip walk that would not have terminated.
 
-**Suggested approach: add a `PathRules` helper in Core** with `Normalise`,
-`IsRoot` and `Parent`, and route all fifteen through it. That turns a scattered
-port into one testable class — and `PathCompleter` and `NaturalOrder` are already
-precedent for that kind of thing living in Core.
+Two things deliberately left alone:
+
+- **`FileClipboard`'s `file://` conversion still splits on `/`.** A URI is not a
+  path — RFC 8089 uses `/` on every platform — and Windows exchanges files as
+  **`CF_HDROP`**, so this needs a different mechanism rather than a separator fix.
+  Annotated in place so a sweep does not "correct" it.
+- **`VirtualPaths` keeps its `heimdall:` prefixes.** The old rationale (real paths
+  start with `/`) stops being true on Windows, but `heimdall:` still cannot
+  collide with `C:\`.
 
 ---
 
@@ -211,9 +216,16 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
    references, `#if` around the platform construction, a `WindowsPlatform` that
    returns `null` for every nullable member and throws for the rest. **Goal: it
    compiles on both platforms.** Nothing runs yet.
-2. **`PathRules` in Core**, and route the 15 sites through it. **Do this before
-   any provider** — otherwise you will debug path bugs and provider bugs at the
-   same time and be unable to tell them apart.
+2. ~~**`PathRules` in Core**, and route the 15 sites through it.~~ **DONE,
+   31 July 2026.** `Heimdall.Core/FileSystem/PathRules.cs` answers the four
+   questions this application asks about a path's shape — `IsRoot`, `Normalise`,
+   `Parent`, `LeafName`, plus `Same` and `Ancestors` — without assuming the
+   separator. All fifteen sites route through it; Linux behaviour is unchanged,
+   verified case by case against the inline code it replaced.
+   **`Same` uses `OrdinalIgnoreCase` on Windows and `Ordinal` on Linux**, because
+   two paths differing only in case are one folder on NTFS and two on ext4.
+   **The `file://` conversion in `FileClipboard` deliberately still splits on
+   `/`** — a URI is not a path, and Windows exchanges files as CF_HDROP anyway.
 3. **`IFileSystemProvider` + `IPlacesProvider`.** First light: a window that
    lists `C:\` and has drives in the sidebar. Icons will be the drawn fallbacks
    and that is fine.

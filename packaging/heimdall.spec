@@ -61,6 +61,18 @@ done
 install -D -m644 %{_sourcedir}/icons/hicolor/scalable/apps/heimdall.svg \
     %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/heimdall.svg
 
+# The symbolic variant, which the package was silently dropping. It is a
+# single-colour glyph using the `.ColorScheme-Text` + `fill="currentColor"`
+# convention, so the desktop tints it to match wherever it is drawn — which is
+# what a dark panel or a monochrome menu actually wants. Shipping the full-colour
+# icon there gives a plate of navy in a row of line art.
+#
+# Note the filename differs from the others: the spec names symbolic icons
+# `<name>-symbolic.svg`, and the theme resolves it by that name rather than by
+# the directory alone.
+install -D -m644 %{_sourcedir}/icons/hicolor/symbolic/apps/heimdall-symbolic.svg \
+    %{buildroot}%{_datadir}/icons/hicolor/symbolic/apps/heimdall-symbolic.svg
+
 # Refresh the desktop and icon caches. Fedora 30+ has RPM file triggers that do
 # this automatically, so these are belt-and-braces there — but the spec should
 # not depend on the host distribution having them, and `|| :` means a machine
@@ -88,6 +100,7 @@ fi
 %{_bindir}/heimdall
 %{_datadir}/applications/heimdall.desktop
 %{_datadir}/icons/hicolor/*/apps/heimdall.svg
+%{_datadir}/icons/hicolor/symbolic/apps/heimdall-symbolic.svg
 
 %changelog
 * Wed Jul 29 2026 Flint <noreply@users.noreply.github.com> - 0.1.0-1

@@ -122,6 +122,12 @@ public static class FileClipboard
     }
 
     private static string ToFileUri(string path)
+        // **Left splitting on '/' deliberately — a file URI is not a path.**
+        // RFC 8089 uses '/' as the separator on every platform, so this is
+        // correct here and would be wrong to route through PathRules. The
+        // Windows work is a different job: a path there is `C:\x\y`, its URI is
+        // `file:///C:/x/y`, and the desktop exchanges files as CF_HDROP rather
+        // than text/uri-list anyway.
         => "file://" + string.Join("/", path.Split('/').Select(Uri.EscapeDataString));
 
     private static string? FromFileUri(string uri)

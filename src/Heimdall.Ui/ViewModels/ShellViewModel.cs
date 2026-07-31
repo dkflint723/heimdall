@@ -991,9 +991,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
             // Sending a folder into itself is the one destination that is never
             // meaningful.
-            .Where(p => !string.Equals(p.Path.TrimEnd('/'),
-                                       ActiveTab?.CurrentPath.TrimEnd('/'),
-                                       StringComparison.Ordinal))
+            // PathRules.Same also picks the platform's case rules — two paths
+            // differing only in case are one folder on NTFS and two on ext4.
+            .Where(p => !PathRules.Same(p.Path, ActiveTab?.CurrentPath))
             .ToList();
 
     private void NotifyTransferTargets() => OnPropertyChanged(nameof(TransferTargets));
@@ -1023,9 +1023,7 @@ public sealed partial class ShellViewModel : ObservableObject
         var open = new[] { Left, Right }
             .Where(g => g is not null)
             .SelectMany(g => g!.Tabs)
-            .FirstOrDefault(t => string.Equals(t.CurrentPath.TrimEnd('/'),
-                                               place.Path.TrimEnd('/'),
-                                               StringComparison.Ordinal));
+            .FirstOrDefault(t => PathRules.Same(t.CurrentPath, place.Path));
 
         if (open is not null) open.PasteInto(paths, move);
         else source.PasteIntoFolder(place.Path, paths, move);

@@ -295,7 +295,9 @@ Environment variables, all off by default:
 | `HEIMDALL_TILE_DEBUG=1` | realized container count, index range and viewport per measure |
 | `HEIMDALL_ICON_DEBUG=1` | per-shape bounds, brushes and gradient axes while rendering SVG icons |
 | `HEIMDALL_FONT_DEBUG=1` | font resolution |
-| `HEIMDALL_TILE_LIMIT=<n>` | overrides the item limit for the compact layout |
+| `HEIMDALL_SETTINGS_DEBUG=1` | settings as deserialized, after normalising, and what a fresh record claims |
+| `HEIMDALL_PANEL_DEBUG=1` | why the details panel grew, held or gave back window width |
+| `HEIMDALL_QUIET_DEBUG=1` | failures that are deliberately swallowed — network discovery, scripts, sharing |
 
 `HEIMDALL_TILE_DEBUG` is the one to reach for first when a listing feels slow:
 the realized count is unambiguous in a way that a timing figure is not. If it
