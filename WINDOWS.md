@@ -207,12 +207,13 @@ Two things deliberately left alone:
   start with `/`) stops being true on Windows, but `heimdall:` still cannot
   collide with `C:\`.
 
-### 5a. One thing §5 got wrong: `PathRules` is separator-sensitive
+### 5a. One thing §5 got wrong: `PathRules` was separator-sensitive — FIXED
 
-Found 3 August 2026, running `PathRules` on Windows for the first time. **The
-rules handle real Windows paths correctly** — `IsRoot(@"C:\")`, UNC share roots,
-`Parent`, `LeafName` and `Ancestors` all behave — but **`Normalise` never
-unifies the separator character**, and on Windows both `\` and `/` are legal:
+Found and fixed 3 August 2026, running `PathRules` on Windows for the first
+time. **The rules handled real Windows paths correctly** — `IsRoot(@"C:\")`, UNC
+share roots, `Parent`, `LeafName` and `Ancestors` all behaved — but **`Normalise`
+never unified the separator character**, and on Windows both `\` and `/` are
+legal:
 
 ```
 Same(@"C:\Users", @"C:/Users")        = False   <-- one folder, two spellings
@@ -233,35 +234,49 @@ element is the normalised input and keeps its `/`, while every ancestor comes
 from `Path.GetDirectoryName` and gets `\`. **One list, two conventions**, which
 the column strip then compares with `Same`.
 
-**The fix is one line in `Normalise`**, and it is a no-op on Linux, where
-`AltDirectorySeparatorChar` and `DirectorySeparatorChar` are both `/`:
+**The fix is a private `Unify` in `PathRules`**, applied at the top of both
+`IsRoot` and `Normalise` — both, because `Normalise` delegates to `IsRoot`, and
+fixing only one leaves `IsRoot("/")` disagreeing with `IsRoot(Normalise("/"))`:
 
 ```csharp
-path = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+private static string Unify(string path)
+    => path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 ```
 
-Do this before `IFileSystemProvider`, not after — every path comparison in the
-port stands on it. `\` is a legal *filename* character on Linux, which is why
-this must go through the platform's own separator constants rather than a
-literal.
+**It is a no-op on Linux**, where both constants are `/` — and it goes through
+the platform's own constants rather than a literal for exactly that reason: `\`
+is a legal *filename* character on Linux, so rewriting it there would rename
+files. `PathRulesPosixTests.Backslash_is_an_ordinary_character` asserts this.
 
-### 5b. The `PathRules` tests are Linux-only, and say otherwise
+After the fix, all four `Same` spellings agree and `Ancestors` returns one list
+regardless of how the path was written.
 
-`tests/Heimdall.Core.Tests/PathRulesTests.cs` opens by claiming "everything here
-runs on any platform: the assertions are about POSIX paths, which the rules must
-handle identically wherever they execute." **That is false, and 7 of 56 tests
-fail on Windows** — `IsRoot("/")`, `Parent("/home")` and both `Ancestors` cases.
+### 5b. The `PathRules` tests were Linux-only and said otherwise — SPLIT
 
-They are not finding the bug in 5a. They fail because a POSIX literal means
-something different here: `/` is "the root of the current drive", so
-`Path.GetPathRoot("/")` answers `\` and the string comparison in `IsRoot` says
-no. The assertions encode Linux, which is what they were for.
+`PathRulesTests.cs` opened by claiming "everything here runs on any platform:
+the assertions are about POSIX paths, which the rules must handle identically
+wherever they execute." **That was false: 7 of 56 failed on Windows**, and 10
+once 5a was fixed, because a POSIX literal names something else here — `/` is
+the root of the *current drive*, so `Path.GetPathRoot("/")` answers `\`.
 
-**Decide before step 3**, because until then a Windows dev loop has no green
-baseline and every real failure has to be picked out of seven expected ones.
-Either make the expectations platform-conditional and add the `C:\` cases beside
-them, or split the POSIX assertions into a Linux-only fixture and write a
-Windows one. The second is more honest about what is being asserted.
+Split three ways on 3 August 2026, with `PosixFact`/`PosixTheory` and
+`WindowsFact`/`WindowsTheory` in `PlatformFacts.cs` doing the skipping:
+
+| | |
+|---|---|
+| `PathRulesTests` | genuinely platform-neutral — virtual paths, empty, null |
+| `PathRulesPosixTests` | every original POSIX assertion, verbatim |
+| `PathRulesWindowsTests` | the `C:\`, UNC and separator cases, new |
+
+**Skipping rather than a conditional expectation.** A test reading
+`expected = IsWindows() ? @"\home" : "/home"` asserts that the code does whatever
+it currently does, which is not a test.
+
+**Nothing was weakened to make Windows pass** — the POSIX assertions moved
+across unchanged, and they are the record of the promise in §5 that Linux
+behaviour did not change.
+
+On Windows: **67 passed, 13 skipped, 0 failed.**
 
 ---
 
@@ -294,9 +309,10 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
    so the first thing built on top of it fails loudly and identifies itself.
    **Nothing runs yet**: the app throws on `platform.Properties`, which is the
    first member the constructor touches.
-   **Two things turned up on the way — see §5a and §5b.** `PathRules.Normalise`
-   does not unify `\` and `/`, which breaks `Same` on Windows, and the
-   `PathRules` tests fail 7 of 56 here. Do 5a before step 3.
+   **Two things turned up on the way, both since fixed — see §5a and §5b.**
+   `PathRules.Normalise` did not unify `\` and `/`, which broke `Same` on
+   Windows, and the `PathRules` tests were POSIX-only while claiming otherwise.
+   The suite is green on Windows: 67 passed, 13 skipped, 0 failed.
 2. ~~**`PathRules` in Core**, and route the 15 sites through it.~~ **DONE,
    31 July 2026.** `Heimdall.Core/FileSystem/PathRules.cs` answers the four
    questions this application asks about a path's shape — `IsRoot`, `Normalise`,
