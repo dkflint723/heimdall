@@ -24,7 +24,41 @@
     <AvaloniaResource Include="heimdall.png" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!-- Exactly one platform assembly is referenced. Referencing both would drag
+       Linux code onto a Windows build and vice versa; referencing neither is
+       caught by the #error in MainWindow.
+
+       Defaulted from the build machine's OS but settable, so either
+       configuration can be built from either machine:
+
+         dotnet build src/Heimdall.Ui -p:HeimdallPlatform=Linux
+
+       That override is the whole point. WINDOWS.md §8 warns that conditional
+       references make it possible to break the Linux build from a Windows
+       machine without noticing, and waiting for CI to say so is a slow way to
+       find out. The compile is real; only the runtime behaviour still needs the
+       other OS. -->
+  <PropertyGroup>
+    <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsLinux())' == 'true'">Linux</HeimdallPlatform>
+    <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsWindows())' == 'true'">Windows</HeimdallPlatform>
+  </PropertyGroup>
+
+  <!-- The HEIMDALL_* symbol fences the single line in MainWindow.axaml.cs that
+       names a platform type, so it is set here beside the reference it belongs
+       to. The two must agree: a reference without its symbol compiles to an
+       unreachable platform, and a symbol without its reference does not compile
+       at all. -->
+  <ItemGroup Condition="'$(HeimdallPlatform)' == 'Linux'">
     <ProjectReference Include="..\Heimdall.Linux\Heimdall.Linux.csproj" />
   </ItemGroup>
+  <PropertyGroup Condition="'$(HeimdallPlatform)' == 'Linux'">
+    <DefineConstants>$(DefineConstants);HEIMDALL_LINUX</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(HeimdallPlatform)' == 'Windows'">
+    <ProjectReference Include="..\Heimdall.Windows\Heimdall.Windows.csproj" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(HeimdallPlatform)' == 'Windows'">
+    <DefineConstants>$(DefineConstants);HEIMDALL_WINDOWS</DefineConstants>
+  </PropertyGroup>
 </Project>

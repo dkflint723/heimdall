@@ -37,24 +37,42 @@ the application still runs.
 
 ---
 
-## 2. Two blockers before any code
+## 2. Two blockers before any code — DONE
 
-**`Heimdall.Ui.csproj` references `Heimdall.Linux` unconditionally.** That has to
-become conditional, or `Heimdall.Windows` will be dragged onto Linux builds and
-vice versa:
+Both cleared 3 August 2026. **The property-function `Condition` syntax works** —
+that was the open question, and it is now answered on a real Windows machine.
+
+The reference is not conditioned on the OS directly, but on a `HeimdallPlatform`
+property that *defaults* from the OS:
 
 ```xml
-<ItemGroup Condition="'$([System.OperatingSystem]::IsLinux())' == 'true'">
-  <ProjectReference Include="..\Heimdall.Linux\Heimdall.Linux.csproj" />
-</ItemGroup>
-<ItemGroup Condition="'$([System.OperatingSystem]::IsWindows())' == 'true'">
-  <ProjectReference Include="..\Heimdall.Windows\Heimdall.Windows.csproj" />
-</ItemGroup>
+<PropertyGroup>
+  <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsLinux())' == 'true'">Linux</HeimdallPlatform>
+  <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsWindows())' == 'true'">Windows</HeimdallPlatform>
+</PropertyGroup>
 ```
 
-Then the `new LinuxPlatform(...)` line needs `#if` fencing, because a reference
-that is not present will not compile. **Untested — this is the first thing to
-prove, before writing a single provider.**
+**The indirection is the point.** §8 warns that conditional references make it
+possible to break the Linux build from a Windows machine without noticing, and
+CI is a slow way to be told. With the override, either configuration compiles
+from either machine:
+
+```bash
+dotnet build src/Heimdall.Ui -p:HeimdallPlatform=Linux
+```
+
+Only runtime behaviour still needs the other OS. Both configurations, and the
+neither-selected case, were built on Windows before this was written.
+
+`MainWindow.axaml.cs` is fenced with `HEIMDALL_LINUX` / `HEIMDALL_WINDOWS`,
+defined beside the reference they belong to, and a `#else` arm carries an
+`#error` naming the fix. **Give each arm its own `else`** — sharing one after the
+`#endif` compiles, but leaves the `#error` arm ending in a dangling `else`, and
+the five cascading syntax errors bury the message that explains the problem.
+
+`[assembly: SupportedOSPlatform("windows")]` mirrors the Linux one.
+**`Heimdall.Windows` stays on plain `net10.0`**, so it still compiles on the
+Linux CI runner and is checked on every push — see §9.
 
 **`Heimdall.Linux/AssemblyInfo.cs` carries `[assembly: SupportedOSPlatform("linux")]`.**
 `Heimdall.Windows` needs the mirror image, and it can additionally use the real
@@ -189,6 +207,62 @@ Two things deliberately left alone:
   start with `/`) stops being true on Windows, but `heimdall:` still cannot
   collide with `C:\`.
 
+### 5a. One thing §5 got wrong: `PathRules` is separator-sensitive
+
+Found 3 August 2026, running `PathRules` on Windows for the first time. **The
+rules handle real Windows paths correctly** — `IsRoot(@"C:\")`, UNC share roots,
+`Parent`, `LeafName` and `Ancestors` all behave — but **`Normalise` never
+unifies the separator character**, and on Windows both `\` and `/` are legal:
+
+```
+Same(@"C:\Users", @"C:/Users")        = False   <-- one folder, two spellings
+Same(@"C:\Users", @"C:\Users\")       = True
+Same(@"C:\Users", @"c:\users")        = True
+Ancestors(@"C:/Users/flint")          = ["C:\", "C:\Users", "C:/Users/flint"]
+```
+
+`Same` handles the trailing separator and the case rules — the two things §5
+went looking for — and misses the third. **This is not theoretical:** Windows
+accepts `C:/Users` everywhere, so it is what a paste into `Ctrl+L` can produce,
+and `Same` is exactly what drives **place highlighting and duplicate-tab
+detection**. Typing a path with forward slashes opens a second tab on a folder
+already open and leaves the sidebar entry unhighlighted.
+
+The `Ancestors` result is the same fault seen from the other side: the last
+element is the normalised input and keeps its `/`, while every ancestor comes
+from `Path.GetDirectoryName` and gets `\`. **One list, two conventions**, which
+the column strip then compares with `Same`.
+
+**The fix is one line in `Normalise`**, and it is a no-op on Linux, where
+`AltDirectorySeparatorChar` and `DirectorySeparatorChar` are both `/`:
+
+```csharp
+path = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+```
+
+Do this before `IFileSystemProvider`, not after — every path comparison in the
+port stands on it. `\` is a legal *filename* character on Linux, which is why
+this must go through the platform's own separator constants rather than a
+literal.
+
+### 5b. The `PathRules` tests are Linux-only, and say otherwise
+
+`tests/Heimdall.Core.Tests/PathRulesTests.cs` opens by claiming "everything here
+runs on any platform: the assertions are about POSIX paths, which the rules must
+handle identically wherever they execute." **That is false, and 7 of 56 tests
+fail on Windows** — `IsRoot("/")`, `Parent("/home")` and both `Ancestors` cases.
+
+They are not finding the bug in 5a. They fail because a POSIX literal means
+something different here: `/` is "the root of the current drive", so
+`Path.GetPathRoot("/")` answers `\` and the string comparison in `IsRoot` says
+no. The assertions encode Linux, which is what they were for.
+
+**Decide before step 3**, because until then a Windows dev loop has no green
+baseline and every real failure has to be picked out of seven expected ones.
+Either make the expectations platform-conditional and add the `C:\` cases beside
+them, or split the POSIX assertions into a Linux-only fixture and write a
+Windows one. The second is more honest about what is being asserted.
+
 ---
 
 ## 6. NativeAOT is the constraint that will surprise you
@@ -212,10 +286,17 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
 
 ## 7. Suggested order
 
-1. **Prove the scaffolding.** New `Heimdall.Windows` project, conditional
-   references, `#if` around the platform construction, a `WindowsPlatform` that
-   returns `null` for every nullable member and throws for the rest. **Goal: it
-   compiles on both platforms.** Nothing runs yet.
+1. ~~**Prove the scaffolding.**~~ **DONE, 3 August 2026.** `Heimdall.Windows`
+   exists, both configurations and the neither-selected case were built on
+   Windows, and the property-function `Condition` syntax §9 doubted is proven —
+   see §2. `WindowsPlatform` returns `null` for all seven nullable members and
+   throws `NotImplementedException` naming the interface for the other eleven,
+   so the first thing built on top of it fails loudly and identifies itself.
+   **Nothing runs yet**: the app throws on `platform.Properties`, which is the
+   first member the constructor touches.
+   **Two things turned up on the way — see §5a and §5b.** `PathRules.Normalise`
+   does not unify `\` and `/`, which breaks `Same` on Windows, and the
+   `PathRules` tests fail 7 of 56 here. Do 5a before step 3.
 2. ~~**`PathRules` in Core**, and route the 15 sites through it.~~ **DONE,
    31 July 2026.** `Heimdall.Core/FileSystem/PathRules.cs` answers the four
    questions this application asks about a path's shape — `IsRoot`, `Normalise`,
@@ -254,12 +335,23 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
 
 Stated plainly so they are not mistaken for findings:
 
-- The conditional `ProjectReference` syntax in §2 is **untested**. MSBuild
-  property functions in `Condition` are correct in principle; the exact form may
-  need adjusting.
-- Whether `net10.0-windows` is worth adopting over plain `net10.0` — it depends
-  on whether any Windows-only BCL surface is needed, and it complicates the
-  solution's TFM story.
+- ~~The conditional `ProjectReference` syntax in §2 is **untested**.~~
+  **Settled 3 August 2026: it works as written.** `$([System.OperatingSystem]::IsWindows())`
+  and `$([System.OperatingSystem]::IsLinux())` both evaluate correctly in a
+  `Condition` under the .NET 10 SDK. The MSBuild intrinsic
+  `$([MSBuild]::IsOSPlatform('Windows'))` was probed alongside and also works —
+  either is fine.
+- ~~Whether `net10.0-windows` is worth adopting over plain `net10.0`.~~
+  **Deferred deliberately, and `Heimdall.Windows` is on plain `net10.0` for
+  now.** `SupportedOSPlatform` already satisfies the platform analyser, and the
+  single TFM keeps the project in the solution on Linux, so CI compile-checks
+  the Windows code on every push — worth more than the WinForms/WPF interop
+  surface, which nothing here wants.
+  **The forcing question is the registry**, which §4 needs for `IThemeProvider`:
+  `Microsoft.Win32.Registry` is not in the default reference set for plain
+  `net10.0`. Decide at step 5 between the `net10.0-windows` TFM and the
+  standalone package — and note the TFM costs the free Linux compile-check
+  above.
 - Whether Avalonia's Windows backend needs anything beyond the existing package
   references. It should not — `Avalonia.Desktop` covers all three desktop
   backends — but that is an assumption, not a verified fact.
