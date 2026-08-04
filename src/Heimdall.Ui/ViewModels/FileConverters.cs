@@ -29,18 +29,23 @@ public static class FileConverters
         {
             if (string.IsNullOrEmpty(entry.FullPath)) return "";
 
-            var parent = Path.GetDirectoryName(entry.FullPath);
-            if (string.IsNullOrEmpty(parent)) return "/";
+            // Normalised first, so the comparisons below see one spelling of the
+            // separator. On Windows a path can arrive with either.
+            var parent = PathRules.Parent(entry.FullPath);
+            if (string.IsNullOrEmpty(parent)) return PathRules.LeafName(entry.FullPath);
 
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var home = PathRules.Normalise(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
             if (!string.IsNullOrEmpty(home))
             {
-                if (string.Equals(parent, home, StringComparison.Ordinal)) return "~";
+                if (PathRules.Same(parent, home)) return "~";
 
                 // The separator is part of the test on purpose: without it,
                 // "/home/flintstone" would match a home of "/home/flint".
-                if (parent.StartsWith(home + "/", StringComparison.Ordinal))
+                // Through the platform's own constant, and case-insensitively on
+                // Windows, for the same reasons PathRules.Same exists.
+                if (parent.StartsWith(home + Path.DirectorySeparatorChar, PathRules.Comparison))
                     return "~" + parent[home.Length..];
             }
 

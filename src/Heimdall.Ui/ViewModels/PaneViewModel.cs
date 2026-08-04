@@ -2003,20 +2003,26 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var parts = CurrentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var accumulated = "";
+        // Ancestors already answers this on both platforms — it starts at the
+        // root, "/" or "C:\", and walks down to the path itself.
+        //
+        // It replaces a split on '/' that prefixed a hardcoded "/" crumb. On
+        // Windows that produced "/ / C:\Users\flint": the split found no '/' to
+        // break on, so the whole path stayed one unclickable crumb, behind a
+        // root that does not exist there. Linux is unchanged — Ancestors("/x/y")
+        // is ["/", "/x", "/x/y"], which is the same three crumbs as before.
+        var levels = PathRules.Ancestors(CurrentPath);
 
-        Breadcrumbs.Add(new PathSegment(
-            "/", "/", new RelayCommand(() => Detached(NavigateAsync("/"), "navigate")), parts.Length == 0));
-
-        for (var i = 0; i < parts.Length; i++)
+        for (var i = 0; i < levels.Count; i++)
         {
-            accumulated += "/" + parts[i];
-            var target = accumulated;
+            var target = levels[i];
 
-            Breadcrumbs.Add(new PathSegment(parts[i], target,
+            // LeafName, not the raw segment: it gives a root back as itself, so
+            // the first crumb reads "/" or "C:\" rather than blank.
+            Breadcrumbs.Add(new PathSegment(
+                PathRules.LeafName(target), target,
                 new RelayCommand(() => Detached(NavigateAsync(target), "navigate")),
-                i == parts.Length - 1));
+                i == levels.Count - 1));
         }
     }
 

@@ -7,44 +7,56 @@ using Heimdall.Core.Search;
 namespace Heimdall.Windows;
 
 /// <summary>
-/// The Windows composition root, and at this stage a skeleton: it exists so the
-/// scaffolding can be proved before any provider is written.
+/// The Windows composition root. Everything OS-specific is built here, so the UI
+/// project holds exactly one reference to a platform type — inside one
+/// OperatingSystem.IsWindows() check.
 ///
-/// The seven nullable members of <see cref="IPlatform"/> return null, which is
-/// the interface working as designed rather than a gap being papered over — the
-/// UI already handles a platform that cannot theme, share, discover or trash.
-/// The eleven required members throw, so the first thing anyone builds on top of
-/// this fails loudly and names itself.
+/// **All eleven required members are real**, because the UI reads every one of
+/// them while constructing the main window: ShellViewModel takes Operations,
+/// Launcher, Search, Scripts and Templates alongside the obvious ones, so a
+/// throwing stub anywhere here means no window at all. That is why step 3 built
+/// more than the two providers WINDOWS.md §7 names.
 ///
-/// Replace them one at a time, in the order WINDOWS.md §7 sets out: filesystem
-/// and places first, and the window lists C:\ with drives in the sidebar.
+/// **Real does not mean complete.** Trash fails rather than deleting, tags store
+/// nothing pending a design decision, and the open-with list is empty — each
+/// documented on the class that does it.
+///
+/// The seven nullable members still return null, which is the interface working
+/// as designed rather than a gap being papered over.
 /// </summary>
 public sealed class WindowsPlatform : IPlatform
 {
-    public WindowsPlatform(string stateDirectory) => StateDirectory = stateDirectory;
+    private readonly WindowsPropertiesProvider _properties = new();
 
-    /// <summary>
-    /// Where this application's own per-user state lives. Held rather than used:
-    /// the Linux places provider and tag store both take it, and their Windows
-    /// counterparts will want it for pinned folders and the tag sidecar.
-    /// </summary>
+    public WindowsPlatform(string stateDirectory)
+    {
+        StateDirectory = stateDirectory;
+        Places = new WindowsPlacesProvider(stateDirectory);
+        Scripts = new WindowsScriptRunner(stateDirectory);
+    }
+
+    /// <summary>Where this application's own per-user state lives.</summary>
     public string StateDirectory { get; }
 
     public string Name => "windows";
 
-    // ---- Required. Each throws until it is written. -----------------------
+    // ---- Required. ---------------------------------------------------------
 
-    public IFileSystemProvider FileSystem => throw NotYet(nameof(IFileSystemProvider));
-    public IFileOperations Operations => throw NotYet(nameof(IFileOperations));
-    public IApplicationLauncher Launcher => throw NotYet(nameof(IApplicationLauncher));
-    public IPlacesProvider Places => throw NotYet(nameof(IPlacesProvider));
-    public ISearchProvider Search => throw NotYet(nameof(ISearchProvider));
-    public IThumbnailProvider Thumbnails => throw NotYet(nameof(IThumbnailProvider));
-    public IFileMetadataProvider Metadata => throw NotYet(nameof(IFileMetadataProvider));
-    public IPropertiesProvider Properties => throw NotYet(nameof(IPropertiesProvider));
-    public IScriptRunner Scripts => throw NotYet(nameof(IScriptRunner));
-    public ITagStore Tags => throw NotYet(nameof(ITagStore));
-    public ITemplateProvider Templates => throw NotYet(nameof(ITemplateProvider));
+    public IFileSystemProvider FileSystem { get; } = new WindowsFileSystemProvider();
+    public IFileOperations Operations { get; } = new WindowsFileOperations();
+    public IApplicationLauncher Launcher { get; } = new WindowsLauncher();
+    public IPlacesProvider Places { get; }
+    public ISearchProvider Search { get; } = new WindowsSearchProvider();
+    public IThumbnailProvider Thumbnails { get; } = new WindowsThumbnailProvider();
+    public IFileMetadataProvider Metadata { get; } = new WindowsMetadataProvider();
+
+    public IPropertiesProvider Properties => _properties;
+
+    public IScriptRunner Scripts { get; }
+
+    public ITagStore Tags { get; } = new WindowsTagStore();
+
+    public ITemplateProvider Templates { get; } = new WindowsTemplates();
 
     // ---- Optional. Null is a legitimate answer, now and possibly forever. --
 
@@ -92,7 +104,4 @@ public sealed class WindowsPlatform : IPlatform
     /// files.
     /// </summary>
     public ITrashMaintenance? TrashMaintenance => null;
-
-    private static NotImplementedException NotYet(string member) =>
-        new($"{member} has no Windows implementation yet (WINDOWS.md §7).");
 }

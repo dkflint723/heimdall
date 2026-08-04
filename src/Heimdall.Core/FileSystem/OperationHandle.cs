@@ -1,12 +1,20 @@
-
-using Heimdall.Core.FileSystem;
-
-namespace Heimdall.Linux;
+namespace Heimdall.Core.FileSystem;
 
 /// <summary>
 /// A running operation. This exists as an object rather than operations being
 /// bare awaitable calls because pause, resume and cancel cannot be retrofitted
 /// onto a Task — and a transfer queue needs all three.
+///
+/// **In Core, not in a platform assembly.** It was written for Linux and moved
+/// here on 3 August 2026 when the Windows operations needed the same state
+/// machine: it is a progress counter and a pause gate, with nothing in it that
+/// knows what a file is.
+///
+/// **The driving methods are public**, which they were not before the move. They
+/// are called by the operations engine in whichever platform assembly owns the
+/// work, and once the type lives here "internal to the assembly that drives it"
+/// stops being expressible. They are not for the UI: it observes
+/// <see cref="Progressed"/> and <see cref="State"/> and drives nothing.
 /// </summary>
 public sealed class OperationHandle : IOperationHandle
 {
@@ -29,12 +37,12 @@ public sealed class OperationHandle : IOperationHandle
     public Progress<OperationProgress> ProgressReporter { get; } = new();
 
     public Task Completion => _completion.Task;
-    internal CancellationToken Token => _cts.Token;
+    public CancellationToken Token => _cts.Token;
 
     public event EventHandler<OperationProgress>? Progressed;
     public event EventHandler? StateChanged;
 
-    internal void Begin(int itemsTotal, long totalBytes)
+    public void Begin(int itemsTotal, long totalBytes)
     {
         _itemsTotal = itemsTotal;
         _bytesTotal = totalBytes;
@@ -42,37 +50,37 @@ public sealed class OperationHandle : IOperationHandle
         Report();
     }
 
-    internal void ItemStarted(string path)
+    public void ItemStarted(string path)
     {
         _currentItem = Path.GetFileName(path);
         Report();
     }
 
-    internal void ItemFinished()
+    public void ItemFinished()
     {
         Interlocked.Increment(ref _itemsDone);
         Report();
     }
 
-    internal void BytesCopied(long count)
+    public void BytesCopied(long count)
     {
         Interlocked.Add(ref _bytesDone, count);
         Report();
     }
 
-    internal void Complete()
+    public void Complete()
     {
         SetState(OperationState.Completed);
         _completion.TrySetResult();
     }
 
-    internal void Cancelled()
+    public void Cancelled()
     {
         SetState(OperationState.Cancelled);
         _completion.TrySetResult();
     }
 
-    internal void Failed(Exception ex)
+    public void Failed(Exception ex)
     {
         Error = ex;
         SetState(OperationState.Failed);
@@ -80,7 +88,7 @@ public sealed class OperationHandle : IOperationHandle
     }
 
     /// <summary>Blocks the worker while paused, without burning a thread spinning.</summary>
-    internal async Task WaitIfPausedAsync()
+    public async Task WaitIfPausedAsync()
     {
         if (_gate.IsSet) return;
         await Task.Run(() => _gate.Wait(_cts.Token), _cts.Token).ConfigureAwait(false);
