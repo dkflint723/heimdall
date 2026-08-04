@@ -61,8 +61,11 @@ from either machine:
 dotnet build src/Heimdall.Ui -p:HeimdallPlatform=Linux
 ```
 
-Only runtime behaviour still needs the other OS. Both configurations, and the
-neither-selected case, were built on Windows before this was written.
+**Verified on both, symmetrically** (3 August 2026 — Windows 11, and Fedora 44
+under WSL): each machine builds its own configuration, the other machine's
+configuration, and fails on `HeimdallPlatform=None` with one clear error. On
+each, only the selected platform assembly lands beside the app — no leakage
+either way.
 
 `MainWindow.axaml.cs` is fenced with `HEIMDALL_LINUX` / `HEIMDALL_WINDOWS`,
 defined beside the reference they belong to, and a `#else` arm carries an
@@ -248,6 +251,10 @@ the platform's own constants rather than a literal for exactly that reason: `\`
 is a legal *filename* character on Linux, so rewriting it there would rename
 files. `PathRulesPosixTests.Backslash_is_an_ordinary_character` asserts this.
 
+**No longer an argument: the POSIX suite was run on Fedora 44 after the change
+and passes**, so §5's promise that Linux behaviour did not change is observed
+rather than reasoned about. See §8a.
+
 After the fix, all four `Same` spellings agree and `Ancestors` returns one list
 regardless of how the path was written.
 
@@ -276,7 +283,10 @@ it currently does, which is not a test.
 across unchanged, and they are the record of the promise in §5 that Linux
 behaviour did not change.
 
-On Windows: **67 passed, 13 skipped, 0 failed.**
+**Windows: 67 passed, 13 skipped, 0 failed. Fedora 44: 59 passed, 13 skipped, 0
+failed.** Thirteen skips each way, and each way they are the other platform's
+fixture. The passed counts differ because a skipped theory counts once while a
+running one expands per `InlineData` row.
 
 ---
 
@@ -312,7 +322,7 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
    **Two things turned up on the way, both since fixed — see §5a and §5b.**
    `PathRules.Normalise` did not unify `\` and `/`, which broke `Same` on
    Windows, and the `PathRules` tests were POSIX-only while claiming otherwise.
-   The suite is green on Windows: 67 passed, 13 skipped, 0 failed.
+   Green on both: 67/13/0 on Windows, 59/13/0 on Fedora 44.
 2. ~~**`PathRules` in Core**, and route the 15 sites through it.~~ **DONE,
    31 July 2026.** `Heimdall.Core/FileSystem/PathRules.cs` answers the four
    questions this application asks about a path's shape — `IsRoot`, `Normalise`,
@@ -337,15 +347,42 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
 
 - **`dotnet build` on Linux must still pass** after every step. The conditional
   references make it possible to break the Linux build from a Windows machine
-  without noticing. **CI covers this** — `.github/workflows/build.yml` runs on
-  every push.
+  without noticing. CI covers this — `.github/workflows/build.yml` runs on every
+  push — but see §8a for the faster loop.
 - **Run the published binary on Windows**, not `dotnet run`.
 - **`HEIMDALL_TILE_DEBUG=1`** still works and is still the ground truth for
   whether a listing is virtualizing.
 - The `[heimdall]` diagnostic lines all go to **stderr** — on Windows, run from a
   terminal or they vanish.
 
----
+### 8a. Checking the other platform without waiting for CI
+
+`-p:HeimdallPlatform=` proves the *other* configuration compiles, but not that it
+behaves. **WSL closes that gap on the Windows machine** and turns a push-and-wait
+into about ten seconds:
+
+```bash
+wsl --install FedoraLinux-44          # matches the development distro
+sudo dnf install -y dotnet-sdk-10.0 git
+```
+
+**Clone inside the WSL filesystem, not `/mnt/d`.** Builds across the 9p mount are
+slow and file watching is unreliable. Cloning *from* the Windows checkout is the
+convenient way to carry a branch across, and git will refuse it as "dubious
+ownership" until the mount is declared safe — note it wants the `.git` path, not
+just the work tree:
+
+```bash
+git config --global --add safe.directory /mnt/d/git_projects/heimdall/.git
+git clone /mnt/d/git_projects/heimdall ~/heimdall
+```
+
+**What this does and does not prove.** It runs the POSIX test suite and both
+build configurations on real Linux, which is what §5's "Linux behaviour is
+unchanged" needs. It is **not** Fedora KDE: no `kdeglobals`, no icon theme, no
+`gio` or `avahi`, so theme, places and discovery fall back to built-in defaults.
+It says nothing about desktop integration, and a green run here is not a
+substitute for the published binary on a real desktop.
 
 ## 9. Things this document is not sure about
 

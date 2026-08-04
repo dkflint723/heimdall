@@ -18,7 +18,9 @@ dotnet build src/Heimdall.Ui -p:HeimdallPlatform=Linux
 ```
 
 That override is worth knowing about on Linux too — it is how you check a change
-has not broken the Windows configuration without waiting for CI.
+has not broken the Windows configuration without waiting for CI. It proves the
+other configuration *compiles*; to check that it *behaves*, WINDOWS.md §8a has a
+WSL recipe for running the Linux suite from the Windows machine.
 
 `dotnet test` is green on both, and the `PathRules` suite is split three ways —
 platform-neutral, POSIX, Windows — because a POSIX literal names something else
