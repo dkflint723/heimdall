@@ -35,6 +35,20 @@ public static class PathRules
         : StringComparison.Ordinal;
 
     /// <summary>
+    /// Reduces the two separator spellings to one, because <b>Windows accepts
+    /// both</b>: <c>C:\Users</c> and <c>C:/Users</c> are one folder, and every
+    /// comparison below is a string comparison that would otherwise call them
+    /// two.
+    ///
+    /// **A no-op on Linux**, where both constants are <c>/</c> — and that is not
+    /// merely a happy accident but the reason this goes through the platform's
+    /// own constants rather than a literal. <c>\</c> is a legal *filename*
+    /// character on Linux, so rewriting it there would rename files.
+    /// </summary>
+    private static string Unify(string path)
+        => path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+
+    /// <summary>
     /// True for <c>/</c>, and on Windows for <c>C:\</c> and a UNC share root.
     ///
     /// Asks the framework rather than comparing to a literal:
@@ -46,9 +60,13 @@ public static class PathRules
     {
         if (string.IsNullOrEmpty(path)) return false;
 
-        var root = Path.GetPathRoot(path);
+        // Unified first, or the comparison fails on spelling alone: on Windows
+        // GetPathRoot("/") answers "\", which is the same root written the other
+        // way, and a raw comparison would call "/" not-a-root.
+        var unified = Unify(path);
+        var root = Path.GetPathRoot(unified);
 
-        return !string.IsNullOrEmpty(root) && string.Equals(root, path, Comparison);
+        return !string.IsNullOrEmpty(root) && string.Equals(root, unified, Comparison);
     }
 
     /// <summary>
@@ -63,13 +81,17 @@ public static class PathRules
     public static string Normalise(string? path)
     {
         if (string.IsNullOrEmpty(path)) return "";
-        if (IsRoot(path)) return path;
 
-        var trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var unified = Unify(path);
+
+        if (IsRoot(unified)) return unified;
+
+        // One separator to trim, because Unify already removed the other.
+        var trimmed = unified.TrimEnd(Path.DirectorySeparatorChar);
 
         // Trimming can expose a root that the trailing separators were hiding,
         // e.g. "C:\\\\" or "//".
-        return trimmed.Length == 0 ? path[..1] : trimmed;
+        return trimmed.Length == 0 ? unified[..1] : trimmed;
     }
 
     /// <summary>
@@ -105,8 +127,16 @@ public static class PathRules
         return string.IsNullOrEmpty(name) ? path : name;
     }
 
-    /// <summary>Whether two paths name the same place, ignoring a trailing
-    /// separator and honouring the platform's case rules.</summary>
+    /// <summary>
+    /// Whether two paths name the same place, ignoring a trailing separator,
+    /// honouring the platform's case rules, and — on Windows — treating the two
+    /// separator spellings as one.
+    ///
+    /// All three matter here, and the third was the one originally missed:
+    /// this drives place highlighting and duplicate-tab detection, so calling
+    /// <c>C:\Users</c> and <c>C:/Users</c> different folders opened a second tab
+    /// on a folder already open.
+    /// </summary>
     public static bool Same(string? a, string? b)
         => string.Equals(Normalise(a), Normalise(b), Comparison);
 

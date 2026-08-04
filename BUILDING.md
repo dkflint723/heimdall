@@ -20,9 +20,10 @@ dotnet build src/Heimdall.Ui -p:HeimdallPlatform=Linux
 That override is worth knowing about on Linux too — it is how you check a change
 has not broken the Windows configuration without waiting for CI.
 
-**`dotnet test` currently fails 7 of 56 on Windows.** The `PathRules` assertions
-are POSIX literals, and a POSIX literal names something else here; the rules
-themselves are fine. WINDOWS.md §5b has the detail.
+`dotnet test` is green on both, and the `PathRules` suite is split three ways —
+platform-neutral, POSIX, Windows — because a POSIX literal names something else
+on Windows. Each half skips on the other's platform, so a run reports skips
+rather than failures. WINDOWS.md §5b has the detail.
 
 ---
 

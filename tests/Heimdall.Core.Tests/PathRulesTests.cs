@@ -4,122 +4,69 @@ using Xunit;
 namespace Heimdall.Core.Tests;
 
 /// <summary>
-/// `PathRules` is the foundation the Windows port stands on, and its whole
-/// promise is that **Linux behaviour did not change** when fifteen inline sites
-/// were routed through it. That promise was originally checked by porting both
-/// the old and new logic to Python and comparing — useful once, and gone the
-/// moment the terminal closed. These are the same comparisons, kept.
+/// The `PathRules` assertions that hold **on every platform**, which turns out
+/// to be a much smaller set than this file once claimed.
 ///
-/// Everything here runs on any platform: the assertions are about POSIX paths,
-/// which the rules must handle identically wherever they execute.
+/// It used to say the POSIX assertions "run on any platform: the assertions are
+/// about POSIX paths, which the rules must handle identically wherever they
+/// execute." Ten of the fifty-six failed the first time they were run on
+/// Windows. They were not finding a bug — a POSIX literal simply names
+/// something else there. Those moved to <see cref="PathRulesPosixTests"/>, with
+/// Windows equivalents in <see cref="PathRulesWindowsTests"/>.
+///
+/// What is left here is genuinely separator-independent: the virtual paths, the
+/// empty string, and null. They are also the cases with the most history —
+/// every one of them was a live bug before `PathRules` existed.
 /// </summary>
 public class PathRulesTests
 {
+    /// <summary>
+    /// A `heimdall:` path is not a filesystem path and has no root. Getting this
+    /// wrong is what enabled the Up button on the Recent Files view, where
+    /// pressing it did nothing.
+    /// </summary>
     [Theory]
-    [InlineData("/", true)]
-    [InlineData("/home", false)]
-    [InlineData("/home/flint", false)]
     [InlineData("", false)]
     [InlineData("heimdall:recent-files", false)]
-    public void IsRoot_recognises_only_the_root(string path, bool expected)
+    [InlineData("heimdall:trash", false)]
+    public void IsRoot_says_no_to_what_is_not_a_path(string path, bool expected)
         => Assert.Equal(expected, PathRules.IsRoot(path));
 
     [Theory]
-    [InlineData("/home/flint/", "/home/flint")]
-    [InlineData("/home/flint", "/home/flint")]
     [InlineData("", "")]
     [InlineData("heimdall:trash", "heimdall:trash")]
-    public void Normalise_drops_a_trailing_separator(string path, string expected)
+    public void Normalise_leaves_a_virtual_path_alone(string path, string expected)
         => Assert.Equal(expected, PathRules.Normalise(path));
-
-    /// <summary>
-    /// **A root keeps its separator.** Trimming `/` would leave an empty string,
-    /// and the Windows equivalent — `C:\` becoming `C:` — names a different place
-    /// entirely: the current directory on that drive.
-    /// </summary>
-    [Fact]
-    public void Normalise_leaves_the_root_intact()
-        => Assert.Equal("/", PathRules.Normalise("/"));
-
-    /// <summary>
-    /// The one deliberate behaviour change when this class was introduced. The
-    /// inline code it replaced turned `//` into an empty string — a path naming
-    /// nothing, which was a latent bug rather than a decision.
-    /// </summary>
-    [Fact]
-    public void Normalise_treats_a_doubled_separator_as_the_root()
-        => Assert.Equal("/", PathRules.Normalise("//"));
 
     /// <summary>
     /// **Null, never empty.** `Path.GetDirectoryName` returns an empty string for
     /// a bare name, and that exact difference once left the Up button enabled on
-    /// a virtual path where pressing it did nothing.
+    /// a virtual path where pressing it did nothing. Callers should be able to
+    /// write `Parent(p) is { } up` and trust it.
     /// </summary>
     [Theory]
-    [InlineData("/home/flint", "/home")]
-    [InlineData("/home", "/")]
-    [InlineData("/home/flint/", "/home")]
-    public void Parent_walks_up(string path, string expected)
-        => Assert.Equal(expected, PathRules.Parent(path));
-
-    [Theory]
-    [InlineData("/")]
     [InlineData("")]
     [InlineData("heimdall:recent-files")]
     public void Parent_is_null_where_there_is_nowhere_to_go(string path)
         => Assert.Null(PathRules.Parent(path));
 
-    [Theory]
-    [InlineData("/home/flint", "flint")]
-    [InlineData("/home/flint/", "flint")]
-    [InlineData("", "")]
-    public void LeafName_gives_the_last_segment(string path, string expected)
-        => Assert.Equal(expected, PathRules.LeafName(path));
-
-    /// <summary>A root has no file name, so it shows as itself rather than
-    /// blank — which is what the hardcoded "/" fallbacks used to do.</summary>
     [Fact]
-    public void LeafName_gives_the_root_back_as_itself()
-        => Assert.Equal("/", PathRules.LeafName("/"));
-
-    [Theory]
-    [InlineData("/home/flint", "/home/flint/", true)]
-    [InlineData("/home/flint", "/home/flint", true)]
-    [InlineData("/home/flint", "/home/other", false)]
-    [InlineData(null, null, true)]
-    public void Same_ignores_a_trailing_separator(string? a, string? b, bool expected)
-        => Assert.Equal(expected, PathRules.Same(a, b));
-
-    /// <summary>
-    /// The walk that replaced a loop terminating on `current == "/"` — a
-    /// comparison that is never true on Windows, so the old code would not have
-    /// stopped where it should.
-    /// </summary>
-    [Fact]
-    public void Ancestors_runs_from_the_root_down_to_the_path()
-        => Assert.Equal(
-            ["/", "/home", "/home/flint", "/home/flint/dev"],
-            PathRules.Ancestors("/home/flint/dev"));
+    public void LeafName_of_nothing_is_nothing()
+        => Assert.Equal("", PathRules.LeafName(""));
 
     [Fact]
-    public void Ancestors_of_the_root_is_just_the_root()
-        => Assert.Equal(["/"], PathRules.Ancestors("/"));
+    public void Same_treats_two_nulls_as_one_place()
+        => Assert.True(PathRules.Same(null, null));
 
     [Fact]
     public void Ancestors_of_nothing_is_empty()
         => Assert.Empty(PathRules.Ancestors(""));
 
     /// <summary>
-    /// Every step must be strictly shorter than the last, or a malformed path
-    /// could spin forever — which is precisely how the original loop failed.
+    /// A virtual path has no root to prepend, and fabricating one would name a
+    /// place that does not exist.
     /// </summary>
     [Fact]
-    public void Ancestors_terminates_and_never_repeats()
-    {
-        var levels = PathRules.Ancestors("/a/b/c/d/e");
-
-        Assert.Equal(levels.Count, levels.Distinct().Count());
-        Assert.Equal("/", levels[0]);
-        Assert.Equal("/a/b/c/d/e", levels[^1]);
-    }
+    public void Ancestors_of_a_virtual_path_is_just_itself()
+        => Assert.Equal(["heimdall:trash"], PathRules.Ancestors("heimdall:trash"));
 }
