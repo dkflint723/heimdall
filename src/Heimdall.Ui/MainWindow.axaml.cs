@@ -14,7 +14,11 @@ using Heimdall.Core.Places;
 using Heimdall.Core.Search;
 using Heimdall.Core.Session;
 using Heimdall.Core.Settings;
+#if HEIMDALL_LINUX
 using Heimdall.Linux;
+#elif HEIMDALL_WINDOWS
+using Heimdall.Windows;
+#endif
 using Heimdall.Ui.Session;
 using Heimdall.Ui.Settings;
 using Heimdall.Ui.ViewModels;
@@ -46,15 +50,37 @@ public partial class MainWindow : Window
         AppIcon.Apply(this);
 
         // The one and only place a platform type is named, and the one guard
-        // the analyser needs — the platform assemblies are annotated
-        // Linux-only, so everything inside them is free of per-call checks.
+        // the analyser needs — each platform assembly is annotated for a single
+        // OS, so everything inside them is free of per-call checks.
+        //
+        // The #if is not belt-and-braces around the runtime check. Only one
+        // platform assembly is referenced per build (see Heimdall.Ui.csproj), so
+        // the branch for the other OS would not compile at all. The runtime
+        // check still earns its place: it is what the analyser reads to allow
+        // the constructor call.
+        const string Unsupported =
+            "No platform implementation for this operating system yet.";
+
         IPlatform platform;
 
+        // Each branch carries its own else rather than sharing one after the
+        // #endif. Sharing it compiled, but left the #else arm as a dangling
+        // `else` — so a build with neither symbol reported five cascading syntax
+        // errors and buried the #error that explains what actually went wrong.
+#if HEIMDALL_LINUX
         if (OperatingSystem.IsLinux())
             platform = new LinuxPlatform(JsonSessionStore.DefaultDirectory());
         else
-            throw new PlatformNotSupportedException(
-                "No platform implementation for this operating system yet.");
+            throw new PlatformNotSupportedException(Unsupported);
+#elif HEIMDALL_WINDOWS
+        if (OperatingSystem.IsWindows())
+            platform = new WindowsPlatform(JsonSessionStore.DefaultDirectory());
+        else
+            throw new PlatformNotSupportedException(Unsupported);
+#else
+#error Heimdall.Ui references no platform assembly. One is selected from the build machine's OS, or by -p:HeimdallPlatform=Linux|Windows; see Heimdall.Ui.csproj and WINDOWS.md §2.
+        platform = null!;
+#endif
 
         _properties = platform.Properties;
         _accessEditor = platform.AccessEditor;

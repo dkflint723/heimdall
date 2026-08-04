@@ -5,8 +5,24 @@ reads the desktop's own configuration where it exists and falls back where it
 does not — but the colour scheme and icon theme come from `kdeglobals`, so on a
 non-KDE desktop it will use its built-in defaults.
 
-There is no Windows build yet: `Heimdall.Ui` references `Heimdall.Linux`
-unconditionally.
+**There is no usable Windows build yet**, but the scaffolding is in place:
+`Heimdall.Ui` picks its platform assembly from the build machine's OS, and on
+Windows the application starts, throws `NotImplementedException` from the first
+provider it touches, and stops. See [WINDOWS.md](WINDOWS.md).
+
+The choice is a `HeimdallPlatform` property, defaulted from the OS and
+overridable, so either configuration can be compiled from either machine:
+
+```bash
+dotnet build src/Heimdall.Ui -p:HeimdallPlatform=Linux
+```
+
+That override is worth knowing about on Linux too — it is how you check a change
+has not broken the Windows configuration without waiting for CI.
+
+**`dotnet test` currently fails 7 of 56 on Windows.** The `PathRules` assertions
+are POSIX literals, and a POSIX literal names something else here; the rules
+themselves are fine. WINDOWS.md §5b has the detail.
 
 ---
 

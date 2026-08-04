@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Heimdall.Windows</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Plain net10.0, not net10.0-windows, and that is a decision rather than an
+       oversight. SupportedOSPlatform on the assembly already satisfies the
+       platform analyser, and a single TFM keeps the solution buildable on Linux
+       so CI compile-checks this project on every push. Revisit when something
+       here actually needs the Windows-only BCL surface — the registry reads for
+       IThemeProvider are the first candidate. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Heimdall.Core\Heimdall.Core.csproj" />
+  </ItemGroup>
+
+</Project>
