@@ -288,6 +288,31 @@ failed.** Thirteen skips each way, and each way they are the other platform's
 fixture. The passed counts differ because a skipped theory counts once while a
 running one expands per `InlineData` row.
 
+### 5c. §5 missed two sites, and running it is what found them
+
+"All fifteen POSIX assumptions in `Heimdall.Ui` now route through `PathRules`"
+was not true. Two more surfaced on 3 August 2026 during step 3 — **neither by
+reading the code again, and neither would have been**: the first was visible in
+the window within seconds, and the second is in a converter with no test.
+
+- **`PaneViewModel.RebuildBreadcrumbs`** split `CurrentPath` on `'/'` and
+  prefixed a hardcoded `"/"` crumb. A Windows path contains no `/`, so the split
+  found nothing to break on: the whole path stayed **one unclickable crumb**,
+  sitting behind a root that does not exist there. It rendered
+  `/ / C:\Users\flint`. Now `PathRules.Ancestors`, which had answered this
+  correctly all along — `Ancestors("/x/y")` is the same three crumbs the split
+  produced, so Linux is unchanged.
+- **`FileConverters.ParentPath`** tested `parent.StartsWith(home + "/")`, so the
+  `~` abbreviation never applied on Windows. Now through `PathRules`.
+
+**The lesson is about method, not about these two.** The original sweep was a
+grep for POSIX-shaped string operations, and both of these are exactly that —
+they were missed because a grep over a large file finds what you remember to
+look for. Running the application on the target found one of them immediately.
+Assume more remain in code that has never executed on Windows: the search view,
+the properties window and the share dialog have all been compiled here and none
+has been opened.
+
 ---
 
 ## 6. NativeAOT is the constraint that will surprise you
@@ -333,11 +358,20 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
    two paths differing only in case are one folder on NTFS and two on ext4.
    **The `file://` conversion in `FileClipboard` deliberately still splits on
    `/`** — a URI is not a path, and Windows exchanges files as CF_HDROP anyway.
-3. **`IFileSystemProvider` + `IPlacesProvider`.** First light: a window that
-   lists `C:\` and has drives in the sidebar. Icons will be the drawn fallbacks
-   and that is fine.
-4. **`IApplicationLauncher`, `IFileOperations` (no trash), `ISearchProvider`.**
-   Now it is usable.
+3. ~~**`IFileSystemProvider` + `IPlacesProvider`.** First light.~~ **DONE,
+   3 August 2026.** The window lists `C:\` — 19 of 19 entries in 12 ms, every
+   Hidden or System entry correctly excluded — with Local disk (C:) and its free
+   space in the sidebar. Icons are the drawn fallbacks, as expected.
+   **It needed eleven providers, not two.** `MainWindow`'s constructor reads
+   every required member of `IPlatform` before it lists anything —
+   `ShellViewModel` takes `Operations`, `Launcher`, `Search`, `Scripts` and
+   `Templates` alongside the obvious ones — so a throwing stub anywhere meant no
+   window at all. Step 4 below was largely absorbed as a result.
+   Two more POSIX assumptions turned up on the way: see §5c.
+4. ~~**`IApplicationLauncher`, `IFileOperations` (no trash), `ISearchProvider`.**~~
+   **Absorbed into step 3**, for the reason above. Launcher is ShellExecute,
+   operations are copy/move/delete/rename with **`Trash` failing rather than
+   deleting**, and search is a managed walk with no index behind it.
 5. **`IThemeProvider`.** Cheap, and makes it stop looking alien.
 6. **Then the hard three** — trash, tags, icons — each as its own decision.
 
@@ -364,7 +398,16 @@ into about ten seconds:
 ```bash
 wsl --install FedoraLinux-44          # matches the development distro
 sudo dnf install -y dotnet-sdk-10.0 git
+sudo dnf install -y fontconfig freetype dejavu-sans-fonts libX11 libICE libSM
 ```
+
+**That second line is not optional if you want to RUN it**, only to build.
+The WSL image is minimal and ships no fontconfig, and without it the binary
+aborts in Avalonia's Skia initialisation before drawing anything — reported as
+`Unable to load shared library 'libSkiaSharp'`, whose real cause is the
+`libfontconfig.so.1: cannot open shared object file` line above it. BUILDING.md
+§4 already lists fontconfig as a runtime requirement; a desktop distro simply
+always has it. WSLg supplies the Wayland session.
 
 **Clone inside the WSL filesystem, not `/mnt/d`.** Builds across the 9p mount are
 slow and file watching is unreliable. Cloning *from* the Windows checkout is the
