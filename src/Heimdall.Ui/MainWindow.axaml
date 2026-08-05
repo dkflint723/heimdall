@@ -229,7 +229,10 @@
                           IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
                           AutomationProperties.Name="details panel for this side  (f11)"
                           ToolTip.Tip="details panel for this side  (f11)">
-              <Path Classes="stroke" Data="M0,0 H12 V12 H0 Z M8,0 V12"
+              <!-- Inset by half the stroke. Drawn on the 0..12 edges the outline
+                   is clipped to half its width on all four sides, which is why
+                   the design's own geometry starts at 0.7. -->
+              <Path Classes="stroke" Data="M0.7,0.7 H11.3 V11.3 H0.7 Z M8,0.7 V11.3"
                     StrokeThickness="1.4" Width="12" Height="12" Stretch="Uniform"/>
             </ToggleButton>
 
@@ -241,8 +244,12 @@
                           IsChecked="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit, Mode=OneWay}"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ToggleSplitCommand}"
                           AutomationProperties.Name="split view  (f3)" ToolTip.Tip="split view  (f3)">
-              <Path Classes="stroke" Data="M0,0 H12 V12 H0 Z M6,0 V12"
-                    StrokeThickness="1.4" Width="12" Height="12" Stretch="Uniform"/>
+              <!-- A 24-unit box at 13px with a 1.8 stroke, where the panel
+                   toggle is a 12-unit box at 12px with 1.4. The design draws
+                   these two at different weights on purpose: the split is the
+                   heavier mark because it divides the window, not a pane. -->
+              <Path Classes="stroke" Data="M2 2 H22 V22 H2 Z M12 2 V22"
+                    StrokeThickness="1.8" Width="13" Height="13" Stretch="Uniform"/>
             </ToggleButton>
 
             <!-- Overflow last, where an overflow menu belongs. Declared in
@@ -481,7 +488,7 @@
 
              Height is fixed rather than derived from Padding so the row does
              not grow by a pixel when the search field's border is present. -->
-        <Border DockPanel.Dock="Top" Height="40" Padding="5,0"
+        <Border DockPanel.Dock="Top" Height="40" Padding="10,0"
                 Background="{DynamicResource ChromeBrush}"
                 BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource SeparatorColour}">
@@ -536,8 +543,12 @@
                           Data="M10.5 4 a6.5 6.5 0 1 0 0 13 a6.5 6.5 0 1 0 0 -13 M15.5 15.5 L20 20"
                           Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.9"
                           StrokeLineCap="Round" Fill="Transparent"/>
+                    <!-- Dimmer than the placeholder beside it. The design sets
+                         the hint below the placeholder rather than level with
+                         it, so the field reads as one thing with a note on it
+                         rather than two labels competing. -->
                     <TextBlock DockPanel.Dock="Right" Text="ctrl f" Margin="6,0,8,0"
-                               VerticalAlignment="Center"
+                               VerticalAlignment="Center" Opacity="0.7"
                                FontSize="{DynamicResource FontSizeTiny}"
                                Foreground="{DynamicResource ViewDimText}"
                                IsVisible="{Binding !$parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.HasQuery}"/>
@@ -1624,18 +1635,31 @@
          Printing it in both places meant the window stated the same fact twice
          and, in split view, disagreed with itself when the two sides were on
          different drives. -->
-    <Border DockPanel.Dock="Bottom" Height="26" Padding="8,0"
+    <Border DockPanel.Dock="Bottom" Height="26" Padding="12,0"
             Background="{DynamicResource ChromeBrush}"
             IsVisible="{Binding ShowStatusBar}"
             BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SeparatorColour}">
-      <DockPanel VerticalAlignment="Center">
-        <TextBlock Text="{Binding ActiveSummary}" Margin="0,0,14,0"
+      <!-- Status, a dot, then the summary — the order and the separator the
+           design draws. Both dim: with free space gone there is no longer a
+           primary reading here to set one of them above the other, and one
+           bright item next to one faint one made the bar look unfinished. -->
+      <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+        <!-- The count leads, as the design draws it. ActiveStatus is usually
+             empty — it carries transient messages — so the separator is bound
+             to IT rather than to the count: gated the other way round, an empty
+             status left a dot floating at the start of the bar with nothing in
+             front of it. -->
+        <TextBlock Text="{Binding ActiveSummary}"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Foreground="{DynamicResource ViewDimText}"/>
+        <TextBlock Text="·" Opacity="0.55"
+                   IsVisible="{Binding ActiveStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    FontSize="{DynamicResource FontSizeSmall}"
                    Foreground="{DynamicResource ViewDimText}"/>
         <TextBlock Text="{Binding ActiveStatus}"
                    FontSize="{DynamicResource FontSizeSmall}"
-                   Foreground="{DynamicResource ViewText}"/>
-      </DockPanel>
+                   Foreground="{DynamicResource ViewDimText}"/>
+      </StackPanel>
     </Border>
 
     <Border DockPanel.Dock="Bottom" Padding="8,5" Background="{DynamicResource AppBackground}"
@@ -1707,6 +1731,7 @@
                       <TextBlock Text="{Binding Label, Converter={x:Static vm:FileConverters.Upper}}"
                                  Margin="12,0,12,6"
                                  FontSize="{DynamicResource FontSizeTiny}"
+                                 FontWeight="Medium"
                                  LetterSpacing="1.1"
                                  Foreground="{DynamicResource ViewDimText}"/>
                       <ItemsControl ItemsSource="{Binding Places}">
@@ -1791,7 +1816,7 @@
                          converter: this is a literal, and the converter exists
                          for Place.Label, which is data. -->
                     <TextBlock Text="NETWORK" FontSize="{DynamicResource FontSizeTiny}"
-                               LetterSpacing="1.1"
+                               FontWeight="Medium" LetterSpacing="1.1"
                                Foreground="{DynamicResource ViewDimText}"/>
                   </DockPanel>
 
@@ -1852,7 +1877,7 @@
                             AutomationProperties.Name="connect to a server" ToolTip.Tip="connect to a server"
                             Command="{Binding ConnectCommand}"/>
                     <TextBlock Text="REMOTE" FontSize="{DynamicResource FontSizeTiny}"
-                               LetterSpacing="1.1"
+                               FontWeight="Medium" LetterSpacing="1.1"
                                Foreground="{DynamicResource ViewDimText}"/>
                   </DockPanel>
                   <ItemsControl ItemsSource="{Binding Sidebar.Remotes}">
@@ -1977,7 +2002,7 @@
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Text="RECENT" Margin="12,0,12,6"
                              FontSize="{DynamicResource FontSizeTiny}"
-                             LetterSpacing="1.1"
+                             FontWeight="Medium" LetterSpacing="1.1"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <Button Command="{Binding Sidebar.OpenRecentFilesCommand}"
                           Background="Transparent" BorderThickness="0"
@@ -2029,7 +2054,7 @@
                 <StackPanel Margin="0,14,0,0" IsVisible="{Binding Sidebar.HasTags}">
                   <TextBlock Text="TAGS" Margin="12,0,12,6"
                              FontSize="{DynamicResource FontSizeTiny}"
-                             LetterSpacing="1.1"
+                             FontWeight="Medium" LetterSpacing="1.1"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
                     <ItemsControl.ItemTemplate>
