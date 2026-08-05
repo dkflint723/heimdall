@@ -84,6 +84,23 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         if (_search is null) { Status = "no search backend"; return; }
 
+        // Debounce. Every keystroke past the second used to start a full walk
+        // immediately, so typing "claude" launched six of them — each one
+        // cancelled by the next, but only after it had already begun reading
+        // directories. Measured on Windows, an unindexed walk of a profile
+        // directory is about five seconds, so the wasted work was most of it.
+        //
+        // NOT ConfigureAwait(false): this resumes on the dispatcher, and
+        // everything after it touches observable properties the UI is bound to.
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
         IsSearching = true;
         Status = $"searching ({BackendName})…";
 

@@ -1,4 +1,6 @@
+using System.IO.Enumeration;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Heimdall.Core.FileSystem;
 using Heimdall.Core.Search;
 
@@ -31,43 +33,55 @@ public sealed class WindowsSearchProvider : ISearchProvider
     /// </summary>
     public bool SupportsContentSearch => false;
 
+    /// <summary>
+    /// **The walk runs on the thread pool, not on the caller's thread.**
+    ///
+    /// This is the whole reason for the channel. An async iterator runs
+    /// synchronously on whoever starts enumerating it until it hits a real
+    /// await — and the caller starts enumerating from the UI thread. The first
+    /// version's only await was a Task.Yield() after each match, which both ran
+    /// every directory read between matches on the dispatcher and captured the
+    /// dispatcher as its continuation context, so it kept coming back. A search
+    /// over a home directory made the window stop redrawing and drop keystrokes
+    /// while it ran.
+    ///
+    /// Same shape as <see cref="WindowsFileSystemProvider.EnumerateAsync"/>,
+    /// for the same reason: a directory read is a blocking syscall and must not
+    /// be on the dispatcher.
+    /// </summary>
     public async IAsyncEnumerable<FileEntry> SearchAsync(
         SearchQuery query,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        var root = query.ScopePath;
-
-        // A null scope means "everywhere indexed", and with no index the honest
-        // reading is every fixed drive.
-        var roots = string.IsNullOrEmpty(root) ? FixedDrives() : [root];
-
-        var comparison = query.CaseSensitive
-            ? StringComparison.Ordinal
-            : StringComparison.OrdinalIgnoreCase;
-
-        var found = 0;
-
-        foreach (var start in roots)
-        {
-            foreach (var path in Walk(start, ct))
+        var channel = Channel.CreateBounded<FileEntry>(
+            new BoundedChannelOptions(256)
             {
-                if (found >= query.MaxResults) yield break;
-                ct.ThrowIfCancellationRequested();
+                SingleReader = true,
+                SingleWriter = true,
+                FullMode = BoundedChannelFullMode.Wait,
+            });
 
-                var name = Path.GetFileName(path);
-                if (!name.Contains(query.Text, comparison)) continue;
-
-                if (Describe(path) is not { } entry) continue;
-
-                found++;
-                yield return entry;
-
-                // The walk is synchronous and CPU-bound on the directory reads.
-                // Yielding lets the panel paint what it has rather than
-                // appearing frozen until the first batch is complete.
-                await Task.Yield();
+        var producer = Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var entry in Walk(query, ct))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    await channel.Writer.WriteAsync(entry, ct).ConfigureAwait(false);
+                }
+                channel.Writer.Complete();
             }
-        }
+            catch (Exception ex)
+            {
+                channel.Writer.Complete(ex);
+            }
+        }, ct);
+
+        await foreach (var entry in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            yield return entry;
+
+        await producer.ConfigureAwait(false);
     }
 
     private static List<string> FixedDrives()
@@ -86,25 +100,48 @@ public sealed class WindowsSearchProvider : ISearchProvider
     }
 
     /// <summary>
-    /// An explicit stack rather than <c>SearchOption.AllDirectories</c>.
-    /// The built-in recursive enumeration throws out the whole walk when it hits
-    /// one unreadable directory, and on a Windows drive it always does —
-    /// System Volume Information sits at the root of C:\ and is denied to a
-    /// non-elevated process. IgnoreInaccessible covers the enumeration itself,
-    /// but a per-directory loop is what keeps a failure local.
+    /// One directory read per directory, and nothing else.
+    ///
+    /// **No follow-up stat per entry.** `FileEntry`'s own rule is that nothing
+    /// on it may require a second call, and this walk broke it twice: once to
+    /// ask <c>File.GetAttributes</c> whether an entry was a directory, and again
+    /// to build a <see cref="FileInfo"/> for each match. Three syscalls per file
+    /// where the directory read already carried the answer.
+    /// <see cref="FileSystemEnumerable{TResult}"/> hands over name, attributes,
+    /// length and timestamp from the entry the OS already returned.
+    ///
+    /// **Reparse points are skipped**, which is correctness rather than speed:
+    /// a profile directory is full of legacy junctions — "Application Data",
+    /// "My Documents" — that point back at their own ancestors, and a recursive
+    /// walk that follows them does not terminate.
     /// </summary>
-    private static IEnumerable<string> Walk(string root, CancellationToken ct)
+    private static IEnumerable<FileEntry> Walk(SearchQuery query, CancellationToken ct)
     {
+        var comparison = query.CaseSensitive
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+
+        // A null scope means "everywhere indexed", and with no index the honest
+        // reading is every fixed drive.
+        var roots = string.IsNullOrEmpty(query.ScopePath)
+            ? FixedDrives()
+            : [query.ScopePath];
+
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = false,
             IgnoreInaccessible = true,
-            AttributesToSkip = FileAttributes.System,
+            AttributesToSkip = FileAttributes.System | FileAttributes.ReparsePoint,
             ReturnSpecialDirectories = false,
         };
 
+        // An explicit stack rather than SearchOption.AllDirectories: the built-in
+        // recursive enumeration abandons the whole walk on one unreadable
+        // directory, and on a Windows drive it always meets one.
         var pending = new Stack<string>();
-        pending.Push(root);
+        foreach (var root in roots) pending.Push(root);
+
+        var found = 0;
 
         while (pending.Count > 0)
         {
@@ -112,55 +149,50 @@ public sealed class WindowsSearchProvider : ISearchProvider
 
             var directory = pending.Pop();
 
-            IEnumerable<string> entries;
-            try { entries = Directory.EnumerateFileSystemEntries(directory, "*", options); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
-
             // Materialised per directory so a mid-enumeration failure costs this
             // folder rather than everything still on the stack.
-            List<string> batch;
-            try { batch = entries.ToList(); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
-
-            foreach (var entry in batch)
+            List<FileEntry> entries;
+            try
             {
+                entries = new FileSystemEnumerable<FileEntry>(directory, Transform, options)
+                    .ToList();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var entry in entries)
+            {
+                if (entry.IsDirectory) pending.Push(entry.FullPath);
+
+                if (!entry.Name.Contains(query.Text, comparison)) continue;
+
                 yield return entry;
 
-                var isDirectory = false;
-                try { isDirectory = (File.GetAttributes(entry) & FileAttributes.Directory) != 0; }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-
-                if (isDirectory) pending.Push(entry);
+                if (++found >= query.MaxResults) yield break;
             }
         }
     }
 
-    private static FileEntry? Describe(string path)
+    private static FileEntry Transform(ref FileSystemEntry entry) => new(
+        Name: entry.FileName.ToString(),
+        FullPath: entry.ToFullPath(),
+        Length: entry.IsDirectory ? 0 : entry.Length,
+        LastWriteTime: entry.LastWriteTimeUtc,
+        Flags: ToFlags(ref entry));
+
+    private static EntryFlags ToFlags(ref FileSystemEntry entry)
     {
-        try
-        {
-            var attributes = File.GetAttributes(path);
-            var isDirectory = (attributes & FileAttributes.Directory) != 0;
+        var flags = EntryFlags.None;
+        var attributes = entry.Attributes;
 
-            var flags = EntryFlags.None;
-            if (isDirectory) flags |= EntryFlags.Directory;
-            if ((attributes & FileAttributes.Hidden) != 0) flags |= EntryFlags.Hidden;
-            if ((attributes & FileAttributes.System) != 0) flags |= EntryFlags.System;
-            if ((attributes & FileAttributes.ReparsePoint) != 0) flags |= EntryFlags.Symlink;
-            if ((attributes & FileAttributes.ReadOnly) != 0) flags |= EntryFlags.ReadOnly;
+        if (entry.IsDirectory) flags |= EntryFlags.Directory;
+        if ((attributes & FileAttributes.Hidden) != 0) flags |= EntryFlags.Hidden;
+        if ((attributes & FileAttributes.System) != 0) flags |= EntryFlags.System;
+        if ((attributes & FileAttributes.ReparsePoint) != 0) flags |= EntryFlags.Symlink;
+        if ((attributes & FileAttributes.ReadOnly) != 0) flags |= EntryFlags.ReadOnly;
 
-            var info = new FileInfo(path);
-
-            return new FileEntry(
-                Path.GetFileName(path),
-                path,
-                isDirectory ? 0 : info.Length,
-                info.LastWriteTimeUtc,
-                flags);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
+        return flags;
     }
 }
