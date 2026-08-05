@@ -556,8 +556,16 @@
                              local:FocusBehavior.FocusWhen="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.IsSearching}"
                              PlaceholderText="Search files"
                              Background="Transparent" BorderThickness="0"
-                             MinHeight="0" Padding="0" VerticalContentAlignment="Center"
+                             MinHeight="0" Padding="0,3" VerticalContentAlignment="Center"
                              FontSize="{DynamicResource FontSizeSmall}"/>
+                    <!-- Padding="0" collapsed the text presenter to the font's
+                         line box, and the selection highlight is drawn to the
+                         presenter while the glyphs sit on their own baseline —
+                         so ascenders and descenders spilled a pixel past the
+                         highlight. MinHeight stays 0, or Fluent's default 32
+                         would burst the 26px field. -->
+                    <!-- Nothing below this line: DockPanel gives its last child
+                         the remaining space, and that has to be the TextBox. -->
                   </DockPanel>
                 </Border>
 
