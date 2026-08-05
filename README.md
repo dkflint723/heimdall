@@ -4,13 +4,14 @@
 
 # Heimdall
 
-**A fast, keyboard-friendly file manager for Linux desktops.**
+**A fast, keyboard-friendly file manager for Linux and Windows desktops.**
 
 It reads your desktop's own settings — icon theme, click behaviour, trash,
 bookmarks and file types — rather than keeping its own copy of them.
 
 Colours and typeface are currently pinned to the design reference rather than
 following your desktop; see [Fitting your desktop](#fitting-your-desktop).
+Windows is newer than Linux and still has gaps — see [Status](#status).
 
 </div>
 
@@ -205,8 +206,10 @@ individually, if you would rather not set them again every time.
 
 ## Installing
 
-Take the tarball from the
-[releases page](https://github.com/dkflint723/heimdall/releases):
+Both builds are on the
+[releases page](https://github.com/dkflint723/heimdall/releases).
+
+### Linux
 
 ```bash
 tar -xzf heimdall-linux-x64.tar.gz
@@ -220,6 +223,19 @@ RPM for Fedora on the same page.
 systems, so a copy installed this way keeps running even after you upgrade the
 package — `heimdall --version` prints the version and the file it came from, which
 is the quickest way to tell which one you have.
+
+### Windows
+
+Run `heimdall-<version>-win-x64-setup.exe`.
+
+It installs for your account only, so it needs no administrator and raises no
+UAC prompt, and it removes from *Installed apps* like anything else. The first
+page offers *Install for all users* if you would rather have it on the machine
+than the account.
+
+Uninstalling leaves your tabs, pinned places, folder views and tags where they
+are, under `%LOCALAPPDATA%\heimdall` — so reinstalling or upgrading picks up
+where you left off. Delete that folder by hand if you want them gone.
 
 **To build it yourself** you need the .NET 10 SDK:
 

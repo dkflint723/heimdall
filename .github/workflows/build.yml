@@ -175,10 +175,14 @@ jobs:
           "$ISCC" //DAppVersion="$VERSION_NUMBER" //DPayload="$(cygpath -w "$PWD/$P")" \
             packaging/heimdall.iss
 
-          SETUP="dist/heimdall-$VERSION_NUMBER-win-x64-setup.exe"
-          test -f "$SETUP" || { echo "$SETUP was not produced"; exit 1; }
+          SETUP="heimdall-$VERSION_NUMBER-win-x64-setup.exe"
+          test -f "dist/$SETUP" || { echo "dist/$SETUP was not produced"; exit 1; }
 
-          sha256sum "$SETUP" | tee "$SETUP.sha256"
+          # Hashed from inside dist/, so the file records a bare filename. Doing
+          # it from here would write "dist/heimdall-...exe", and the artifact and
+          # the release asset both flatten that away -- leaving a checksum file
+          # that cannot be checked anywhere it is actually downloaded to.
+          ( cd dist && sha256sum "$SETUP" | tee "$SETUP.sha256" )
 
       - uses: actions/upload-artifact@v7
         with:
