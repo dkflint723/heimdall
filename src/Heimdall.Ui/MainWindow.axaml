@@ -249,7 +249,7 @@
                    these two at different weights on purpose: the split is the
                    heavier mark because it divides the window, not a pane. -->
               <Path Classes="stroke" Data="M2 2 H22 V22 H2 Z M12 2 V22"
-                    StrokeThickness="1.8" Width="13" Height="13" Stretch="Uniform"/>
+                    StrokeThickness="0.98" Width="13" Height="13" Stretch="Uniform"/>
             </ToggleButton>
 
             <!-- Overflow last, where an overflow menu belongs. Declared in
@@ -503,7 +503,7 @@
                     Command="{Binding ActiveTab.GoBackCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoBack}">
               <Path Data="M15 5 L8 12 L15 19" Stroke="{DynamicResource ViewText}"
-                    StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                    StrokeThickness="1.2" StrokeLineCap="Round" StrokeJoin="Round"
                     Width="16" Height="16" Stretch="Uniform"/>
             </Button>
             <Button DockPanel.Dock="Left" Width="30"
@@ -512,7 +512,7 @@
                     Command="{Binding ActiveTab.GoForwardCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoForward}">
               <Path Data="M9 5 L16 12 L9 19" Stroke="{DynamicResource ViewText}"
-                    StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                    StrokeThickness="1.2" StrokeLineCap="Round" StrokeJoin="Round"
                     Width="16" Height="16" Stretch="Uniform"/>
             </Button>
             <Button DockPanel.Dock="Left" Width="30" Margin="0,0,6,0"
@@ -521,7 +521,7 @@
                     Command="{Binding ActiveTab.GoUpCommand}"
                     IsEnabled="{Binding ActiveTab.CanGoUp}">
               <Path Data="M5 15 L12 8 L19 15" Stroke="{DynamicResource ViewText}"
-                    StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                    StrokeThickness="1.2" StrokeLineCap="Round" StrokeJoin="Round"
                     Width="16" Height="16" Stretch="Uniform"/>
             </Button>
 
@@ -541,7 +541,7 @@
                   <DockPanel>
                     <Path DockPanel.Dock="Left" Margin="8,0" Width="13" Height="13" Stretch="Uniform"
                           Data="M10.5 4 a6.5 6.5 0 1 0 0 13 a6.5 6.5 0 1 0 0 -13 M15.5 15.5 L20 20"
-                          Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.9"
+                          Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.03"
                           StrokeLineCap="Round" Fill="Transparent"/>
                     <!-- Dimmer than the placeholder beside it. The design sets
                          the hint below the placeholder rather than level with
@@ -615,7 +615,7 @@
                             ToolTip.Tip="filter the listing  (ctrl+i)">
                 <StackPanel Orientation="Horizontal" Spacing="7">
                   <Path Data="M3 6 H21 M6.5 12 H17.5 M10 18 H14"
-                        Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.9"
+                        Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.03"
                         StrokeLineCap="Round" Fill="Transparent"
                         Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center"/>
                   <TextBlock Text="Filter" FontSize="{DynamicResource FontSizeSmall}"
@@ -1763,7 +1763,7 @@
                                         Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                                         VerticalAlignment="Center"
                                         Stroke="{DynamicResource ViewText}"
-                                        StrokeThickness="1.6"
+                                        StrokeThickness="{DynamicResource IconStroke}"
                                         StrokeLineCap="Round" StrokeJoin="Round"
                                         th:SidebarIcon.Token="{Binding Icon}"/>
                                   <TextBlock DockPanel.Dock="Right" Text="{Binding CapacityShort}"
@@ -1847,7 +1847,7 @@
                                   Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                                   VerticalAlignment="Center"
                                   Stroke="{DynamicResource ViewText}"
-                                  StrokeThickness="1.6"
+                                  StrokeThickness="{DynamicResource IconStroke}"
                                   StrokeLineCap="Round" StrokeJoin="Round"
                                   th:SidebarIcon.Token="server"/>
                           <StackPanel Orientation="Horizontal" Spacing="6">
@@ -1910,7 +1910,7 @@
                                   Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                                   VerticalAlignment="Center"
                                   Stroke="{DynamicResource ViewText}"
-                                  StrokeThickness="1.6"
+                                  StrokeThickness="{DynamicResource IconStroke}"
                                   StrokeLineCap="Round" StrokeJoin="Round"
                                   th:SidebarIcon.Token="server"/>
                           <StackPanel Orientation="Horizontal" Spacing="6">
@@ -1945,7 +1945,7 @@
                           Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                           VerticalAlignment="Center"
                           Stroke="{DynamicResource ViewText}"
-                          StrokeThickness="1.6"
+                          StrokeThickness="{DynamicResource IconStroke}"
                           StrokeLineCap="Round" StrokeJoin="Round"
                           th:SidebarIcon.Token="server"/>
                     <TextBlock Text="connect to server…"
@@ -2016,7 +2016,7 @@
                             Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                             VerticalAlignment="Center"
                             Stroke="{DynamicResource ViewText}"
-                            StrokeThickness="1.6"
+                            StrokeThickness="{DynamicResource IconStroke}"
                             StrokeLineCap="Round" StrokeJoin="Round"
                             th:SidebarIcon.Token="recent-files"/>
                       <TextBlock Text="Recent files"
@@ -2037,7 +2037,7 @@
                             Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
                             VerticalAlignment="Center"
                             Stroke="{DynamicResource ViewText}"
-                            StrokeThickness="1.6"
+                            StrokeThickness="{DynamicResource IconStroke}"
                             StrokeLineCap="Round" StrokeJoin="Round"
                             th:SidebarIcon.Token="recent-locations"/>
                       <TextBlock Text="Recent locations"

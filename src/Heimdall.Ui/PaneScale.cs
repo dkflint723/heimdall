@@ -37,6 +37,18 @@ public static class PaneScale
         ("ThumbSize", 24),
         ("IconSize", 16),
         ("TileSize", 72),
+
+        // **Stroke width is not a stretch-invariant in Avalonia, and it is in
+        // SVG.** The design draws its glyphs on a 24-unit viewBox at 16px with
+        // stroke-width 1.6, and SVG scales the stroke with the box: it lands at
+        // 1.6 * 16/24 = 1.067 device pixels. Avalonia's StrokeThickness is in
+        // device pixels already and Stretch does not touch it, so the same 1.6
+        // drew half again too heavy and every icon read bolder than the mock.
+        //
+        // Derived here rather than written as 1.067 in the markup so it keeps
+        // its ratio to IconSize through the pane zoom — the two are scaled by
+        // the same factor, which is the whole point of it being a metric.
+        ("IconStroke", 16.0 / 24.0 * 1.6),
     ];
 
     /// <summary>
