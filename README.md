@@ -6,9 +6,11 @@
 
 **A fast, keyboard-friendly file manager for Linux desktops.**
 
-It looks like part of your desktop because it reads your desktop's own settings —
-colour scheme, accent, icon theme and font — and follows them as you change them,
-without a restart.
+It reads your desktop's own settings — icon theme, click behaviour, trash,
+bookmarks and file types — rather than keeping its own copy of them.
+
+Colours and typeface are currently pinned to the design reference rather than
+following your desktop; see [Fitting your desktop](#fitting-your-desktop).
 
 </div>
 
@@ -153,15 +155,22 @@ Heimdall reads your desktop's configuration rather than keeping its own copy:
 
 | | |
 |---|---|
-| **Colour scheme and accent** | follows your desktop, live |
+| **Colour scheme and accent** | currently the design reference's dark palette |
 | **Icon theme** | your themed icons, with hand-drawn fallbacks where a theme has none |
-| **Font** | the desktop font, or pick your own with a live preview |
+| **Font** | currently the design reference's typeface |
 | **Single or double click** | follows your desktop setting |
 | **Trash** | the standard desktop trash, shared with every other application |
 | **Bookmarks** | the same places list your other file manager uses |
 | **File types** | your system's own file-type database |
 
-Change a theme and Heimdall changes with it. Nothing needs restarting.
+Change your icon theme and Heimdall changes with it. Nothing needs restarting.
+
+Colour and typeface are the exception, and a deliberate one. The machinery to
+follow your scheme, accent and font live is all still there and still runs — it
+is then overwritten by `ApplyDesignScheme`, so the window matches the design
+reference exactly, in its dark palette, on every desktop and in every scheme.
+Reverting that is a one-line change, documented where it happens in
+`src/Heimdall.Ui/ThemeApplier.cs`.
 
 ## Keyboard
 
