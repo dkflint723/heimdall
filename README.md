@@ -230,8 +230,13 @@ version numbers should not be trusted yet. Known gaps:
 - **In a git submodule the marks wait for a refresh** after a commit rather than
   updating on their own.
 - **Selection mode, configurable shortcuts and multiple windows** are not built.
-- **Linux only for now.** The Windows port is designed and its platform-neutral
-  groundwork is done; nothing Windows-specific is built yet.
+- **Windows is new and incomplete.** It browses, lists drives, opens files,
+  copies, moves, renames, recycles, tags, and follows the system light/dark mode
+  and accent. Missing: the Trash view and *Restore* — recycled files come back
+  from Explorer, not from here — the shell's per-file icons, and *Open with* as
+  a list rather than the system picker. Tags are kept in an index beside the
+  application rather than on the file, so unlike on Linux they do not travel
+  with it. See [WINDOWS.md](WINDOWS.md).
 
 Bugs and ideas are welcome on the
 [issue tracker](https://github.com/dkflint723/heimdall/issues).
