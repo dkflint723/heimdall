@@ -790,6 +790,13 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowStatusBar));
         OnPropertyChanged(nameof(ShowFreeSpace));
 
+        // Free space now prints on the drive rows rather than in the status bar,
+        // and those rows are separate objects — raising it here does not reach
+        // them, so each one is told directly.
+        foreach (var group in Sidebar.Groups)
+            foreach (var item in group.Places)
+                item.RaiseCapacityVisibilityChanged();
+
         OnPropertyChanged(nameof(ShowCopyToInMenu));
         OnPropertyChanged(nameof(ShowMoveToInMenu));
         OnPropertyChanged(nameof(ShowSortByInMenu));

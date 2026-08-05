@@ -28,10 +28,42 @@ public static class FocusBehavior
     public static bool GetFocusOnVisible(Control target)
         => target.GetValue(FocusOnVisibleProperty);
 
+    /// <summary>
+    /// Focuses a control when a bound flag goes true, where
+    /// <see cref="FocusOnVisibleProperty"/> waits for it to become visible.
+    ///
+    /// The search field needs this because it is always visible on the active
+    /// side, so there is no appearance to hang the focus on. Ctrl+F set
+    /// SidebarViewModel.IsSearching and nothing consumed it: the gesture
+    /// revealed the sidebar and left the caret wherever it already was.
+    /// </summary>
+    public static readonly AttachedProperty<bool> FocusWhenProperty =
+        AvaloniaProperty.RegisterAttached<Control, bool>("FocusWhen", typeof(FocusBehavior));
+
+    public static void SetFocusWhen(Control target, bool value)
+        => target.SetValue(FocusWhenProperty, value);
+
+    public static bool GetFocusWhen(Control target)
+        => target.GetValue(FocusWhenProperty);
+
     static FocusBehavior()
     {
         HookCommitOnEnter();
         HookLostFocus();
+
+        FocusWhenProperty.Changed.AddClassHandler<Control>((control, args) =>
+        {
+            if (args.NewValue is not true) return;
+
+            // Posted rather than immediate: the flag can go true before the
+            // control is attached and laid out, and Focus() on a detached
+            // control is a no-op that fails silently.
+            Dispatcher.UIThread.Post(() =>
+            {
+                control.Focus();
+                if (control is TextBox box) box.SelectAll();
+            }, DispatcherPriority.Input);
+        });
 
         FocusOnVisibleProperty.Changed.AddClassHandler<Control>((control, args) =>
         {

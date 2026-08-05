@@ -156,11 +156,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnNaturalSortingChanged(bool value)
         => OnPropertyChanged(nameof(CanSetCaseSensitivity));
 
-    /// <summary>Free space sits inside the status bar, so it goes with it.</summary>
-    public bool CanSetFreeSpace => ShowStatusBar;
-
-    partial void OnShowStatusBarChanged(bool value)
-        => OnPropertyChanged(nameof(CanSetFreeSpace));
+    // CanSetFreeSpace was here, gating the free-space checkbox on the status
+    // bar because that is where the number used to print. It prints on the
+    // sidebar's drive rows now, so hiding the status bar would have greyed out
+    // a setting governing something still on screen.
 
     [ObservableProperty] private bool _showPreviews;
     [ObservableProperty] private bool _confirmMoveToTrash;
