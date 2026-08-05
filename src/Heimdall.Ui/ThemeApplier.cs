@@ -200,6 +200,78 @@ public static class ThemeApplier
             $"[heimdall] font: configured='{chosen ?? "(none)"}' "
             + $"desktop='{palette?.FontFamily ?? "(none)"}' "
             + $"applied='{target["AppFontFamily"]}'");
+
+        ApplyDesignScheme(target);
+    }
+
+    /// <summary>
+    /// **The design reference's own palette and typeface, applied verbatim,
+    /// last, over everything the desktop said.**
+    ///
+    /// This is a deliberate reversal of the rule the rest of this file exists
+    /// to enforce. Everything above derives its colours from the desktop scheme
+    /// so the window looks like part of it; the handoff says the mock's hex
+    /// values are "reference values only" for exactly that reason. Requested
+    /// anyway, and requested twice: a 1:1 match with
+    /// `Heimdall Window.dc.html`, which cannot be had while the desktop still
+    /// gets a vote.
+    ///
+    /// **What this costs**, so it is not discovered later: the window no longer
+    /// follows the desktop's colour scheme, accent or font, and it does not
+    /// follow a light scheme at all — these values are the mock's dark one. The
+    /// live re-theming still runs, it just gets overwritten here.
+    ///
+    /// **To revert**, delete the call above. Nothing else references this.
+    /// </summary>
+    private static void ApplyDesignScheme(IResourceDictionary target)
+    {
+        static SolidColorBrush B(string hex) => new(Color.Parse(hex));
+
+        // Surfaces, from the mock's own markup: window and chrome #2b2b32,
+        // sidebar #26262d, listing and the active tab #23232b.
+        target["AppBackground"] = B("#2b2b32");
+        target["ChromeBrush"] = B("#2b2b32");
+        target["PanelBackground"] = B("#26262d");
+        target["ViewBackground"] = B("#23232b");
+        target["ViewAlternate"] = B("#26262d");
+
+        target["WindowText"] = B("#e7e7ec");
+        target["ViewText"] = B("#e7e7ec");
+        target["ViewDimText"] = B("#8b8b95");
+
+        target["SeparatorColour"] = B("#34343c");
+        target["BorderColour"] = B("#34343c");
+
+        // The checked segment is rgba(109,109,240,.22) in the mock, which is
+        // the tint AccentDim is bound to everywhere it is used.
+        target["AccentColour"] = B("#6d6df0");
+        target["AccentDim"] = B("#386d6df0");
+
+        target["ChipBackground"] = B("#31313a");
+        target["HoverBackground"] = B("#14ffffff");
+
+        target["SelectionBackground"] = B("#4d6d6df0");
+        target["SelectionText"] = B("#e7e7ec");
+
+        // The mock sets 'JetBrains Mono'. What is installed here is the Nerd
+        // Font packaging of the same typeface, so it is named first and the
+        // plain name kept behind it for a machine that has that instead.
+        target["AppFontFamily"] =
+            new FontFamily("JetBrainsMono NF, JetBrains Mono, Cascadia Mono, Consolas");
+
+        // Re-derived from the new text colours. The ramp above was built from
+        // the desktop's and would otherwise be left pointing at a palette that
+        // is no longer on screen — it goes through AgeConverters rather than the
+        // resource dictionary, so overwriting the brushes does not reach it.
+        if (target["ViewText"] is ISolidColorBrush t && target["ViewDimText"] is ISolidColorBrush d)
+        {
+            var ramp = new IBrush[6];
+            for (var i = 0; i < 6; i++)
+                ramp[i] = new SolidColorBrush(
+                    Blend(t.Color, d.Color, Math.Min(i / 5.0 * 1.25, 1.0)));
+
+            ViewModels.AgeConverters.SetRamp(ramp);
+        }
     }
 
     private static Color Lighten(Color c, double amount) => Blend(c, Colors.White, amount);
