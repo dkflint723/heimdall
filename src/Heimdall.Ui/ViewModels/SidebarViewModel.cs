@@ -121,9 +121,13 @@ public sealed partial class SidebarViewModel : ObservableObject
     /// viewed. Set by the shell — the sidebar has no idea which pane is active
     /// and should not learn.
     ///
-    /// Compared with a trailing separator trimmed: `/home/flint` and
-    /// `/home/flint/` are the same place, and a place list that quietly fails to
-    /// highlight Home because of one character would be baffling.
+    /// Compared with PathRules.Same, which is what that method is for: a
+    /// trailing separator trimmed, both separators treated as one, and the
+    /// platform's own case rule applied. `/home/flint` and `/home/flint/` are
+    /// the same place, so are `C:\Users` and `C:/Users`, and on Windows so are
+    /// `C:\Users\flint` and the `c:\users\flint` a user may well have typed
+    /// into the location bar. A place list that quietly fails to highlight Home
+    /// over any of those would be baffling.
     /// </summary>
     public void SetCurrentPath(string? path)
     {
@@ -131,7 +135,7 @@ public sealed partial class SidebarViewModel : ObservableObject
 
         foreach (var group in Groups)
         foreach (var item in group.Places)
-            item.IsCurrent = Normalise(item.Path) == wanted;
+            item.IsCurrent = PathRules.Same(item.Path, path);
 
         CurrentPath = wanted;
         OnPropertyChanged(nameof(IsRecentFilesCurrent));
