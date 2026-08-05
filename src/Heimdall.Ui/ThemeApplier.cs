@@ -129,28 +129,24 @@ public static class ThemeApplier
             target["PanelBackground"] = new SolidColorBrush(
                 dark ? Darken(back.Color, 0.22) : Darken(back.Color, 0.05));
 
-            // Bevels. One pixel lighter along a top edge and one pixel darker
-            // along the bottom is what makes a band read as a raised surface —
-            // it is the cheapest depth cue there is and needs no shadows.
+            // Bevels. Kept in the table because nothing else derives from them
+            // and a future bevel may want them, but **no longer used as region
+            // borders** — every band boundary is a SeparatorColour hairline now.
+            // With both present each band had two edges, a light one from here
+            // and a dark one from EdgeShadow, which is one more than a boundary
+            // needs.
             target["EdgeHighlight"] = new SolidColorBrush(
                 Color.FromArgb(dark ? (byte)22 : (byte)150, 255, 255, 255));
 
             target["EdgeShadow"] = new SolidColorBrush(
                 Color.FromArgb(dark ? (byte)90 : (byte)40, 0, 0, 0));
 
-            // A shallow vertical gradient on the chrome bands. Flat fills are
-            // what read as "flat"; two stops a few percent apart are enough to
-            // suggest a surface catching light without looking glossy.
-            target["ChromeBrush"] = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-                GradientStops =
-                {
-                    new GradientStop(Lighten(back.Color, dark ? 0.06 : 0.03), 0),
-                    new GradientStop(Darken(back.Color, dark ? 0.05 : 0.02), 1),
-                },
-            };
+            // Flat, where this used to be a two-stop vertical gradient. The
+            // gradient and the bevel pair were doing the same job as the seams,
+            // and a flat fill survives an arbitrary desktop scheme better than a
+            // derived ±5% ramp does — on a scheme already near black or white
+            // the ramp clips and the "surface" reads as a smudge.
+            target["ChromeBrush"] = new SolidColorBrush(back.Color);
         }
 
         // The file-age ramp is derived here rather than hardcoded: fixed pale

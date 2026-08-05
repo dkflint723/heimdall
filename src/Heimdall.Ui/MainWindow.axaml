@@ -52,7 +52,7 @@
       <Border DockPanel.Dock="Right" IsVisible="{Binding IsInfoUsable}"
               Width="{Binding InfoWidth}"
               Background="{DynamicResource PanelBackground}"
-              BorderThickness="1,0,0,0" BorderBrush="{DynamicResource EdgeShadow}">
+              BorderThickness="1,0,0,0" BorderBrush="{DynamicResource SeparatorColour}">
         <ScrollViewer>
           <StackPanel Margin="14" Spacing="10">
 
@@ -145,75 +145,125 @@
                any of them re-evaluates all three — the three layouts are one choice,
                the panel is a different one, and the rule says so. -->
 
-          <ToggleButton DockPanel.Dock="Right" Margin="0,0,0,4"
-                        VerticalAlignment="Center" Padding="7,3"
-                        IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
-                        AutomationProperties.Name="details panel for this side  (f11)" ToolTip.Tip="details panel for this side  (f11)">
-            <Path Data="M0,0 H12 V12 H0 Z M8,0 V12"
-                  Stroke="{DynamicResource ViewText}" StrokeThickness="1.4"
-                  Fill="Transparent" Width="12" Height="12" Stretch="Uniform"/>
-          </ToggleButton>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8"
+                      VerticalAlignment="Center" Margin="0,0,0,6">
 
-          <!-- A rule, not a Separator: that control draws horizontally and
-               would render as a stray dash here. -->
-          <Border DockPanel.Dock="Right" Width="1" Margin="7,2,7,6"
-                  Background="{DynamicResource SeparatorColour}"/>
+            <StackPanel.Styles>
+              <Style Selector="ToggleButton.seg">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="8,5"/>
+                <Setter Property="CornerRadius" Value="3"/>
+                <Setter Property="MinWidth" Value="0"/>
+              </Style>
+              <!-- Fluent paints the checked state on the ContentPresenter, so
+                   the tint has to be set there or the theme's solid accent wins
+                   and the option reads as a button rather than a selection. -->
+              <Style Selector="ToggleButton.seg /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="CornerRadius" Value="3"/>
+              </Style>
+              <Style Selector="ToggleButton.seg:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+              </Style>
+              <Style Selector="ToggleButton.seg:checked /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentDim}"/>
+              </Style>
+              <Style Selector="ToggleButton.seg Path">
+                <Setter Property="Fill" Value="{DynamicResource ViewDimText}"/>
+              </Style>
+              <Style Selector="ToggleButton.seg:checked Path">
+                <Setter Property="Fill" Value="{DynamicResource AccentColour}"/>
+              </Style>
+              <!-- Stroked glyphs take the same colours on the other property. -->
+              <Style Selector="ToggleButton.seg Path.stroke">
+                <Setter Property="Fill" Value="Transparent"/>
+                <Setter Property="Stroke" Value="{DynamicResource ViewDimText}"/>
+              </Style>
+              <Style Selector="ToggleButton.seg:checked Path.stroke">
+                <Setter Property="Stroke" Value="{DynamicResource AccentColour}"/>
+              </Style>
+            </StackPanel.Styles>
 
-          <ToggleButton DockPanel.Dock="Right" Margin="0,0,2,4"
-                        VerticalAlignment="Center" Padding="7,3"
-                        IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
-                        Command="{Binding ActiveTab.ShowAsGridCommand}"
-                        AutomationProperties.Name="large grid" ToolTip.Tip="large grid">
-            <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
-                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
-          </ToggleButton>
+            <!-- The three layouts are ONE choice, so they share one container
+                 instead of being three loose buttons next to a rule.
 
-          <ToggleButton DockPanel.Dock="Right" Margin="0,0,2,4"
-                        VerticalAlignment="Center" Padding="7,3"
-                        IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
-                        IsEnabled="{Binding ActiveTab.CanUseCompact}"
-                        Command="{Binding ActiveTab.ShowAsCompactCommand}"
-                        AutomationProperties.Name="small grid" ToolTip.Tip="small grid">
-            <!-- Two short columns: the shape of the layout itself. -->
-            <Path Data="M0,0 H5 V2 H0 Z M0,4 H5 V6 H0 Z M0,8 H5 V10 H0 Z M7,0 H12 V2 H7 Z M7,4 H12 V6 H7 Z M7,8 H12 V10 H7 Z"
-                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
-          </ToggleButton>
+                 ToggleButton rather than RadioButton throughout: Fluent draws a
+                 RadioButton's selection circle BESIDE its content, so three
+                 layout buttons rendered as six glyphs and the row read as twice
+                 as many controls in no obvious order. A ToggleButton shows the
+                 same state as a background. They still behave as one choice
+                 because IsChecked is OneWay-bound to the view mode, so setting
+                 any of them re-evaluates all three. -->
+            <Border Background="{DynamicResource ChipBackground}" CornerRadius="4" Padding="2">
+              <StackPanel Orientation="Horizontal">
+                <ToggleButton Classes="seg"
+                              IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
+                              Command="{Binding ActiveTab.ShowAsDetailsCommand}"
+                              AutomationProperties.Name="list" ToolTip.Tip="list">
+                  <Path Data="M0,0 H12 V2 H0 Z M0,5 H12 V7 H0 Z M0,10 H12 V12 H0 Z"
+                        Width="12" Height="12" Stretch="Uniform"/>
+                </ToggleButton>
+                <ToggleButton Classes="seg"
+                              IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
+                              IsEnabled="{Binding ActiveTab.CanUseCompact}"
+                              Command="{Binding ActiveTab.ShowAsCompactCommand}"
+                              AutomationProperties.Name="small grid" ToolTip.Tip="small grid">
+                  <!-- Two short columns: the shape of the layout itself. -->
+                  <Path Data="M0,0 H5 V2 H0 Z M0,4 H5 V6 H0 Z M0,8 H5 V10 H0 Z M7,0 H12 V2 H7 Z M7,4 H12 V6 H7 Z M7,8 H12 V10 H7 Z"
+                        Width="12" Height="12" Stretch="Uniform"/>
+                </ToggleButton>
+                <ToggleButton Classes="seg"
+                              IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
+                              Command="{Binding ActiveTab.ShowAsGridCommand}"
+                              AutomationProperties.Name="large grid" ToolTip.Tip="large grid">
+                  <Path Data="M0,0 H5 V5 H0 Z M7,0 H12 V5 H7 Z M0,7 H5 V12 H0 Z M7,7 H12 V12 H7 Z"
+                        Width="12" Height="12" Stretch="Uniform"/>
+                </ToggleButton>
+              </StackPanel>
+            </Border>
 
-          <ToggleButton DockPanel.Dock="Right" Margin="0,0,2,4"
-                        VerticalAlignment="Center" Padding="7,3"
-                        IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
-                        Command="{Binding ActiveTab.ShowAsDetailsCommand}"
-                        AutomationProperties.Name="list" ToolTip.Tip="list">
-            <Path Data="M0,0 H12 V2 H0 Z M0,5 H12 V7 H0 Z M0,10 H12 V12 H0 Z"
-                  Fill="{DynamicResource ViewText}" Width="12" Height="12" Stretch="Uniform"/>
-          </ToggleButton>
+            <!-- The details panel is a different choice, so it sits outside the
+                 chip rather than behind a rule. -->
+            <ToggleButton Classes="seg"
+                          IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
+                          AutomationProperties.Name="details panel for this side  (f11)"
+                          ToolTip.Tip="details panel for this side  (f11)">
+              <Path Classes="stroke" Data="M0,0 H12 V12 H0 Z M8,0 V12"
+                    StrokeThickness="1.4" Width="12" Height="12" Stretch="Uniform"/>
+            </ToggleButton>
 
-          <Button DockPanel.Dock="Right" Content="&#x2261;"
-                  FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
-                  Margin="6,0,0,4" VerticalAlignment="Center"
-                  Background="Transparent" BorderThickness="0"
-                  AutomationProperties.Name="view options" ToolTip.Tip="view options">
+            <!-- Split is window-level state inside a per-group template, hence
+                 the $parent[Window] hop. It moved here from the sidebar header:
+                 it is a view decision and belongs with the other view decisions,
+                 not above a list of places it has nothing to do with. -->
+            <ToggleButton Classes="seg"
+                          IsChecked="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit, Mode=OneWay}"
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ToggleSplitCommand}"
+                          AutomationProperties.Name="split view  (f3)" ToolTip.Tip="split view  (f3)">
+              <Path Classes="stroke" Data="M0,0 H12 V12 H0 Z M6,0 V12"
+                    StrokeThickness="1.4" Width="12" Height="12" Stretch="Uniform"/>
+            </ToggleButton>
+
+            <!-- Overflow last, where an overflow menu belongs. Declared in
+                 VISUAL order along with everything above it — these used to be
+                 four DockPanel.Dock="Right" children, where the first declared
+                 sat furthest right and the source read backwards from the
+                 screen. -->
+            <Button Content="&#x2261;"
+                    FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
+                    Foreground="{DynamicResource ViewDimText}"
+                    Background="Transparent" BorderThickness="0"
+                    AutomationProperties.Name="view options" ToolTip.Tip="view options">
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight">
                 <StackPanel Width="230" Spacing="10" Margin="4">
 
-                  <TextBlock Text="Layout" FontSize="{DynamicResource FontSizeTiny}"
-                             Foreground="{DynamicResource ViewDimText}"/>
-                  <UniformGrid Columns="2">
-                    <RadioButton Content="List" GroupName="layout"
-                                 FontSize="{DynamicResource FontSizeSmall}"
-                                 IsChecked="{Binding ActiveTab.IsDetailsView, Mode=OneWay}"
-                                  Command="{Binding ActiveTab.ShowAsDetailsCommand}"/>
-                    <RadioButton Content="Compact" GroupName="layout"
-                               FontSize="{DynamicResource FontSizeSmall}"
-                               IsChecked="{Binding ActiveTab.IsCompactView, Mode=OneWay}"
-                        IsEnabled="{Binding ActiveTab.CanUseCompact}"
-                                Command="{Binding ActiveTab.ShowAsCompactCommand}"/>
-                  <RadioButton Content="Grid" GroupName="layout"
-                                 FontSize="{DynamicResource FontSizeSmall}"
-                                 IsChecked="{Binding ActiveTab.IsGridView, Mode=OneWay}"
-                                  Command="{Binding ActiveTab.ShowAsGridCommand}"/>
-                  </UniformGrid>
+                  <!-- The Layout radio group was here. The segmented control in
+                       the bar above is the same choice, one click away and
+                       always visible, so keeping it here as well meant two
+                       controls for one decision that could disagree on which
+                       looked authoritative. -->
 
                   <CheckBox Content="Details panel  (f11)"
                             FontSize="{DynamicResource FontSizeSmall}"
@@ -325,7 +375,10 @@
                 </StackPanel>
               </Flyout>
             </Button.Flyout>
-          </Button>
+            </Button>
+
+          </StackPanel>
+
           <!-- Scrolled, and that is the fix rather than a nicety.
                A horizontal StackPanel measures its children with INFINITE width
                and does not clip, so the strip grew past the space the DockPanel
@@ -357,15 +410,19 @@
                    forwards it, and the visible box stays tight when it does not. -->
               <Style Selector="TabStripItem /template/ ContentPresenter">
                 <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="CornerRadius" Value="6,6,0,0"/>
-                <Setter Property="Padding" Value="18,11"/>
-                <!-- The thickness is reserved HERE, transparent, so selecting a
-                     tab changes only the brush. Adding the border in the
-                     :selected style alone shifted that tab's label a pixel right
-                     and down — the standing rule is that a per-state style may
-                     change colour and the visibility of an overlaid element and
-                     nothing that affects layout. -->
-                <Setter Property="BorderThickness" Value="1,1,1,0"/>
+                <Setter Property="CornerRadius" Value="4,4,0,0"/>
+                <Setter Property="Padding" Value="16,9"/>
+                <!-- Zero in the BASE style, and zero in every state. The
+                     selected tab used to draw a bevel here; with the chrome flat
+                     the only thing carrying the tab metaphor is ViewBackground
+                     against ChromeBrush, so a border would be a second, weaker
+                     answer to a question already answered.
+                     The thickness stays declared rather than dropped because the
+                     standing rule is that a per-state style may change colour and
+                     the visibility of an overlaid element and nothing that
+                     affects layout — stating it at 0 here is what keeps that
+                     true if a state ever wants a brush again. -->
+                <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="BorderBrush" Value="Transparent"/>
               </Style>
               <Style Selector="TabStripItem:pointerover /template/ ContentPresenter">
@@ -376,7 +433,6 @@
               </Style>
               <Style Selector="TabStripItem:selected /template/ ContentPresenter">
                 <Setter Property="Background" Value="{DynamicResource ViewBackground}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource EdgeHighlight}"/>
               </Style>
             </TabStrip.Styles>
             <TabStrip.ItemTemplate>
@@ -419,27 +475,156 @@
         </Border>
 
         <!-- One path bar per side, Dolphin-style: clickable ancestors, with
-             an editable box behind them for typing or pasting a path. -->
-        <Border DockPanel.Dock="Top" Padding="6,5"
+             an editable box behind them for typing or pasting a path — and now
+             the search field and the filter, which is why it is a toolbar
+             rather than a path strip.
+
+             Height is fixed rather than derived from Padding so the row does
+             not grow by a pixel when the search field's border is present. -->
+        <Border DockPanel.Dock="Top" Height="40" Padding="5,0"
                 Background="{DynamicResource ChromeBrush}"
                 BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource EdgeShadow}">
+                BorderBrush="{DynamicResource SeparatorColour}">
           <DockPanel>
-            <Button DockPanel.Dock="Left" Content="&#x2190;" Width="30" Margin="0,0,2,0"
+            <!-- Stroked chevrons rather than arrow glyphs: they take the icon
+                 scale and the icon weight, so they stop reading as text set in
+                 the middle of a toolbar. Disabled state stays the control's own
+                 opacity. -->
+            <Button DockPanel.Dock="Left" Width="30"
                     Background="Transparent" BorderThickness="0"
                     AutomationProperties.Name="back  (alt+left)" ToolTip.Tip="back  (alt+left)"
                     Command="{Binding ActiveTab.GoBackCommand}"
-                    IsEnabled="{Binding ActiveTab.CanGoBack}"/>
-            <Button DockPanel.Dock="Left" Content="&#x2192;" Width="30" Margin="0,0,2,0"
+                    IsEnabled="{Binding ActiveTab.CanGoBack}">
+              <Path Data="M15 5 L8 12 L15 19" Stroke="{DynamicResource ViewText}"
+                    StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                    Width="16" Height="16" Stretch="Uniform"/>
+            </Button>
+            <Button DockPanel.Dock="Left" Width="30"
                     Background="Transparent" BorderThickness="0"
                     AutomationProperties.Name="forward  (alt+right)" ToolTip.Tip="forward  (alt+right)"
                     Command="{Binding ActiveTab.GoForwardCommand}"
-                    IsEnabled="{Binding ActiveTab.CanGoForward}"/>
-            <Button DockPanel.Dock="Left" Content="&#x2191;" Width="30" Margin="0,0,6,0"
+                    IsEnabled="{Binding ActiveTab.CanGoForward}">
+              <Path Data="M9 5 L16 12 L9 19" Stroke="{DynamicResource ViewText}"
+                    StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                    Width="16" Height="16" Stretch="Uniform"/>
+            </Button>
+            <Button DockPanel.Dock="Left" Width="30" Margin="0,0,6,0"
                     Background="Transparent" BorderThickness="0"
                     AutomationProperties.Name="up one folder  (alt+up)" ToolTip.Tip="up one folder  (alt+up)"
                     Command="{Binding ActiveTab.GoUpCommand}"
-                    IsEnabled="{Binding ActiveTab.CanGoUp}"/>
+                    IsEnabled="{Binding ActiveTab.CanGoUp}">
+              <Path Data="M5 15 L12 8 L19 15" Stroke="{DynamicResource ViewText}"
+                    StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round"
+                    Width="16" Height="16" Stretch="Uniform"/>
+            </Button>
+
+            <!-- Right cluster: search, then filter. Declared before the crumbs
+                 so the crumbs, as the last child, still take the remaining
+                 width. -->
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4"
+                        VerticalAlignment="Center">
+
+              <!-- ONE search per window, so it renders on the active side only.
+                   The split's two path bars would otherwise show the same query
+                   twice and leave "which box am I typing in" ambiguous. -->
+              <Panel IsVisible="{Binding IsActiveGroup}">
+                <Border x:Name="SearchBox" Width="230" Height="26" CornerRadius="4"
+                        Background="{DynamicResource ViewBackground}"
+                        BorderThickness="1" BorderBrush="{DynamicResource SeparatorColour}">
+                  <DockPanel>
+                    <Path DockPanel.Dock="Left" Margin="8,0" Width="13" Height="13" Stretch="Uniform"
+                          Data="M10.5 4 a6.5 6.5 0 1 0 0 13 a6.5 6.5 0 1 0 0 -13 M15.5 15.5 L20 20"
+                          Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.9"
+                          StrokeLineCap="Round" Fill="Transparent"/>
+                    <TextBlock DockPanel.Dock="Right" Text="ctrl f" Margin="6,0,8,0"
+                               VerticalAlignment="Center"
+                               FontSize="{DynamicResource FontSizeTiny}"
+                               Foreground="{DynamicResource ViewDimText}"
+                               IsVisible="{Binding !$parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.HasQuery}"/>
+                    <TextBox Text="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.Query}"
+                             local:FocusBehavior.FocusWhen="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.IsSearching}"
+                             PlaceholderText="Search files"
+                             Background="Transparent" BorderThickness="0"
+                             MinHeight="0" Padding="0" VerticalContentAlignment="Center"
+                             FontSize="{DynamicResource FontSizeSmall}"/>
+                  </DockPanel>
+                </Border>
+
+                <!-- Results in a popup under the field, not in the sidebar. They
+                     used to replace the places list, so searching took away the
+                     thing you navigate with. -->
+                <Popup PlacementTarget="{Binding #SearchBox}"
+                       Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                       IsLightDismissEnabled="True"
+                       IsOpen="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.HasQuery, Mode=OneWay}">
+                  <Border Width="520" MaxHeight="420" CornerRadius="4" Padding="0,6"
+                          Background="{DynamicResource PanelBackground}"
+                          BorderThickness="1" BorderBrush="{DynamicResource SeparatorColour}">
+                    <DockPanel>
+                      <TextBlock DockPanel.Dock="Top"
+                                 Text="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.Status}"
+                                 Margin="12,2,12,6" TextWrapping="Wrap"
+                                 FontSize="{DynamicResource FontSizeTiny}"
+                                 Foreground="{DynamicResource ViewDimText}"/>
+                      <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.Results}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="fs:FileEntry">
+                              <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.OpenCommand}"
+                                      CommandParameter="{Binding}"
+                                      Background="Transparent" BorderThickness="0"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                      Padding="12,7">
+                                <StackPanel>
+                                  <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBase}"
+                                             TextTrimming="CharacterEllipsis"/>
+                                  <TextBlock Text="{Binding FullPath}" FontSize="{DynamicResource FontSizeTiny}"
+                                             Foreground="{DynamicResource ViewDimText}"
+                                             TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                              </Button>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </ScrollViewer>
+                    </DockPanel>
+                  </Border>
+                </Popup>
+              </Panel>
+
+              <!-- Filter, inline. It used to be a band of its own that appeared
+                   on Ctrl+I and shoved the whole listing down; here the chip
+                   becomes the field and nothing moves. -->
+              <ToggleButton Padding="8,3" MinWidth="0" CornerRadius="4"
+                            Background="Transparent" BorderThickness="0"
+                            IsChecked="{Binding ActiveTab.IsFilterVisible, Mode=OneWay}"
+                            Command="{Binding ActiveTab.ToggleFilterCommand}"
+                            IsVisible="{Binding !ActiveTab.IsFilterVisible}"
+                            AutomationProperties.Name="filter the listing  (ctrl+i)"
+                            ToolTip.Tip="filter the listing  (ctrl+i)">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <Path Data="M3 6 H21 M6.5 12 H17.5 M10 18 H14"
+                        Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.9"
+                        StrokeLineCap="Round" Fill="Transparent"
+                        Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center"/>
+                  <TextBlock Text="Filter" FontSize="{DynamicResource FontSizeSmall}"
+                             Foreground="{DynamicResource ViewDimText}" VerticalAlignment="Center"/>
+                </StackPanel>
+              </ToggleButton>
+
+              <TextBox Width="200" Height="26" MinHeight="0" Padding="8,0" CornerRadius="4"
+                       VerticalContentAlignment="Center"
+                       IsVisible="{Binding ActiveTab.IsFilterVisible}"
+                       Text="{Binding ActiveTab.FilterText}"
+                       local:FocusBehavior.FocusOnVisible="True"
+                       PlaceholderText="filter — esc to clear"
+                       FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Escape" Command="{Binding ActiveTab.ClearFilterCommand}"/>
+                </TextBox.KeyBindings>
+              </TextBox>
+
+            </StackPanel>
 
             <Panel>
               <!-- The double-click target sits BEHIND the crumbs and fills the
@@ -515,22 +700,9 @@
           </DockPanel>
         </Border>
 
-        <Border DockPanel.Dock="Top" Padding="6,4" Background="{DynamicResource AppBackground}"
-                IsVisible="{Binding ActiveTab.IsFilterVisible}">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Text="filter" FontSize="{DynamicResource FontSizeSmall}"
-                       Opacity="0.5" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding ActiveTab.FilterText}" Width="280"
-                     local:FocusBehavior.FocusOnVisible="True"
-                     FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
-              <TextBox.KeyBindings>
-                <KeyBinding Gesture="Escape" Command="{Binding ActiveTab.ClearFilterCommand}"/>
-              </TextBox.KeyBindings>
-            </TextBox>
-            <TextBlock Text="esc to clear" FontSize="{DynamicResource FontSizeSmall}"
-                       Opacity="0.35" VerticalAlignment="Center"/>
-          </StackPanel>
-        </Border>
+        <!-- The filter's own band was here. It appeared on Ctrl+I and pushed
+             the listing down by its full height, so turning on a filter moved
+             every row you were looking at. It is a field in the path bar now. -->
 
         <!-- The only cue for which half takes the next keystroke, so it has to
              be visible but quiet. -->
@@ -906,7 +1078,7 @@
                    The whole band only exists in the trash listing. -->
               <Border DockPanel.Dock="Top" Padding="12,6"
                       Background="{DynamicResource ChromeBrush}"
-                      BorderThickness="0,0,0,1" BorderBrush="{DynamicResource EdgeShadow}"
+                      BorderThickness="0,0,0,1" BorderBrush="{DynamicResource SeparatorColour}"
                       IsVisible="{Binding IsTrashListing}">
                 <StackPanel Orientation="Horizontal" Spacing="8"
                             HorizontalAlignment="Right">
@@ -931,7 +1103,7 @@
                    Without it the column labels float on the same plane as the
                    rows they describe. -->
               <Border DockPanel.Dock="Top" Padding="0,4" Background="{DynamicResource ChromeBrush}"
-                      BorderThickness="0,1,0,1" BorderBrush="{DynamicResource EdgeShadow}"
+                      BorderThickness="0,1,0,1" BorderBrush="{DynamicResource SeparatorColour}"
                       IsVisible="{Binding IsDetailsView}">
                 <!-- Headings sort. The sort state existed, was persisted per
                      tab, and had no control anywhere that could set it. -->
@@ -1447,14 +1619,16 @@
 
 
 
-    <Border DockPanel.Dock="Bottom" Padding="8,4" Background="{DynamicResource ChromeBrush}"
+    <!-- Free space is gone from here: it is one number about one drive, and the
+         drive row in the sidebar now prints it beside the drive it describes.
+         Printing it in both places meant the window stated the same fact twice
+         and, in split view, disagreed with itself when the two sides were on
+         different drives. -->
+    <Border DockPanel.Dock="Bottom" Height="26" Padding="8,0"
+            Background="{DynamicResource ChromeBrush}"
             IsVisible="{Binding ShowStatusBar}"
-            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource EdgeHighlight}">
-      <DockPanel>
-        <TextBlock DockPanel.Dock="Right" Text="{Binding ActiveTab.FreeSpace}"
-                   IsVisible="{Binding ShowFreeSpace}"
-                   FontSize="{DynamicResource FontSizeSmall}"
-                   Foreground="{DynamicResource ViewDimText}"/>
+            BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SeparatorColour}">
+      <DockPanel VerticalAlignment="Center">
         <TextBlock Text="{Binding ActiveSummary}" Margin="0,0,14,0"
                    FontSize="{DynamicResource FontSizeSmall}"
                    Foreground="{DynamicResource ViewDimText}"/>
@@ -1499,112 +1673,88 @@
          workspace layout is that the things you organise by — places, tags,
          devices — are never behind a panel toggle. -->
     <Border DockPanel.Dock="Left" Background="{DynamicResource PanelBackground}"
-            BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EdgeShadow}"
+            BorderThickness="0,0,1,0" BorderBrush="{DynamicResource SeparatorColour}"
             Width="{Binding Sidebar.Width}"
             IsVisible="{Binding Sidebar.IsPanelVisible}">
       <DockPanel>
 
-        <Border DockPanel.Dock="Top" Padding="10,10,10,6">
-          <DockPanel>
-            <!-- Split is window-level, so it lives in a window-level place
-                 rather than owning a toolbar row of its own. -->
-            <ToggleButton DockPanel.Dock="Right" Margin="6,0,0,0" Padding="7,3"
-                          Content="&#x25EB;" FontSize="{DynamicResource FontSizeBase}"
-                          IsChecked="{Binding IsSplit, Mode=OneWay}"
-                          Command="{Binding ToggleSplitCommand}"
-                          AutomationProperties.Name="split view  (f3)" ToolTip.Tip="split view  (f3)"/>
-            <TextBox Text="{Binding Sidebar.Search.Query}"
-                     PlaceholderText="Search files"
-                     FontSize="{DynamicResource FontSizeBase}"/>
-          </DockPanel>
-        </Border>
+        <!-- No header. The search box moved to the pane toolbar, next to the
+             path it searches under, and the split toggle to the view cluster
+             where the other view decisions live — neither had anything to do
+             with the list of places underneath them. That reclaims 46px and the
+             sidebar now starts at its first group heading. -->
 
         <ScrollViewer>
           <StackPanel Margin="0,0,0,12">
 
-            <!-- Search results take over the sidebar while a query is live,
-                 rather than opening a separate panel. -->
-            <StackPanel IsVisible="{Binding Sidebar.Search.HasQuery}">
-              <TextBlock Text="{Binding Sidebar.Search.Status}" Margin="12,4,12,6"
-                         FontSize="{DynamicResource FontSizeTiny}"
-                         Foreground="{DynamicResource ViewDimText}" TextWrapping="Wrap"/>
-              <ItemsControl ItemsSource="{Binding Sidebar.Search.Results}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="fs:FileEntry">
-                    <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.OpenCommand}"
-                            CommandParameter="{Binding}"
-                            Background="Transparent" BorderThickness="0"
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            Padding="12,7">
-                      <StackPanel>
-                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeBase}"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding FullPath}" FontSize="{DynamicResource FontSizeTiny}"
-                                   Foreground="{DynamicResource ViewDimText}"
-                                   TextTrimming="CharacterEllipsis"/>
-                      </StackPanel>
-                    </Button>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
+            <!-- The search results that used to live here are now a popup under
+                 the toolbar field. They replaced the places list while a query
+                 was live, which meant searching took away the thing you
+                 navigate with — and the way back was to clear a field you might
+                 still want. The places list no longer changes for any reason. -->
 
-            <StackPanel IsVisible="{Binding !Sidebar.Search.HasQuery}">
+            <StackPanel>
 
               <ItemsControl ItemsSource="{Binding Sidebar.Groups}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:PlaceGroupViewModel">
-                    <StackPanel Margin="0,8,0,0">
-                      <TextBlock Text="{Binding Label}" Margin="12,0,12,4"
-                                 FontSize="{DynamicResource FontSizeSmall}"
+                    <StackPanel Margin="0,14,0,0">
+                      <!-- Upper-cased through a converter: Place.Label is data
+                           read off the desktop's own places list and must never
+                           be rewritten to make a heading look right. The
+                           tracking is what separates the heading from its rows,
+                           so the group needs no rule above it. -->
+                      <TextBlock Text="{Binding Label, Converter={x:Static vm:FileConverters.Upper}}"
+                                 Margin="12,0,12,6"
+                                 FontSize="{DynamicResource FontSizeTiny}"
+                                 LetterSpacing="1.1"
                                  Foreground="{DynamicResource ViewDimText}"/>
                       <ItemsControl ItemsSource="{Binding Places}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:PlaceItemViewModel">
                             <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
                                     CommandParameter="{Binding Path}"
-                                    Background="Transparent" BorderThickness="0"
+                                    Background="{Binding IsCurrent, Converter={x:Static vm:FileConverters.CurrentRowFill}}"
+                                    BorderThickness="0"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
-                                    Padding="12,7" Opacity="{Binding Opacity}">
+                                    Padding="12,6" Opacity="{Binding Opacity}">
                               <StackPanel>
-                                <!-- Which place is open, shown the same way the
-                                     settings dialog shows the current page: a
-                                     3px accent bar at the left edge. Same
-                                     geometry, same brush, so the two read as one
-                                     idea rather than two. -->
-                                <!-- The icon shares a LINE with the label rather
-                                     than centring against the whole row. A drive
-                                     row is three lines tall — label, bar, free
-                                     space — so a centred icon floated halfway
-                                     down it, level with nothing. Bottom-aligned
-                                     inside this line, the icon rests on the same
-                                     edge as the label at any font size, which a
-                                     hardcoded offset would not survive. -->
+                                <!-- ONE line: bar, icon, label, free space. The
+                                     drive row used to be three lines tall, which
+                                     is why the icon had to bottom-align inside
+                                     its own line — a centred icon floated
+                                     halfway down the row, level with nothing.
+                                     At one line the whole row centres and that
+                                     workaround goes.
+                                     The accent bar alone is a 2x14px mark at
+                                     this height, so the current row also takes a
+                                     wash of the accent as its background. -->
                                 <DockPanel>
-                                  <Border DockPanel.Dock="Left" Width="3" Margin="0,2,6,2" CornerRadius="2"
+                                  <Border DockPanel.Dock="Left" Width="2" Margin="0,1,8,1"
                                         Background="{DynamicResource AccentColour}"
                                         IsVisible="{Binding IsCurrent}"/>
-                                  <Path DockPanel.Dock="Left" Margin="0,0,9,0"
+                                  <Path DockPanel.Dock="Left" Margin="0,0,10,0"
                                         Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" Stretch="Uniform"
-                                        VerticalAlignment="Bottom"
+                                        VerticalAlignment="Center"
                                         Stroke="{DynamicResource ViewText}"
                                         StrokeThickness="1.6"
                                         StrokeLineCap="Round" StrokeJoin="Round"
                                         th:SidebarIcon.Token="{Binding Icon}"/>
+                                  <TextBlock DockPanel.Dock="Right" Text="{Binding CapacityShort}"
+                                             VerticalAlignment="Center" Margin="8,0,0,0"
+                                             FontSize="{DynamicResource FontSizeTiny}"
+                                             Foreground="{DynamicResource ViewDimText}"
+                                             IsVisible="{Binding ShowCapacity}"
+                                             ToolTip.Tip="{Binding CapacityText}"/>
                                   <TextBlock Text="{Binding Label}"
-                                             VerticalAlignment="Bottom"
+                                             VerticalAlignment="Center"
                                              FontSize="{DynamicResource FontSizeBase}"
                                              TextTrimming="CharacterEllipsis"/>
                                 </DockPanel>
                                 <ProgressBar Value="{Binding UsedFraction}" Maximum="1"
-                                             Height="2" Margin="25,4,10,0"
-                                             IsVisible="{Binding HasCapacity}"/>
-                                <TextBlock Text="{Binding CapacityText}"
-                                           Margin="25,0,0,0"
-                                           FontSize="{DynamicResource FontSizeTiny}"
-                                           Foreground="{DynamicResource ViewDimText}"
-                                           IsVisible="{Binding HasCapacity}"/>
+                                             Height="2" Margin="10,6,0,0"
+                                             IsVisible="{Binding ShowCapacity}"/>
                               </StackPanel>
                             </Button>
                           </DataTemplate>
@@ -1637,7 +1787,11 @@
                             AutomationProperties.Name="share a folder from this machine" ToolTip.Tip="share a folder from this machine"
                             IsVisible="{Binding CanShare}"
                             Command="{Binding RequestShareCommand}"/>
-                    <TextBlock Text="network" FontSize="{DynamicResource FontSizeSmall}"
+                    <!-- Written upper-case rather than run through the Upper
+                         converter: this is a literal, and the converter exists
+                         for Place.Label, which is data. -->
+                    <TextBlock Text="NETWORK" FontSize="{DynamicResource FontSizeTiny}"
+                               LetterSpacing="1.1"
                                Foreground="{DynamicResource ViewDimText}"/>
                   </DockPanel>
 
@@ -1697,7 +1851,8 @@
                             FontSize="{DynamicResource FontSizeTiny}"
                             AutomationProperties.Name="connect to a server" ToolTip.Tip="connect to a server"
                             Command="{Binding ConnectCommand}"/>
-                    <TextBlock Text="remote" FontSize="{DynamicResource FontSizeSmall}"
+                    <TextBlock Text="REMOTE" FontSize="{DynamicResource FontSizeTiny}"
+                               LetterSpacing="1.1"
                                Foreground="{DynamicResource ViewDimText}"/>
                   </DockPanel>
                   <ItemsControl ItemsSource="{Binding Sidebar.Remotes}">
@@ -1820,8 +1975,9 @@
                      shown, unlike tags and frequent: these two are places that
                      exist whether or not they currently hold anything. -->
                 <StackPanel Margin="0,14,0,0">
-                  <TextBlock Text="recent" Margin="12,0,12,4"
-                             FontSize="{DynamicResource FontSizeSmall}"
+                  <TextBlock Text="RECENT" Margin="12,0,12,6"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             LetterSpacing="1.1"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <Button Command="{Binding Sidebar.OpenRecentFilesCommand}"
                           Background="Transparent" BorderThickness="0"
@@ -1871,8 +2027,9 @@
                      request; the rationale for the old position was that tags
                      are a way of organising and belonged with the places. -->
                 <StackPanel Margin="0,14,0,0" IsVisible="{Binding Sidebar.HasTags}">
-                  <TextBlock Text="tags" Margin="12,0,12,4"
-                             FontSize="{DynamicResource FontSizeSmall}"
+                  <TextBlock Text="TAGS" Margin="12,0,12,6"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             LetterSpacing="1.1"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
                     <ItemsControl.ItemTemplate>

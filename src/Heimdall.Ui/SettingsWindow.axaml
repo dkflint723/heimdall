@@ -169,10 +169,11 @@
                       FontSize="{DynamicResource FontSizeSmall}"
                       IsChecked="{Binding ShowStatusBar}"/>
 
-            <CheckBox Content="Show free space"
-                      Margin="24,0,0,0"
+            <!-- No longer indented under the status bar, and no longer disabled
+                 with it: the number moved to the sidebar's drive rows, so the
+                 two settings are now independent. -->
+            <CheckBox Content="Free space on drive rows"
                       FontSize="{DynamicResource FontSizeSmall}"
-                      IsEnabled="{Binding CanSetFreeSpace}"
                       IsChecked="{Binding ShowFreeSpace}"/>
           </StackPanel>
 

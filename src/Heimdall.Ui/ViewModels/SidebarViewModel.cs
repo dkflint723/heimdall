@@ -186,11 +186,22 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public bool HasTags => Tags.Count > 0;
 
-    /// <summary>Ctrl+F reveals the sidebar and puts the caret in its search box.</summary>
+    /// <summary>
+    /// Ctrl+F puts the caret in the toolbar's search box.
+    ///
+    /// The field lives in the path bar now, not behind the sidebar, so revealing
+    /// the rail is no longer what this gesture is for — but it is kept, because
+    /// the rail is also where a search result's place context is read from.
+    /// </summary>
     [RelayCommand]
     private void FocusSearch()
     {
         Rail = RailState.Full;
+
+        // Re-raised rather than set once. The flag was already true after the
+        // first Ctrl+F, so a second one changed nothing and the caret stayed
+        // where it was. Same pattern as PaneViewModel.RefreshScale().
+        IsSearching = false;
         IsSearching = true;
     }
 
@@ -271,4 +282,32 @@ public sealed partial class PlaceItemViewModel(Place place) : ObservableObject
         ? $"{ByteSize.Format(free)} free"
         : "";
 
+    /// <summary>
+    /// Free space without the trailing "free". The drive row is one line now and
+    /// the label beside it already says which drive this is, so that word was
+    /// carrying no information at exactly the width where it cost the most.
+    /// <see cref="CapacityText"/> stays, as the row's tooltip.
+    /// </summary>
+    public string CapacityShort => place.CapacityBytes is > 0 && place.FreeBytes is { } free
+        ? ByteSize.Format(free)
+        : "";
+
+    /// <summary>
+    /// The status bar used to print free space and the drive row printed it too.
+    /// It is one number about one drive, so it belongs on the drive — and the
+    /// setting that used to hide it in the status bar now hides it here.
+    ///
+    /// Read from AppSettings rather than passed in, matching the static-provider
+    /// convention IconLoader and RowMetadata already use. That makes it impure:
+    /// a settings save has to re-raise it, which is what
+    /// <see cref="RaiseCapacityVisibilityChanged"/> exists for.
+    /// </summary>
+    public bool ShowCapacity =>
+        HasCapacity && Settings.AppSettings.Current.General.ShowFreeSpace;
+
+    /// <summary>
+    /// The rows are separate objects from the shell that owns the setting, so
+    /// raising the change there does not reach them.
+    /// </summary>
+    public void RaiseCapacityVisibilityChanged() => OnPropertyChanged(nameof(ShowCapacity));
 }

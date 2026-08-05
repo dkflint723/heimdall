@@ -91,6 +91,27 @@ public static class FileConverters
             return local.ToString("dd MMM yyyy");
         });
 
+    /// <summary>
+    /// Upper-cases a label for display only. The sidebar's group headings are
+    /// set in small caps with tracking; <c>Place.Label</c> is data read off the
+    /// desktop's places list and is never rewritten to suit a heading.
+    /// </summary>
+    public static readonly IValueConverter Upper =
+        new FuncValueConverter<string?, string>(s => s?.ToUpperInvariant() ?? "");
+
+    /// <summary>
+    /// A wash of the accent behind the open place's row. Nothing but the edge
+    /// bar carried "this is where you are", and on a one-line row that bar is a
+    /// 2x14px mark — too small to find at a glance.
+    /// </summary>
+    public static readonly IValueConverter CurrentRowFill =
+        new FuncValueConverter<bool, Avalonia.Media.IBrush?>(current =>
+            current && Avalonia.Application.Current?.Resources["AccentDim"]
+                is Avalonia.Media.ISolidColorBrush accent
+                ? new Avalonia.Media.SolidColorBrush(
+                    Avalonia.Media.Color.FromArgb(28, accent.Color.R, accent.Color.G, accent.Color.B))
+                : Avalonia.Media.Brushes.Transparent);
+
     /// <summary>Accent along the active side's tab bar, transparent on the other.</summary>
     public static readonly IValueConverter ActiveEdge =
         new FuncValueConverter<bool, object?>(active =>
