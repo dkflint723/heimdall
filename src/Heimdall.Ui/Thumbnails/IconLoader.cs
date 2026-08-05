@@ -918,18 +918,33 @@ public static class IconLoader
 
         var group = new DrawingGroup();
 
+        // The 16-unit box the two-tone glyph used is kept for the file, and the
+        // folder now draws on the design's own 64 x 54 canvas — so the clip
+        // below has to follow whichever is in use rather than being a constant.
+        var canvas = isDirectory ? new Rect(0, 0, 64, 54) : new Rect(0, 0, 16, 16);
+
         if (isDirectory)
         {
-            // Two tones: a recessed back and a lit front panel.
+            // **The design reference's folder, copied.** Body, then the flap's
+            // lit edge, then the seam under it — three fixed colours from
+            // `Heimdall Window.dc.html`, which is why this no longer takes the
+            // accent. That is the same trade as the palette override in
+            // ThemeApplier: 1:1 with the mock costs the desktop its say.
+            // Revert by restoring the accent brushes on the old 16-unit paths.
             group.Children.Add(new GeometryDrawing
             {
-                Geometry = Geometry.Parse("M1,3.5 L6,3.5 L7.5,5.5 L15,5.5 L15,13 L1,13 Z"),
-                Brush = new SolidColorBrush(accent, 0.5),
+                Geometry = Geometry.Parse("M3 11 h20 l4 5 h34 v34 H3 Z"),
+                Brush = new SolidColorBrush(Color.Parse("#5457dd")),
             });
             group.Children.Add(new GeometryDrawing
             {
-                Geometry = Geometry.Parse("M1.6,7 L14.4,7 L14.4,13 L1.6,13 Z"),
-                Brush = new SolidColorBrush(accent, 0.95),
+                Geometry = Geometry.Parse("M3 11 h20 l4 5"),
+                Pen = new Pen(new SolidColorBrush(Color.Parse("#cfd0ff")), 2),
+            });
+            group.Children.Add(new GeometryDrawing
+            {
+                Geometry = Geometry.Parse("M3 16 H61"),
+                Pen = new Pen(new SolidColorBrush(Color.Parse("#8f91ff")), 1.5),
             });
         }
         else
@@ -945,7 +960,7 @@ public static class IconLoader
         {
             Drawing = new DrawingGroup
             {
-                ClipGeometry = new RectangleGeometry(new Rect(0, 0, 16, 16)),
+                ClipGeometry = new RectangleGeometry(canvas),
                 Children = { group },
             },
         };
