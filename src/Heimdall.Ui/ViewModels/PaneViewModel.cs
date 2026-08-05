@@ -11,7 +11,25 @@ using Heimdall.Core.Session;
 namespace Heimdall.Ui.ViewModels;
 
 /// <summary>One clickable ancestor in the breadcrumb bar.</summary>
-public sealed record PathSegment(string Name, string FullPath, ICommand Open, bool IsLast);
+public sealed record PathSegment(string Name, string FullPath, ICommand Open, bool IsLast)
+{
+    /// <summary>
+    /// The platform's own separator, so the bar reads `C:\ Users \ flint`
+    /// rather than mixing one convention with the other. It was a literal "/"
+    /// in the markup, which on Windows drew a POSIX separator between two
+    /// backslash paths.
+    /// </summary>
+    public static string Separator => Path.DirectorySeparatorChar.ToString();
+
+    /// <summary>
+    /// **A root already ends in a separator, so it must not be given another.**
+    /// `LeafName` returns a root as itself — `C:\` or `/` — and the bar then
+    /// appended its own, producing `C:\ \ Users` on Windows and `/ / home` on
+    /// Linux. The doubling was there before the crumbs moved to `Ancestors`; it
+    /// only became obvious on Windows, where the two glyphs differ.
+    /// </summary>
+    public bool ShowSeparator => !IsLast && !PathRules.IsRoot(FullPath);
+}
 
 /// <summary>A tag in the context menu, carrying the command that applies it.</summary>
 public sealed record TagOption(string Name, ICommand Command);

@@ -679,9 +679,11 @@
                                      Foreground="{Binding IsLast, Converter={x:Static vm:FileConverters.CrumbBrush}}"
                                      FontSize="{DynamicResource FontSizeBase}"/>
                         </Button>
-                        <!-- No trailing separator after the current folder. -->
-                        <TextBlock Text="/" VerticalAlignment="Center" Margin="1,0"
-                                   IsVisible="{Binding !IsLast}"
+                        <!-- No trailing separator after the current folder, and
+                             none after a root, which carries its own. -->
+                        <TextBlock Text="{x:Static vm:PathSegment.Separator}"
+                                   VerticalAlignment="Center" Margin="1,0"
+                                   IsVisible="{Binding ShowSeparator}"
                                    Foreground="{DynamicResource ViewDimText}"
                                    FontSize="{DynamicResource FontSizeSmall}"/>
                       </StackPanel>
