@@ -60,5 +60,20 @@
   </ItemGroup>
   <PropertyGroup Condition="'$(HeimdallPlatform)' == 'Windows'">
     <DefineConstants>$(DefineConstants);HEIMDALL_WINDOWS</DefineConstants>
+
+    <!-- The Win32 icon resource, which is a different thing from the Avalonia
+         one above: this is what Explorer, the taskbar, the Start menu and the
+         installer read off the executable itself, before any of our code runs.
+         Without it the binary carries the default .NET icon.
+
+         Windows only, because it is a PE resource and means nothing to an ELF
+         binary. It sits here rather than beside the AvaloniaResource above
+         because HeimdallPlatform is not set until further up this file, and
+         MSBuild evaluates a condition against whatever the property held at
+         the moment it was read.
+
+         Built from the hicolor SVGs by brand/make-ico.py; see that script for
+         why each size is rendered from its own drawing rather than scaled. -->
+    <ApplicationIcon>..\..\brand\icons\heimdall.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>
