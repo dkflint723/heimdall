@@ -3,6 +3,12 @@ name: build
 # Every push to main proves the tree still builds; a v* tag additionally
 # publishes a release. Separating those means a broken commit is caught without
 # anyone having to remember to tag.
+#
+# Two jobs, one per platform, and neither cross-compiles. The Linux job produces
+# a tarball plus install.sh; the Windows job produces an Inno Setup installer,
+# because a bare zip on Windows leaves the user to invent their own Start menu
+# entry and uninstall. The Windows job is also the only place
+# Heimdall.Windows.Tests actually runs.
 on:
   push:
     branches: [main]
@@ -103,4 +109,97 @@ jobs:
 
           gh release upload "$GITHUB_REF_NAME" \
             heimdall-linux-x64.tar.gz heimdall-linux-x64.tar.gz.sha256 \
+            --clobber
+
+  windows-x64:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      # No equivalent of the linux-x64 prerequisites step: the runner image
+      # already carries the MSVC toolchain NativeAOT links with. Locally it
+      # needs Visual Studio or the Build Tools, and vswhere.exe on PATH -- the
+      # failure without it names link.exe and is not obviously about vswhere.
+
+      - name: Build
+        run: dotnet build -c Debug
+
+      # Both projects, unlike the Linux job: Heimdall.Windows.Tests is where the
+      # file operations are actually exercised, and it is the reason to run this
+      # job on a Windows machine rather than cross-compiling.
+      - name: Test
+        run: dotnet test heimdall.slnx -c Debug
+
+      - name: Publish
+        shell: bash
+        run: |
+          case "$GITHUB_REF_NAME" in
+            v[0-9]*) VERSION_NUMBER="${GITHUB_REF_NAME#v}" ;;
+            *)       VERSION_NUMBER="0.0.0" ;;
+          esac
+
+          echo "stamping version $VERSION_NUMBER"
+          echo "VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
+
+          dotnet publish src/Heimdall.Ui -c Release -r win-x64 -p:PublishAot=true \
+            -p:Version="$VERSION_NUMBER"
+
+      # Same check the Linux job makes for libSkiaSharp.so, and for the same
+      # reason: these sit beside the binary and are loaded from its own
+      # directory, so an installer built without them produces something that
+      # aborts before it draws anything.
+      - name: Package
+        shell: bash
+        run: |
+          P=src/Heimdall.Ui/bin/Release/net10.0/win-x64/publish
+
+          for required in Heimdall.Ui.exe libSkiaSharp.dll libHarfBuzzSharp.dll av_libglesv2.dll; do
+            test -f "$P/$required" || { echo "$required missing from the publish"; exit 1; }
+          done
+
+          # ISCC is preinstalled on the windows runner image. Resolved rather
+          # than assumed to be on PATH, which it is not.
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          test -x "$ISCC" || { echo "Inno Setup not found at $ISCC"; exit 1; }
+
+          # Logged because the script uses ArchitecturesAllowed=x64compatible,
+          # which needs 6.3 or newer. If the runner image ever ships something
+          # older this is the line that explains the compile error.
+          "$ISCC" | head -2 || true
+
+          "$ISCC" //DAppVersion="$VERSION_NUMBER" //DPayload="$(cygpath -w "$PWD/$P")" \
+            packaging/heimdall.iss
+
+          SETUP="dist/heimdall-$VERSION_NUMBER-win-x64-setup.exe"
+          test -f "$SETUP" || { echo "$SETUP was not produced"; exit 1; }
+
+          sha256sum "$SETUP" | tee "$SETUP.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: heimdall-win-x64
+          path: |
+            dist/*.exe
+            dist/*.sha256
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Same race as the linux-x64 job: whichever of the three tag-triggered
+          # workflows arrives first creates the release, and the others must not
+          # fail for finding it already there.
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --prerelease
+
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/heimdall-$VERSION_NUMBER-win-x64-setup.exe" \
+            "dist/heimdall-$VERSION_NUMBER-win-x64-setup.exe.sha256" \
             --clobber
