@@ -120,6 +120,112 @@ internal static partial class Native
     internal static nint DoubleNullTerminated(IReadOnlyList<string> paths)
         => Marshal.StringToHGlobalUni(string.Join('\0', paths) + '\0');
 
+    // ---- Junctions ---------------------------------------------------------
+
+    internal const uint GENERIC_WRITE = 0x40000000;
+    internal const uint FILE_SHARE_ALL = 0x00000007;
+    internal const uint OPEN_EXISTING = 3;
+    internal const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+    internal const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+    internal const uint FSCTL_SET_REPARSE_POINT = 0x000900A4;
+    internal const uint IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003;
+
+    internal static readonly nint INVALID_HANDLE_VALUE = -1;
+
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW",
+        StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static partial nint CreateFile(
+        string fileName, uint access, uint share, nint security,
+        uint creation, uint flags, nint template);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool DeviceIoControl(
+        nint device, uint code, nint inBuffer, uint inSize,
+        nint outBuffer, uint outSize, out uint returned, nint overlapped);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "CloseHandle", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool CloseHandle(nint handle);
+
+    /// <summary>
+    /// Points an existing, empty directory at <paramref name="target"/>, making
+    /// it a junction.
+    ///
+    /// **This exists because the BCL only offers the kind of link that needs a
+    /// privilege.** Directory.CreateSymbolicLink requires
+    /// SeCreateSymbolicLinkPrivilege — Developer Mode, or elevation — and
+    /// throws "a required privilege is not held by the client" without it. A
+    /// junction needs nothing but write access to the directory, which is why
+    /// `mklink /J` works for an ordinary user and why Windows uses junctions
+    /// for its own compatibility links. Copying a folder that contains one is
+    /// not an exotic case (node_modules, package caches, the legacy profile
+    /// links), so it cannot be allowed to fail on a machine in its default
+    /// configuration.
+    ///
+    /// The structure is REPARSE_DATA_BUFFER in its mount-point form: an
+    /// eight-byte header, four USHORT offsets and lengths, then both names back
+    /// to back. ReparseDataLength counts everything after the header, and the
+    /// two NUL terminators sit in the buffer without being counted in either
+    /// length — the usual way to get this wrong.
+    /// </summary>
+    internal static void CreateJunction(string path, string target)
+    {
+        var full = Path.GetFullPath(target);
+
+        // A drive root keeps its separator; anything else loses a trailing one.
+        var print = full.Length > 3 ? full.TrimEnd(Path.DirectorySeparatorChar) : full;
+
+        // The object-manager name the reparse point actually stores.
+        var substitute = @"\??\" + print;
+
+        var names = (substitute.Length + 1 + print.Length + 1) * 2;
+        var buffer = new byte[16 + names];
+
+        BitConverter.TryWriteBytes(buffer.AsSpan(0), IO_REPARSE_TAG_MOUNT_POINT);
+        BitConverter.TryWriteBytes(buffer.AsSpan(4), (ushort)(8 + names));
+        // Bytes 6..8 are Reserved, and are already zero.
+        BitConverter.TryWriteBytes(buffer.AsSpan(8), (ushort)0);
+        BitConverter.TryWriteBytes(buffer.AsSpan(10), (ushort)(substitute.Length * 2));
+        BitConverter.TryWriteBytes(buffer.AsSpan(12), (ushort)((substitute.Length + 1) * 2));
+        BitConverter.TryWriteBytes(buffer.AsSpan(14), (ushort)(print.Length * 2));
+
+        var text = MemoryMarshal.Cast<byte, char>(buffer.AsSpan(16));
+        substitute.CopyTo(text);
+        print.CopyTo(text[(substitute.Length + 1)..]);
+
+        // BACKUP_SEMANTICS to open a directory at all; OPEN_REPARSE_POINT so the
+        // handle is the directory itself rather than whatever it may point at.
+        var handle = CreateFile(
+            path, GENERIC_WRITE, FILE_SHARE_ALL, 0, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, 0);
+
+        if (handle == INVALID_HANDLE_VALUE)
+            throw new IOException(
+                $"Could not open '{path}' to make it a junction.",
+                Marshal.GetHRForLastWin32Error());
+
+        try
+        {
+            unsafe
+            {
+                fixed (byte* data = buffer)
+                {
+                    if (!DeviceIoControl(
+                            handle, FSCTL_SET_REPARSE_POINT,
+                            (nint)data, (uint)buffer.Length, 0, 0, out _, 0))
+                        throw new IOException(
+                            $"Could not point '{path}' at '{print}'.",
+                            Marshal.GetHRForLastWin32Error());
+                }
+            }
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
+
     // ---- The desktop's UI font ---------------------------------------------
 
     internal const uint SPI_GETICONTITLELOGFONT = 0x001F;
