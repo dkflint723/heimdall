@@ -108,8 +108,10 @@ public static class FileConverters
         new FuncValueConverter<bool, Avalonia.Media.IBrush?>(current =>
             current && Avalonia.Application.Current?.Resources["AccentDim"]
                 is Avalonia.Media.ISolidColorBrush accent
+                // 7% — the design's own rgba(...,.07). Enough to find the row,
+                // not enough to read as a selection.
                 ? new Avalonia.Media.SolidColorBrush(
-                    Avalonia.Media.Color.FromArgb(28, accent.Color.R, accent.Color.G, accent.Color.B))
+                    Avalonia.Media.Color.FromArgb(18, accent.Color.R, accent.Color.G, accent.Color.B))
                 : Avalonia.Media.Brushes.Transparent);
 
     /// <summary>Accent along the active side's tab bar, transparent on the other.</summary>
