@@ -34,6 +34,13 @@ has not broken the Windows configuration without waiting for CI. It proves the
 other configuration *compiles*; to check that it *behaves*, WINDOWS.md §8a has a
 WSL recipe for running the Linux suite from the Windows machine.
 
+**Rebuild without the override before running.** Both configurations write to the
+same `bin/Debug/net10.0/`, so the cross-check leaves the other platform's binary
+where you launch from. It starts and then dies at the platform seam with
+`PlatformNotSupportedException: No platform implementation for this operating
+system yet` — a true statement about a binary built for the other OS, and a
+thoroughly misleading one about your machine. A bare `dotnet build` fixes it.
+
 `dotnet test` is green on both, and the `PathRules` suite is split three ways —
 platform-neutral, POSIX, Windows — because a POSIX literal names something else
 on Windows. Each half skips on the other's platform, so a run reports skips

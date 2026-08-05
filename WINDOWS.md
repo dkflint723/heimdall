@@ -67,6 +67,16 @@ configuration, and fails on `HeimdallPlatform=None` with one clear error. On
 each, only the selected platform assembly lands beside the app — no leakage
 either way.
 
+> **The override is a compile check, not a runnable build. Rebuild without it
+> before you run anything.** Both configurations write to the same
+> `bin/Debug/net10.0/`, so a cross-check build leaves the *other* platform's
+> binary sitting at the path you launch from — and it starts, gets as far as the
+> platform seam, and dies with
+> `PlatformNotSupportedException: No platform implementation for this operating
+> system yet.` The message is accurate and completely misleading: nothing is
+> wrong with the platform, the binary was just compiled for the other one.
+> A bare `dotnet build` puts the right one back.
+
 `MainWindow.axaml.cs` is fenced with `HEIMDALL_LINUX` / `HEIMDALL_WINDOWS`,
 defined beside the reference they belong to, and a `#else` arm carries an
 `#error` naming the fix. **Give each arm its own `else`** — sharing one after the
