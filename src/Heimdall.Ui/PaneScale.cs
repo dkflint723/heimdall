@@ -28,11 +28,15 @@ public static class PaneScale
         ("FontSizeLarge", 15.5),
     ];
 
+    // The design reference's sizes at 100%: a 16px sidebar or row icon and a
+    // 72px folder on a grid tile. They stay the BASE of the scale rather than
+    // becoming literals in the markup — the pane's zoom still multiplies them,
+    // which is what Ctrl+scroll and the per-layout zoom both ride on.
     private static readonly (string Key, double Value)[] IconMetrics =
     [
-        ("ThumbSize", 26),
-        ("IconSize", 17),
-        ("TileSize", 84),
+        ("ThumbSize", 24),
+        ("IconSize", 16),
+        ("TileSize", 72),
     ];
 
     /// <summary>
