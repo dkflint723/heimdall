@@ -23,6 +23,16 @@ public sealed class WindowsFileOperations : IFileOperations
 
     private readonly ConcurrentStack<IUndoable> _undo = new();
 
+    /// <summary>
+    /// Tags are keyed by path here, unlike the Linux extended attributes that
+    /// ride along with the file, so the operations that change a path have to
+    /// tell the index. Null is allowed so the operations remain testable on
+    /// their own.
+    /// </summary>
+    private readonly WindowsTagStore? _tags;
+
+    public WindowsFileOperations(WindowsTagStore? tags = null) => _tags = tags;
+
     public bool CanUndo => !_undo.IsEmpty;
 
     public IOperationHandle Copy(
@@ -155,6 +165,12 @@ public sealed class WindowsFileOperations : IFileOperations
                     if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
                     else File.Delete(path);
 
+                    // Only after the delete succeeded, and only for a permanent
+                    // one — a recycled file can come back, and forgetting its
+                    // tags would mean restoring it from Explorer returned an
+                    // untagged file.
+                    _tags?.Forget(path);
+
                     handle.ItemFinished();
                 }
 
@@ -208,7 +224,11 @@ public sealed class WindowsFileOperations : IFileOperations
         if (Directory.Exists(path)) Directory.Move(path, target);
         else File.Move(path, target, overwrite: false);
 
-        _undo.Push(new UndoRename(target, path));
+        // Before the undo entry, so a rename that is immediately undone leaves
+        // the index where it started rather than one step behind.
+        _tags?.Retarget(path, target);
+
+        _undo.Push(new UndoRename(target, path, _tags));
         return ValueTask.CompletedTask;
     }
 
@@ -290,10 +310,19 @@ public sealed class WindowsFileOperations : IFileOperations
                             Directory.Delete(source);
                 }
 
+                // Per top-level source, not per planned item: Retarget already
+                // follows everything beneath a folder, so moving a tagged tree
+                // costs one call rather than one per file in it.
+                if (move)
+                    foreach (var source in sources)
+                        _tags?.Retarget(
+                            source,
+                            Path.Combine(destination, PathRules.LeafName(Path.GetFullPath(source))));
+
                 // Copies are not undoable: undoing one means deleting files,
                 // and an undo that deletes is not a safe default.
                 if (move && created.Count > 0)
-                    _undo.Push(new UndoMove(sources, destination));
+                    _undo.Push(new UndoMove(sources, destination, _tags));
 
                 handle.Complete();
             }
@@ -389,18 +418,22 @@ public sealed class WindowsFileOperations : IFileOperations
         ValueTask UndoAsync(CancellationToken ct);
     }
 
-    private sealed class UndoRename(string current, string original) : IUndoable
+    private sealed class UndoRename(
+        string current, string original, WindowsTagStore? tags) : IUndoable
     {
         public ValueTask UndoAsync(CancellationToken ct)
         {
             if (Directory.Exists(current)) Directory.Move(current, original);
             else if (File.Exists(current)) File.Move(current, original, overwrite: false);
+            else return ValueTask.CompletedTask;
+
+            tags?.Retarget(current, original);
             return ValueTask.CompletedTask;
         }
     }
 
     private sealed class UndoMove(
-        IReadOnlyList<string> sources, string destination) : IUndoable
+        IReadOnlyList<string> sources, string destination, WindowsTagStore? tags) : IUndoable
     {
         public ValueTask UndoAsync(CancellationToken ct)
         {
@@ -408,6 +441,8 @@ public sealed class WindowsFileOperations : IFileOperations
             {
                 var name = PathRules.LeafName(Path.GetFullPath(source));
                 var moved = Path.Combine(destination, name);
+
+                tags?.Retarget(moved, source);
 
                 if (File.Exists(moved))
                 {
