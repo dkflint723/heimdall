@@ -332,6 +332,40 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
   this the hard way: a clean `dotnet build` says nothing about whether the AOT
   binary starts. See `BUILDING.md` §4.
 
+### 6a. The AOT publish works — and what it took
+
+Verified 4 August 2026, after the interop landed, because that is the change
+this section was warning about:
+
+```bash
+dotnet publish src/Heimdall.Ui -c Release -r win-x64 -p:PublishAot=true
+```
+
+**Zero analyser warnings**, so the `LibraryImport` choice held up: the trim, AOT
+and single-file analysers accepted every declaration in `Native.cs`. The binary
+runs, lists `C:\`, and reports `font: desktop='Segoe UI'` — which is the
+registry and `SystemParametersInfo` calls working *after* trimming and native
+compilation, not just in a debug build.
+
+**`vswhere.exe` must be on `PATH`.** Without it the ILCompiler's own toolchain
+lookup fails and its error text is spliced into the linker command line, so the
+failure reads as a corrupted `link.exe` path and says nothing about vswhere:
+
+```
+error MSB3073: The command ""'vswhere.exe' is not recognized ...;...\link.exe" @"...link.rsp"" exited with code 123
+```
+
+Either publish from a Developer Command Prompt, or:
+
+```powershell
+$env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
+```
+
+**The publish directory is the deliverable, exactly as on Linux.** `Heimdall.Ui.exe`
+is 26.7 MB and needs `libSkiaSharp.dll`, `libHarfBuzzSharp.dll` and
+`av_libglesv2.dll` beside it. Self-contained means no .NET runtime to install;
+it does not mean one file.
+
 ---
 
 ## 7. Suggested order
@@ -372,8 +406,25 @@ The project publishes with `PublishAot=true` and `TrimMode=full`, and
    **Absorbed into step 3**, for the reason above. Launcher is ShellExecute,
    operations are copy/move/delete/rename with **`Trash` failing rather than
    deleting**, and search is a managed walk with no index behind it.
-5. **`IThemeProvider`.** Cheap, and makes it stop looking alien.
-6. **Then the hard three** — trash, tags, icons — each as its own decision.
+5. ~~**`IThemeProvider`.**~~ **DONE, 4 August 2026.** Light or dark from
+   `AppsUseLightTheme`, the accent from DWM, the UI font from
+   `SPI_GETICONTITLELOGFONT`, and both keys watched with
+   `RegNotifyChangeKeyValue` so a scheme change repaints without a restart.
+   **The rest of the palette is derived**, because Windows publishes only those
+   two facts where kdeglobals hands over a whole scheme — see
+   `WindowsThemeProvider`.
+   **The two accent registry values disagree about byte order.** Measured on one
+   machine: `AccentColor = 0xFF4F4737` is ABGR, `ColorizationColor = 0xC437474F`
+   is ARGB, and both mean `#37474F`. Read the wrong one the wrong way and the
+   accent comes out with red and blue swapped, which looks plausible.
+6. **The hard three** — trash, tags, icons.
+   **Trash is half done.** `IFileOperations.Trash` recycles, via
+   `SHFileOperation` rather than COM `IFileOperation`; verified by count, two
+   items in and two items in the bin. **`ITrashMaintenance` is still null**, so
+   there is no Trash view and no Restore — those need the shell namespace, which
+   is the COM decision still outstanding. Recycled items are restorable from
+   Explorer in the meantime, which is why this is worth having early.
+   Tags and icons are untouched and both are decisions before they are code.
 
 ---
 
@@ -438,16 +489,14 @@ Stated plainly so they are not mistaken for findings:
   `$([MSBuild]::IsOSPlatform('Windows'))` was probed alongside and also works —
   either is fine.
 - ~~Whether `net10.0-windows` is worth adopting over plain `net10.0`.~~
-  **Deferred deliberately, and `Heimdall.Windows` is on plain `net10.0` for
-  now.** `SupportedOSPlatform` already satisfies the platform analyser, and the
-  single TFM keeps the project in the solution on Linux, so CI compile-checks
-  the Windows code on every push — worth more than the WinForms/WPF interop
-  surface, which nothing here wants.
-  **The forcing question is the registry**, which §4 needs for `IThemeProvider`:
-  `Microsoft.Win32.Registry` is not in the default reference set for plain
-  `net10.0`. Decide at step 5 between the `net10.0-windows` TFM and the
-  standalone package — and note the TFM costs the free Linux compile-check
-  above.
+  **Settled 4 August 2026: it stays on plain `net10.0`.** The forcing question
+  was the registry, which `IThemeProvider` needs and which
+  `Microsoft.Win32.Registry` only supplies in-box for a `-windows` TFM. The
+  answer was to skip the BCL wrapper: `RegGetValueW` is one
+  `LibraryImport` declaration, and native interop was already required for the
+  Recycle Bin. Two P/Invokes cost less than a TFM change that would have taken
+  the Windows project out of the Linux build and with it the free compile-check
+  on every push.
 - Whether Avalonia's Windows backend needs anything beyond the existing package
   references. It should not — `Avalonia.Desktop` covers all three desktop
   backends — but that is an assumption, not a verified fact.

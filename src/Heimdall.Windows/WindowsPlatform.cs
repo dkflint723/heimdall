@@ -84,10 +84,12 @@ public sealed class WindowsPlatform : IPlatform
     public INetworkDiscovery? Discovery => null;
 
     /// <summary>
-    /// Null for now, and the cheapest of the remaining work: dark mode and the
-    /// accent colour are two registry reads, no COM.
+    /// Light or dark and the system accent, read from the registry and watched
+    /// for changes. Everything else in the palette is derived — Windows
+    /// publishes only those two facts, unlike kdeglobals, which hands over a
+    /// whole scheme.
     /// </summary>
-    public IThemeProvider? Theme => null;
+    public IThemeProvider? Theme { get; } = new WindowsThemeProvider();
 
     /// <summary>
     /// Null, and staying that way for a while. Windows has per-file icons from

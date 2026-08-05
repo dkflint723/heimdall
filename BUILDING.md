@@ -5,10 +5,22 @@ reads the desktop's own configuration where it exists and falls back where it
 does not — but the colour scheme and icon theme come from `kdeglobals`, so on a
 non-KDE desktop it will use its built-in defaults.
 
-**There is no usable Windows build yet**, but the scaffolding is in place:
-`Heimdall.Ui` picks its platform assembly from the build machine's OS, and on
-Windows the application starts, throws `NotImplementedException` from the first
-provider it touches, and stops. See [WINDOWS.md](WINDOWS.md).
+**Windows runs.** It browses, lists drives, opens files, copies, moves,
+renames, recycles, and follows the system light/dark mode and accent.
+Still missing: the Trash view and Restore, tags, and shell icons — see
+[WINDOWS.md](WINDOWS.md) for what each is waiting on. `Heimdall.Ui` picks its
+platform assembly from the build machine's OS.
+
+Publishing on Windows needs the **MSVC C++ build tools**, and `vswhere.exe` on
+`PATH` so the NativeAOT toolchain lookup can find them:
+
+```powershell
+$env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
+dotnet publish src/Heimdall.Ui -c Release -r win-x64 -p:PublishAot=true
+```
+
+As on Linux, **the publish directory is the deliverable** — the executable needs
+`libSkiaSharp.dll`, `libHarfBuzzSharp.dll` and `av_libglesv2.dll` beside it.
 
 The choice is a `HeimdallPlatform` property, defaulted from the OS and
 overridable, so either configuration can be compiled from either machine:
