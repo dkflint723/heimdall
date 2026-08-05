@@ -33,6 +33,14 @@ public sealed class WindowsPlatform : IPlatform
         StateDirectory = stateDirectory;
         Places = new WindowsPlacesProvider(stateDirectory);
         Scripts = new WindowsScriptRunner(stateDirectory);
+
+        // The tag index is keyed by path, so the operations that change a path
+        // have to be able to tell it. That coupling is the price of a sidecar,
+        // and it is stated here rather than hidden — see WindowsTagStore.
+        var tags = new WindowsTagStore(stateDirectory);
+
+        Tags = tags;
+        Operations = new WindowsFileOperations(tags);
     }
 
     /// <summary>Where this application's own per-user state lives.</summary>
@@ -43,7 +51,7 @@ public sealed class WindowsPlatform : IPlatform
     // ---- Required. ---------------------------------------------------------
 
     public IFileSystemProvider FileSystem { get; } = new WindowsFileSystemProvider();
-    public IFileOperations Operations { get; } = new WindowsFileOperations();
+    public IFileOperations Operations { get; }
     public IApplicationLauncher Launcher { get; } = new WindowsLauncher();
     public IPlacesProvider Places { get; }
     public ISearchProvider Search { get; } = new WindowsSearchProvider();
@@ -54,7 +62,7 @@ public sealed class WindowsPlatform : IPlatform
 
     public IScriptRunner Scripts { get; }
 
-    public ITagStore Tags { get; } = new WindowsTagStore();
+    public ITagStore Tags { get; }
 
     public ITemplateProvider Templates { get; } = new WindowsTemplates();
 

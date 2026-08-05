@@ -145,19 +145,52 @@ are path assumptions, not APIs — see §5.
   **`ITrashMaintenance` also needs `List`/`Restore`/`Empty`** — the Recycle Bin
   exposes these through the same COM surface. Returning `null` for
   `TrashMaintenance` on day one is legitimate and skips all of it.
-- **`ITagStore`.** Linux uses **xattrs**, which Windows does not have. The
-  nearest equivalent is **NTFS Alternate Data Streams** (`file.txt:tags`), which
-  are invisible, survive copies within NTFS, and are **silently destroyed by any
-  copy to FAT/exFAT or by most archivers.** The honest alternative is a sidecar
-  store keyed by path, which then goes stale on rename. **This is a design
-  decision, not an implementation detail — decide before writing code.**
-- **`IIconThemeProvider`.** The whole model differs. Linux has a theme of named
-  icons the app resolves; Windows has **per-file icons** from
+- **`ITagStore` — DECIDED 4 August 2026: a path-keyed sidecar.** Four reasons,
+  in the order they matter.
+  **ADS loses data silently and irrecoverably** — a copy to FAT or exFAT, a zip
+  round-trip, most archivers and most sync clients drop the stream and report
+  success. A sidecar goes *stale*, which is visible and repairable; it cannot go
+  silently empty.
+  **ADS cannot be read on the listing path.** `GetAsync` runs for every row in
+  the viewport, and an alternate stream costs a CreateFile per file where the
+  index costs a dictionary lookup. This is `FileEntry`'s "no follow-up stat"
+  rule one level down.
+  **ADS does not exist off NTFS**, so tagging a file on an exFAT stick would
+  simply fail.
+  **And the promise it appears to keep, it does not.** The README's claim is
+  that tags "travel with it and other tools can read them" — no other Windows
+  tool reads a private alternate stream, so ADS buys the fragility of on-file
+  storage without the interoperability that would justify it.
+  **The cost, stated plainly:** tags do not travel to another machine, and a
+  file renamed by *another* program loses them. Renames, moves, undo and
+  permanent deletes made through this application keep the index correct —
+  `WindowsTagStore.Retarget` follows a whole subtree — which is the case that is
+  actually within our control.
+  **The upgrade path is not ADS.** It is the property system's
+  `System.Keywords`: the field Explorer already labels "Tags", which Windows
+  Search indexes and other tools genuinely read. It only exists for formats with
+  a metadata container — never a .txt, never a folder — so it can only mirror
+  this index, not replace it. It needs `IPropertyStore`, which is COM.
+- **`IIconThemeProvider` — DECIDED 4 August 2026: stays `null`, and the blocker
+  is the interface rather than the effort.** The whole model differs. Linux has a
+  theme of named icons the app resolves; Windows has **per-file icons** from
   `SHGetFileInfo`/`IShellItemImageFactory`. `IconLoader`'s SVG renderer and
   `XdgIconTheme`'s name resolution have **no Windows counterpart at all.**
-  Returning `null` for `Icons` falls back to the drawn glyphs in
-  `IconLoader.Fallback` and `SidebarIcon` — **which is why those exist and are
-  hand-drawn rather than themed.** Start there.
+  Look at the signatures rather than the summary: `ThemeName`,
+  `Resolve(names, size)` returning **a path**, `NamesFor(path)` returning
+  **freedesktop icon names**, `Reload(themeName)`. Windows has no theme to name,
+  no named icons to resolve, and no icon *files* to point at — `SHGetFileInfo`
+  answers with an `HICON` and `IShellItemImageFactory` with an `HBITMAP`.
+  Satisfying this interface would mean extracting the handle, encoding a PNG and
+  caching it to disk purely to have a path to hand back: reimplementing the
+  freedesktop thumbnail cache to serve an abstraction that does not fit.
+  **The right shape is a different seam** — something per-file and
+  bitmap-returning, closer to `IThumbnailProvider` than to this — which is a
+  change to Core, not a Windows implementation, and should not be made while
+  Linux is the only real consumer.
+  Meanwhile `null` falls back to the drawn glyphs in `IconLoader.Fallback` and
+  `SidebarIcon`, **which is why those exist and are hand-drawn rather than
+  themed**, and they look right on Windows as they stand.
 - **`IAccessEditor`.** POSIX modes have no meaning on Windows; ACLs are a
   different model entirely. **Return `null`** — the interface is already nullable
   for exactly this reason.
@@ -417,14 +450,34 @@ it does not mean one file.
    machine: `AccentColor = 0xFF4F4737` is ABGR, `ColorizationColor = 0xC437474F`
    is ARGB, and both mean `#37474F`. Read the wrong one the wrong way and the
    accent comes out with red and blue swapped, which looks plausible.
-6. **The hard three** — trash, tags, icons.
-   **Trash is half done.** `IFileOperations.Trash` recycles, via
-   `SHFileOperation` rather than COM `IFileOperation`; verified by count, two
-   items in and two items in the bin. **`ITrashMaintenance` is still null**, so
-   there is no Trash view and no Restore — those need the shell namespace, which
-   is the COM decision still outstanding. Recycled items are restorable from
-   Explorer in the meantime, which is why this is worth having early.
-   Tags and icons are untouched and both are decisions before they are code.
+6. **The hard three** — trash, tags, icons. All three now decided; one is fully
+   built, one is built, one is deliberately not.
+   **Trash: half built.** `IFileOperations.Trash` recycles, via `SHFileOperation`
+   rather than COM `IFileOperation`; verified by count, two items in and the bin
+   goes from one to three. **`ITrashMaintenance` is still null**, so there is no
+   Trash view and no Restore — those need the shell namespace, and that is the
+   one COM decision still outstanding. Recycled items restore from Explorer
+   meanwhile, which is why the half was worth having early.
+   **Tags: built, as a path-keyed sidecar.** See §4 for the four reasons ADS
+   lost and what the sidecar costs.
+   **Icons: staying null, on purpose.** The interface is freedesktop-shaped in
+   its signatures, not just its vocabulary; see §4.
+
+7. **What is left, in the order it is worth doing.**
+   - **`ITrashMaintenance`** — the Trash view, Restore and the sweep. The only
+     remaining feature the README promises that Windows cannot do at all, and
+     the reason there is no Trash entry in the sidebar. Needs source-generated
+     COM against the shell namespace. **§6a settled the risk**: the AOT publish
+     is clean with source-generated P/Invoke, so COM is the next thing to prove
+     rather than a leap.
+   - **`GetOpenWithOptions`** — `IAssocHandler`, the same COM decision, much
+     smaller. Good first use of it.
+   - **A per-file icon seam in Core** — see §4. Wanted on both platforms, so it
+     is a Core design question rather than Windows work.
+   - **`IFileSharing`** — `CopypartyShare` is mostly path handling and could
+     move to Core, at which point Windows gets it for the cost of the move.
+   - **Screens never opened on Windows** — search, properties, share. Compiled,
+     never run. §5c is about exactly this class of bug.
 
 ---
 
