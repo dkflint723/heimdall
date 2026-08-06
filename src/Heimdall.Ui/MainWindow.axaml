@@ -1923,18 +1923,33 @@
                                   StrokeThickness="{DynamicResource IconStroke}"
                                   StrokeLineCap="Round" StrokeJoin="Round"
                                   th:SidebarIcon.Token="server"/>
-                          <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding Label}"
-                                       FontSize="{DynamicResource FontSizeBase}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <!-- A dead mount lists as an empty folder, which is
-                                 indistinguishable from an empty share unless
-                                 something says so. -->
-                            <TextBlock Text="offline" IsVisible="{Binding !Reachable}"
-                                       FontSize="{DynamicResource FontSizeTiny}"
-                                       Foreground="{DynamicResource AccentColour}"
-                                       VerticalAlignment="Center"/>
-                          </StackPanel>
+                          <!-- **A DockPanel, not a horizontal StackPanel.** The
+                               label already asked for CharacterEllipsis and
+                               never got it: a horizontal StackPanel measures
+                               its children with infinite width, so a TextBlock
+                               inside one is never told it has run out of room
+                               and trimming cannot engage. A network label is
+                               the longest thing the sidebar ever shows —
+                               "files on 192.168.4.39:8080" — so it simply ran
+                               off the edge, cut mid-character with no ellipsis
+                               to say it had.
+
+                               Docking "offline" right and letting the label
+                               take what remains gives it a real width, which is
+                               all trimming ever needed. -->
+                          <TextBlock Text="offline" DockPanel.Dock="Right"
+                                     IsVisible="{Binding !Reachable}"
+                                     Margin="6,0,0,0"
+                                     FontSize="{DynamicResource FontSizeTiny}"
+                                     Foreground="{DynamicResource AccentColour}"
+                                     VerticalAlignment="Center"/>
+
+                          <!-- The full path in the tooltip, because the label
+                               is now allowed to be shorter than the truth. -->
+                          <TextBlock Text="{Binding Label}"
+                                     ToolTip.Tip="{Binding Path}"
+                                     FontSize="{DynamicResource FontSizeBase}"
+                                     TextTrimming="CharacterEllipsis"/>
                           </DockPanel>
                         </Button>
                       </DataTemplate>
