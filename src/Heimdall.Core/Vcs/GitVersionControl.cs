@@ -36,6 +36,9 @@ public sealed class GitVersionControl : IVersionControl
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
+
+                // See Ask, below. Redirecting the streams is not enough.
+                CreateNoWindow = true,
             });
 
             if (process is null) return false;
@@ -115,6 +118,22 @@ public sealed class GitVersionControl : IVersionControl
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
+
+                // **A black console window flashed on every folder listing.**
+                // Heimdall is a GUI-subsystem binary and so owns no console;
+                // git.exe is a console-subsystem one. Starting it from here
+                // makes Windows allocate a NEW console for the child, and
+                // allocating a console shows its window. Redirecting all three
+                // streams does not prevent that -- redirection decides where
+                // the handles point, not whether a console is created.
+                //
+                // CreateNoWindow passes CREATE_NO_WINDOW, which is what
+                // actually suppresses it. Nothing on Linux, where the flag is
+                // ignored and there was never a window to begin with, which is
+                // why this survived the port unnoticed: the git probe runs at
+                // startup and the status read runs on EVERY listing, so it
+                // flashed on more or less every navigation.
+                CreateNoWindow = true,
             });
 
             if (process is null) return null;
