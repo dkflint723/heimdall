@@ -88,7 +88,8 @@ public abstract class CopypartyBackend
                 try
                 {
                     var candidate = Path.Combine(directory, name + extension);
-                    if (File.Exists(candidate)) return candidate;
+                    if (File.Exists(candidate) && !IsAppExecutionAlias(candidate))
+                        return candidate;
                 }
                 catch
                 {
@@ -98,6 +99,40 @@ public abstract class CopypartyBackend
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// **A Windows machine with no Python still has python.exe on PATH.**
+    ///
+    /// Windows ships App Execution Aliases in
+    /// %LOCALAPPDATA%\Microsoft\WindowsApps for python, python3 and others.
+    /// They are zero-byte reparse points that File.Exists reports as files, and
+    /// running one opens the Microsoft Store at the page for the thing it
+    /// stands in for. So without this, on a stock machine: Locate() finds
+    /// "python3", runs it to test whether copyparty is importable, and the
+    /// Microsoft Store opens — at startup, because the sharing provider is
+    /// constructed with the platform. The user launched a file manager and got
+    /// a shop.
+    ///
+    /// Zero length is the test. A real executable is never zero bytes, and the
+    /// reparse-point attribute alone would also catch ordinary symlinks, which
+    /// are perfectly good interpreters and are how several version managers put
+    /// one on PATH.
+    /// </summary>
+    private static bool IsAppExecutionAlias(string path)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Length == 0 && (file.Attributes & FileAttributes.ReparsePoint) != 0;
+        }
+        catch
+        {
+            // If it cannot be inspected it cannot be trusted to be run.
+            return true;
+        }
     }
 
     /// <summary>
