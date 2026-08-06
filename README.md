@@ -235,7 +235,10 @@ than the account.
 
 Uninstalling leaves your tabs, pinned places, folder views and tags where they
 are, under `%LOCALAPPDATA%\heimdall` — so reinstalling or upgrading picks up
-where you left off. Delete that folder by hand if you want them gone.
+where you left off. Delete that folder by hand if you want them gone, but note
+that it also holds your settings, your recent folders and the `scripts\` folder
+with any scripts you wrote yourself — check that first if you would rather keep
+them.
 
 **To build it yourself** you need the .NET 10 SDK:
 
@@ -259,9 +262,9 @@ version numbers should not be trusted yet. Known gaps:
   copies, moves, renames, recycles, tags, and follows the system light/dark mode
   and accent. Missing: the Trash view and *Restore* — recycled files come back
   from Explorer, not from here — the shell's per-file icons, and *Open with* as
-  a list rather than the system picker. Tags are kept in an index beside the
-  application rather than on the file, so unlike on Linux they do not travel
-  with it. See [WINDOWS.md](WINDOWS.md).
+  a list rather than the system picker. Tags are kept in an index under
+  `%LOCALAPPDATA%\heimdall` rather than on the file itself, so unlike on Linux
+  they do not travel with it. See [WINDOWS.md](WINDOWS.md).
 
 Bugs and ideas are welcome on the
 [issue tracker](https://github.com/dkflint723/heimdall/issues).
