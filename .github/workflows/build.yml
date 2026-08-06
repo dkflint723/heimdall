@@ -12,13 +12,25 @@ name: build
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    # `v[0-9]*`, not `v*`: the version below parses the same shape, and a tag
+    # that triggers the workflow but fails that parse used to publish a real
+    # release with every asset stamped 0.0.0.
+    tags: ['v[0-9]*']
   pull_request:
     branches: [main]
   workflow_dispatch:
 
+# Read by default. Only the release job needs to write, and it is the only job
+# gated on a tag -- the build jobs run on every pull request, where they compile
+# and execute branch-authored code and have no business holding a write token.
 permissions:
-  contents: write        # needed only by the release step
+  contents: read
+
+# Cancel superseded pull request runs; never cancel a push to main or a tag,
+# where a half-finished run means a half-uploaded release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   linux-x64:
@@ -26,6 +38,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Nothing here pushes, and the default leaves the job's token in
+          # .git/config for the whole run, where anything the build executes
+          # can read it.
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -55,9 +72,19 @@ jobs:
           # Same tag-shaped test the distro workflow uses: `${VAR:-default}`
           # does not fire for a branch name, so a push to main would otherwise
           # stamp the binary with the literal string "main".
+          #
+          # A TAG that does not parse is a hard error rather than a silent
+          # 0.0.0: 0.0.0 is the right answer for a branch build and the wrong
+          # one for anything that is about to be published.
           case "$GITHUB_REF_NAME" in
             v[0-9]*) VERSION_NUMBER="${GITHUB_REF_NAME#v}" ;;
-            *)       VERSION_NUMBER="0.0.0" ;;
+            *)
+              if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+                echo "tag $GITHUB_REF_NAME is not v<number>; refusing to stamp 0.0.0" >&2
+                exit 1
+              fi
+              VERSION_NUMBER="0.0.0"
+              ;;
           esac
 
           echo "stamping version $VERSION_NUMBER"
@@ -95,27 +122,13 @@ jobs:
             heimdall-linux-x64.tar.gz
             heimdall-linux-x64.tar.gz.sha256
 
-      # `gh` is preinstalled on the runner, so this needs no third-party action.
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # build.yml and distro.yml are triggered by the same tag and run
-          # concurrently, so whichever arrives first must create the release and
-          # the other must not fail for finding it already there.
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --prerelease
-
-          gh release upload "$GITHUB_REF_NAME" \
-            heimdall-linux-x64.tar.gz heimdall-linux-x64.tar.gz.sha256 \
-            --clobber
-
   windows-x64:
     runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -140,7 +153,13 @@ jobs:
         run: |
           case "$GITHUB_REF_NAME" in
             v[0-9]*) VERSION_NUMBER="${GITHUB_REF_NAME#v}" ;;
-            *)       VERSION_NUMBER="0.0.0" ;;
+            *)
+              if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+                echo "tag $GITHUB_REF_NAME is not v<number>; refusing to stamp 0.0.0" >&2
+                exit 1
+              fi
+              VERSION_NUMBER="0.0.0"
+              ;;
           esac
 
           echo "stamping version $VERSION_NUMBER"
@@ -191,19 +210,42 @@ jobs:
             dist/*.exe
             dist/*.sha256
 
+  # One job owns the release, rather than each build job racing to create it.
+  # Both platforms' assets go up in a single call, so a reader never sees a
+  # tarball published beside another run's checksum.
+  release:
+    needs: [linux-x64, windows-x64]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: assets
+
+      # `gh` is preinstalled on the runner, so this needs no third-party action.
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Same race as the linux-x64 job: whichever of the three tag-triggered
-          # workflows arrives first creates the release, and the others must not
-          # fail for finding it already there.
+          # --prerelease is derived, not unconditional. Passing it for every tag
+          # marked even a stable release as a prerelease, which suppresses the
+          # Latest badge and leaves /releases/latest pointing at whatever older
+          # release was not flagged.
+          case "$GITHUB_REF_NAME" in
+            *-*) PRERELEASE=--prerelease ;;
+            *)   PRERELEASE= ;;
+          esac
+
+          # distro.yml is triggered by the same tag and may get here first, so a
+          # release that already exists is not an error. The trailing `view`
+          # keeps a lost race from failing the step before the upload runs.
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --prerelease
+            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag $PRERELEASE \
+            || gh release view "$GITHUB_REF_NAME" >/dev/null
 
           gh release upload "$GITHUB_REF_NAME" \
-            "dist/heimdall-$VERSION_NUMBER-win-x64-setup.exe" \
-            "dist/heimdall-$VERSION_NUMBER-win-x64-setup.exe.sha256" \
+            assets/heimdall-linux-x64/* assets/heimdall-win-x64/* \
             --clobber

@@ -5,11 +5,19 @@ name: distro packages
 # release is being cut or when someone asks for it.
 on:
   push:
-    tags: ['v*']
+    # `v[0-9]*` to match the version parsing below, as in build.yml.
+    tags: ['v[0-9]*']
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# Never cancel a tag run mid-upload; this only guards against two runs of the
+# same tag (a re-cut tag, or a dispatch racing the push) interleaving their
+# uploads and leaving an artifact beside another run's checksum.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
 
@@ -189,10 +197,18 @@ jobs:
         run: |
           find artifacts -type f -printf '%p\n'
 
-          # Same reasoning as build.yml: create only if the other workflow has
-          # not got here first.
+          # Same reasoning as build.yml, including the derived --prerelease:
+          # whichever workflow wins the race decides the release's flags, so
+          # they have to agree. The trailing `view` keeps a lost race from
+          # failing the step before the upload runs.
+          case "$GITHUB_REF_NAME" in
+            *-*) PRERELEASE=--prerelease ;;
+            *)   PRERELEASE= ;;
+          esac
+
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --prerelease
+            || gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag $PRERELEASE \
+            || gh release view "$GITHUB_REF_NAME" >/dev/null
 
           # Scoped to the artifact directories this workflow uploaded, so a file
           # that happens to sit in the workspace cannot be published by accident.
