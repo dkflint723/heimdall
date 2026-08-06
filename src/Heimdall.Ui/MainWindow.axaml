@@ -1860,15 +1860,22 @@
                                   StrokeThickness="{DynamicResource IconStroke}"
                                   StrokeLineCap="Round" StrokeJoin="Round"
                                   th:SidebarIcon.Token="server"/>
-                          <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding Name}"
-                                       FontSize="{DynamicResource FontSizeBase}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding Friendly}"
-                                       FontSize="{DynamicResource FontSizeTiny}"
-                                       Foreground="{DynamicResource ViewDimText}"
-                                       VerticalAlignment="Center"/>
-                          </StackPanel>
+                          <!-- Docked, not stacked, for the reason given on the
+                               REMOTE rows: a horizontal StackPanel measures its
+                               children with infinite width, so the trimming
+                               below never engages and a long advertised name
+                               pushes the protocol tag off the edge instead.
+                               An mDNS instance name is not chosen for brevity —
+                               "Flint-PC-c-webdav" is what copyparty announces. -->
+                          <TextBlock Text="{Binding Friendly}" DockPanel.Dock="Right"
+                                     Margin="6,0,0,0"
+                                     FontSize="{DynamicResource FontSizeTiny}"
+                                     Foreground="{DynamicResource ViewDimText}"
+                                     VerticalAlignment="Center"/>
+
+                          <TextBlock Text="{Binding Name}"
+                                     FontSize="{DynamicResource FontSizeBase}"
+                                     TextTrimming="CharacterEllipsis"/>
                           </DockPanel>
                         </Button>
                       </DataTemplate>
