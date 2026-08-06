@@ -255,6 +255,19 @@ public partial class MainWindow : Window
         // SplitRatio would never reflect where the divider actually sits.
         SplitHandle.DragCompleted += (_, _) => CaptureSplitRatio();
 
+        // The sidebar's handle has to move the width itself, unlike the one
+        // above: a Thumb reports how far it was dragged and changes nothing,
+        // where a GridSplitter edits the definitions it sits between. The
+        // sidebar is in a DockPanel and has none, which is why it is a Thumb.
+        //
+        // Clamped rather than free. Below about 150 the group headings and the
+        // drive sizes collide; above 520 it is taking room from the listing,
+        // which is what the window is for. The value is an [ObservableProperty]
+        // that the session already saves and restores, so a width set here
+        // survives a restart with no further work.
+        SidebarHandle.DragDelta += (_, e) =>
+            _shell.Sidebar.Width = Math.Clamp(_shell.Sidebar.Width + e.Vector.X, 150, 520);
+
         // A folder named on the command line, and any handed over by a later
         // launch. Without this the window ignored the path it was asked for,
         // which as a default file manager is the whole job.
