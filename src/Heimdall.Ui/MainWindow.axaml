@@ -2194,6 +2194,31 @@
       </DockPanel>
     </Border>
 
+    <!-- **The sidebar had no resize handle at all.** Its width was bound here,
+         saved into the session and restored from it, so everything around the
+         value worked — but nothing could ever change it. It sat on whatever
+         was written last, or the 210 default, and read as a locked panel
+         because it was one.
+
+         A Thumb rather than a GridSplitter, and that is forced: a splitter
+         resizes by editing the Row or ColumnDefinitions it sits between, and
+         the sidebar lives in a DockPanel, which has neither. The window's two
+         working splitters are both inside Grids.
+
+         Transparent, because the sidebar's own 1px right border is already the
+         separator; this is grab area, and the cursor announces it. The default
+         Thumb template draws a themed rectangle, so it is replaced with a bare
+         Border or the handle would be a visible slab. -->
+    <Thumb x:Name="SidebarHandle" DockPanel.Dock="Left"
+           Width="5" Background="Transparent" Cursor="SizeWestEast"
+           IsVisible="{Binding Sidebar.IsPanelVisible}">
+      <Thumb.Template>
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}"/>
+        </ControlTemplate>
+      </Thumb.Template>
+    </Thumb>
+
     <Grid x:Name="SplitGrid">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="{Binding LeftColumnWidth}"/>
