@@ -321,6 +321,16 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool CanConnect => _remotes?.IsAvailable == true;
 
+    /// <summary>
+    /// What the connect prompt should offer, from whatever is doing the
+    /// mounting. Hard-coding "smb://" here put a Linux URI in front of Windows
+    /// users, whose redirector wants `\\server\share` and cannot mount sftp at
+    /// all.
+    /// </summary>
+    public string ConnectPrefill => _remotes?.AddressPrefill ?? "";
+
+    public string ConnectHint => _remotes?.AddressHint ?? "";
+
     // ---- network discovery -----------------------------------------------
 
     private INetworkDiscovery? _discovery;

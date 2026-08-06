@@ -21,8 +21,11 @@ namespace Heimdall.Windows;
 /// nothing pending a design decision, and the open-with list is empty — each
 /// documented on the class that does it.
 ///
-/// The seven nullable members still return null, which is the interface working
-/// as designed rather than a gap being papered over.
+/// Four of the seven nullable members still return null, which is the interface
+/// working as designed rather than a gap being papered over. The other three —
+/// <see cref="Sharing"/>, <see cref="Remotes"/> and <see cref="Discovery"/> —
+/// were null because nobody had written them yet, which is a different thing
+/// and is no longer true.
 /// </summary>
 public sealed class WindowsPlatform : IPlatform
 {
@@ -75,21 +78,32 @@ public sealed class WindowsPlatform : IPlatform
     public IAccessEditor? AccessEditor => null;
 
     /// <summary>
-    /// Null for now. copyparty runs on Windows wherever Python does, so this is
-    /// reachable — but CopypartyShare lives in Heimdall.Linux and is mostly path
-    /// handling, so the move to Core comes first.
+    /// The same copyparty, driven the same way. What used to be null here is
+    /// now the shared engine in Core plus <see cref="WindowsCopyparty"/>, which
+    /// is only the part that differs: where to look for it, and how to install
+    /// it when it is missing.
     /// </summary>
-    public IFileSharing? Sharing => null;
+    public IFileSharing? Sharing { get; } = new CopypartyShare(new WindowsCopyparty());
 
     /// <summary>
-    /// Null, deliberately. Mapped network drives arrive as ordinary drive
-    /// letters through <see cref="Places"/>, so there is nothing left for a
-    /// separate remote-mount concept to describe.
+    /// The Windows redirector, which is to SMB and WebDAV what gvfs is on
+    /// Linux.
+    ///
+    /// This used to be null on the grounds that mapped network drives already
+    /// arrive as drive letters through <see cref="Places"/>. True, and not the
+    /// same thing: it left no way to CONNECT to a share from inside Heimdall,
+    /// and nothing at all for a UNC path the user had not mapped. Places still
+    /// owns the lettered drives — see WindowsRemoteMounts for how the two avoid
+    /// listing the same share twice.
     /// </summary>
-    public IRemoteMounts? Remotes => null;
+    public IRemoteMounts? Remotes { get; } = new WindowsRemoteMounts();
 
-    /// <summary>Null. Avahi has no Windows equivalent worth the effort.</summary>
-    public INetworkDiscovery? Discovery => null;
+    /// <summary>
+    /// Null was right about avahi and wrong about the conclusion: Windows has
+    /// run its own mDNS responder since 10 version 1703, and DnsServiceBrowse
+    /// asks it the same question avahi-browse answers.
+    /// </summary>
+    public INetworkDiscovery? Discovery { get; } = new WindowsNetworkDiscovery();
 
     /// <summary>
     /// Light or dark and the system accent, read from the registry and watched

@@ -12,11 +12,18 @@ namespace Heimdall.Windows;
 /// AOT-clean; the reflection-based marshaller behind `DllImport` is not, and
 /// would fail at runtime rather than at build time.
 ///
-/// Everything here is deliberately small. The two things that actually needed
-/// native calls are the Recycle Bin, which has no BCL API at all, and the
-/// registry, which has one — but only for the `net10.0-windows` TFM this project
-/// does not use, and adopting that TFM would cost the free Linux compile-check
-/// (§9). Two `RegGetValueW` calls are cheaper than that trade.
+/// Nothing here is reached for by preference. Each block exists because the BCL
+/// offers no equivalent, or offers one this project cannot take:
+///
+/// - **Registry** — there is a managed API, but only on the `net10.0-windows`
+///   TFM this project does not use, and adopting it would cost the free Linux
+///   compile-check (§9). Two `RegGetValueW` calls are cheaper than that trade.
+/// - **The Recycle Bin** — no BCL API at all.
+/// - **Junctions** — `Directory.CreateSymbolicLink` needs a privilege an
+///   ordinary user does not hold; the reparse-point ioctl needs none.
+/// - **Network connections and DNS-SD** — the redirector and the mDNS responder
+///   are both services already running on the machine, and asking them is the
+///   Windows shape of what gvfs and avahi do on Linux.
 /// </summary>
 internal static partial class Native
 {
@@ -268,4 +275,205 @@ internal static partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SystemParametersInfo(
         uint action, uint param, ref LOGFONTW data, uint winIni);
+
+    // ---- Network connections (mpr.dll) -------------------------------------
+    //
+    // The Windows answer to gvfs: the redirector already speaks SMB and, with
+    // the WebClient service, WebDAV, and exposes both as ordinary paths. So the
+    // whole of WindowsRemoteMounts is asking mpr who is connected and telling it
+    // to connect one more, exactly as LinuxRemoteMounts reads gvfs and shells to
+    // gio.
+
+    internal const uint RESOURCE_CONNECTED = 0x00000001;
+    internal const uint RESOURCETYPE_DISK = 0x00000001;
+
+    internal const uint RESOURCEUSAGE_CONNECTABLE = 0x00000001;
+    internal const uint RESOURCEDISPLAYTYPE_SHARE = 0x00000003;
+
+    /// <summary>Prompt for credentials rather than failing, using Windows' own dialog.</summary>
+    internal const uint CONNECT_INTERACTIVE = 0x00000008;
+    internal const uint CONNECT_PROMPT = 0x00000010;
+
+    internal const int NO_ERROR = 0;
+    internal const int ERROR_MORE_DATA = 234;
+    internal const int ERROR_NO_MORE_ITEMS = 259;
+    internal const int ERROR_ACCESS_DENIED = 5;
+    internal const int ERROR_INVALID_PASSWORD = 86;
+    internal const int ERROR_LOGON_FAILURE = 1326;
+    internal const int ERROR_SESSION_CREDENTIAL_CONFLICT = 1219;
+    internal const int ERROR_BAD_NET_NAME = 67;
+    internal const int ERROR_BAD_NETPATH = 53;
+    internal const int ERROR_CANCELLED = 1223;
+    internal const int ERROR_OPEN_FILES = 2401;
+    internal const int ERROR_DEVICE_IN_USE = 2404;
+
+    /// <summary>
+    /// NETRESOURCEW. The four string fields are pointers rather than marshalled
+    /// strings so the structure stays blittable and LibraryImport will take it,
+    /// the same trade SHFILEOPSTRUCTW makes above.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NETRESOURCEW
+    {
+        internal uint dwScope;
+        internal uint dwType;
+        internal uint dwDisplayType;
+        internal uint dwUsage;
+        internal nint lpLocalName;
+        internal nint lpRemoteName;
+        internal nint lpComment;
+        internal nint lpProvider;
+    }
+
+    [LibraryImport("mpr.dll", EntryPoint = "WNetOpenEnumW")]
+    internal static partial int WNetOpenEnum(
+        uint scope, uint type, uint usage, nint netResource, out nint handle);
+
+    [LibraryImport("mpr.dll", EntryPoint = "WNetEnumResourceW")]
+    internal static partial int WNetEnumResource(
+        nint handle, ref uint count, nint buffer, ref uint bufferSize);
+
+    [LibraryImport("mpr.dll", EntryPoint = "WNetCloseEnum")]
+    internal static partial int WNetCloseEnum(nint handle);
+
+    /// <summary>
+    /// Connects a share. A null <c>lpLocalName</c> makes it deviceless — a
+    /// connection to `\\server\share` with no drive letter — which is what
+    /// WindowsRemoteMounts wants, so a connection it makes does not also appear
+    /// in Places as a lettered network drive.
+    /// </summary>
+    [LibraryImport("mpr.dll", EntryPoint = "WNetAddConnection2W",
+        StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int WNetAddConnection2(
+        ref NETRESOURCEW netResource, string? password, string? username, uint flags);
+
+    [LibraryImport("mpr.dll", EntryPoint = "WNetCancelConnection2W",
+        StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int WNetCancelConnection2(string name, uint flags, [MarshalAs(UnmanagedType.Bool)] bool force);
+
+    // ---- DNS Service Discovery (dnsapi.dll) --------------------------------
+    //
+    // The Windows equivalent of asking avahi: Windows 10 has run its own mDNS
+    // responder since 1703, and DnsServiceBrowse is the documented way to ask
+    // it. INetworkDiscovery's own rule -- do not implement mDNS, ask the
+    // responder that has been listening since boot -- therefore holds here just
+    // as it does on Linux.
+
+    internal const uint DNS_REQUEST_PENDING = 9506;
+    internal const uint DNS_QUERY_REQUEST_VERSION1 = 1;
+
+    internal const ushort DNS_TYPE_A = 0x0001;
+    internal const ushort DNS_TYPE_PTR = 0x000C;
+    internal const ushort DNS_TYPE_AAAA = 0x001C;
+    internal const ushort DNS_TYPE_SRV = 0x0021;
+
+    /// <summary>
+    /// DNS_SERVICE_BROWSE_REQUEST. pBrowseCallback is a function pointer to an
+    /// <c>[UnmanagedCallersOnly]</c> static, which is what keeps this AOT-clean:
+    /// a managed delegate marshalled to native would need the reflection-based
+    /// marshaller this assembly does not have.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct DNS_SERVICE_BROWSE_REQUEST
+    {
+        internal uint Version;
+        internal uint InterfaceIndex;
+        internal nint QueryName;
+        internal nint pBrowseCallback;
+        internal nint pQueryContext;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct DNS_SERVICE_CANCEL
+    {
+        internal nint reserved;
+    }
+
+    [LibraryImport("dnsapi.dll", EntryPoint = "DnsServiceBrowse")]
+    internal static partial int DnsServiceBrowse(
+        ref DNS_SERVICE_BROWSE_REQUEST request, ref DNS_SERVICE_CANCEL cancel);
+
+    [LibraryImport("dnsapi.dll", EntryPoint = "DnsServiceBrowseCancel")]
+    internal static partial int DnsServiceBrowseCancel(ref DNS_SERVICE_CANCEL cancel);
+
+    [LibraryImport("dnsapi.dll", EntryPoint = "DnsFree")]
+    internal static partial void DnsFree(nint data, int freeType);
+
+    /// <summary>
+    /// DNS_SERVICE_RESOLVE_REQUEST — turns one instance name into a host, an
+    /// address and a port.
+    ///
+    /// **A second callback API rather than a DnsQuery for the SRV record**,
+    /// which was the first attempt and does not work: DnsQuery_W is the unicast
+    /// resolver, and it answers nothing for a `.local` name however the flags
+    /// are set. Measured against a network full of Chromecasts — the browse
+    /// found every instance and every SRV lookup came back empty. Only
+    /// DnsServiceResolve goes to the multicast responder.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct DNS_SERVICE_RESOLVE_REQUEST
+    {
+        internal uint Version;
+        internal uint InterfaceIndex;
+        internal nint QueryName;
+        internal nint pResolveCompletionCallback;
+        internal nint pQueryContext;
+    }
+
+    [LibraryImport("dnsapi.dll", EntryPoint = "DnsServiceResolve")]
+    internal static partial int DnsServiceResolve(
+        ref DNS_SERVICE_RESOLVE_REQUEST request, ref DNS_SERVICE_CANCEL cancel);
+
+    [LibraryImport("dnsapi.dll", EntryPoint = "DnsServiceResolveCancel")]
+    internal static partial int DnsServiceResolveCancel(ref DNS_SERVICE_CANCEL cancel);
+
+    [LibraryImport("dnsapi.dll", EntryPoint = "DnsServiceFreeInstance")]
+    internal static partial void DnsServiceFreeInstance(nint instance);
+
+    /// <summary>
+    /// Field offsets into DNS_SERVICE_INSTANCE on x64. Read by hand for the
+    /// same reason DNS_RECORDW is: only three of its eleven fields are wanted,
+    /// and two of the rest are parallel string arrays.
+    ///
+    ///   0  pszInstanceName   8  pszHostName   16 ip4Address   24 ip6Address
+    ///   32 wPort            34 wPriority     36 wWeight      40 dwPropertyCount
+    /// </summary>
+    internal static class DnsServiceInstance
+    {
+        internal const int HostName = 8;
+
+        /// <summary>A POINTER to an IP4_ADDRESS, not the address itself.</summary>
+        internal const int Ip4Address = 16;
+
+        internal const int Port = 32;
+    }
+
+    /// <summary>DnsFreeRecordList.</summary>
+    internal const int DnsFreeRecordList = 1;
+
+    /// <summary>
+    /// Field offsets into DNS_RECORDW on x64, which is read by hand rather than
+    /// declared as a struct: the Data member is a union whose largest arm would
+    /// force a size the shorter records do not have, and only three of its arms
+    /// are ever wanted here.
+    ///
+    ///   0  pNext        8  pName       16  wType      18  wDataLength
+    ///   20 Flags        24 dwTtl       28  dwReserved 32  Data
+    /// </summary>
+    internal static class DnsRecord
+    {
+        internal const int Next = 0;
+        internal const int Name = 8;
+        internal const int Type = 16;
+        internal const int Data = 32;
+
+        /// <summary>DNS_PTR_DATAW.pNameHost, and DNS_SRV_DATAW.pNameTarget.</summary>
+        internal const int TargetName = Data;
+
+        /// <summary>DNS_SRV_DATAW.wPort, past pNameTarget, wPriority and wWeight.</summary>
+        internal const int SrvPort = Data + 8 + 2 + 2;
+
+        /// <summary>DNS_A_DATA.IpAddress, in network order.</summary>
+        internal const int AAddress = Data;
+    }
 }
