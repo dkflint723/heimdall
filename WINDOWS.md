@@ -205,13 +205,24 @@ are path assumptions, not APIs — see §5.
   different model entirely. **Return `null`** — the interface is already nullable
   for exactly this reason.
 
-### Not worth doing
-- **`INetworkDiscovery`** — Avahi has no Windows equivalent worth the effort.
-  Return `null`.
-- **`IRemoteMounts`** — `gio` has no counterpart; Windows mapped drives appear as
-  ordinary drive letters through `IPlacesProvider` anyway. Return `null`.
+### Judged not worth doing — and wrong on all three. See §7a.
+- ~~**`INetworkDiscovery`** — Avahi has no Windows equivalent worth the effort.~~
+  True of avahi, false of the conclusion: Windows runs its own mDNS responder
+  and `DnsServiceBrowse` asks it the same question.
+- ~~**`IRemoteMounts`** — `gio` has no counterpart; Windows mapped drives appear
+  as ordinary drive letters through `IPlacesProvider` anyway.~~ Also true, and
+  also not the point — it left no way to *connect* to a share from inside
+  Heimdall, and nothing at all for a UNC path nobody had mapped.
 - **`IFileSharing`** — copyparty runs on Windows if Python is installed; the
-  existing `CopypartyShare` logic is mostly path handling and could move to Core.
+  existing `CopypartyShare` logic is mostly path handling and could move to
+  Core. This one was right, and is what happened.
+
+**Worth remembering as a pattern.** Each of these was filed under "not worth
+doing" after correctly observing that the *Linux mechanism* has no Windows
+counterpart — no avahi, no gio. The feature is not the mechanism, and in both
+cases Windows had its own way to do the same thing. A port's real risk is not
+the API that is missing; it is concluding from a missing API that the capability
+is missing.
 
 ---
 
@@ -484,10 +495,46 @@ it does not mean one file.
      smaller. Good first use of it.
    - **A per-file icon seam in Core** — see §4. Wanted on both platforms, so it
      is a Core design question rather than Windows work.
-   - **`IFileSharing`** — `CopypartyShare` is mostly path handling and could
-     move to Core, at which point Windows gets it for the cost of the move.
+   - ~~**`IFileSharing`**~~ — **DONE**, along with `IRemoteMounts` and
+     `INetworkDiscovery`; see §7a.
    - **Screens never opened on Windows** — search, properties, share. Compiled,
      never run. §5c is about exactly this class of bug.
+
+7a. **The network three — DONE.** All three of `IRemoteMounts`, `INetworkDiscovery`
+   and `IFileSharing` returned null, so the whole "Network and sharing" section
+   of the README did nothing on Windows. The UI was already wired for all of
+   them and simply received null, which is why the features were invisible
+   rather than broken.
+
+   - **`IRemoteMounts` → the redirector.** `WNetAddConnection2` to connect,
+     `WNetOpenEnum` to list, `WNetCancelConnection2` to disconnect — the Windows
+     shape of what gvfs does on Linux. Connections are made **deviceless**, with
+     no drive letter, because `WindowsPlacesProvider` already lists
+     `DriveType.Network` drives under Network and a lettered connection would
+     put the same share on screen twice. Credentials go to Windows'
+     own dialog via `CONNECT_INTERACTIVE | CONNECT_PROMPT`, so Heimdall never
+     handles a password and Credential Manager comes free.
+   - **`INetworkDiscovery` → `DnsServiceBrowse`.** Windows has run an mDNS
+     responder since 10 version 1703, so `INetworkDiscovery`'s rule — do not
+     implement mDNS, ask the responder that has been listening since boot —
+     holds here exactly as it does for avahi. **Not** the SMB network
+     neighbourhood: `WNetOpenEnum` over `RESOURCE_GLOBALNET` needs the Computer
+     Browser service and SMB1, both off by default, and would never find a
+     Heimdall share anyway.
+   - **`IFileSharing` → Core.** `CopypartyShare` moved to
+     `Heimdall.Core/Sharing` as predicted, behind a `CopypartyBackend` that
+     carries the two things that genuinely differ: where copyparty is, and how
+     to install it. About sixty lines a platform against four hundred shared.
+
+   **Two things this cost that were not on the list.** `DnsQuery_W` does not
+   resolve `.local` SRV records — the unicast resolver answers nothing for them,
+   measured against a network of Chromecasts where every browse succeeded and
+   every SRV lookup came back empty. `DnsServiceResolve`, a second callback API,
+   is the only route. And a browse callback must check the record type before
+   reading `Data`: the list carries SRV, TXT and A records alongside the PTRs,
+   `Data` is a union, and in a TXT record the first four bytes are a string
+   count — reading them as a pointer is an access violation on a DNS worker
+   thread, which no `catch` will save.
 
 ---
 

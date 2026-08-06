@@ -141,10 +141,14 @@ tell the colours apart.
 
 ## Network and sharing
 
-**Connect to a server** — SFTP, SMB and anything else your desktop can mount.
-Mounted shares appear in the sidebar and browse like local folders.
+**Connect to a server.** Shares appear in the sidebar and browse like local
+folders. On Linux that is SFTP, SMB and anything else your desktop can mount; on
+Windows it is SMB and, with the WebClient service, WebDAV — and if a share wants
+a password, Windows asks for it in its own dialog and remembers it.
 
-**Discover shares** on your network without typing addresses.
+**Discover shares** on your network without typing addresses. Whatever is
+announcing itself — a NAS, another desktop, a Heimdall share on another
+machine — shows up ready to connect.
 
 **Share a folder over HTTP** for another machine to fetch, with optional upload.
 This uses [copyparty](https://github.com/9001/copyparty) when you have it
@@ -258,11 +262,13 @@ version numbers should not be trusted yet. Known gaps:
 - **In a git submodule the marks wait for a refresh** after a commit rather than
   updating on their own.
 - **Selection mode, configurable shortcuts and multiple windows** are not built.
-- **Windows is new and incomplete.** It browses, lists drives, opens files,
-  copies, moves, renames, recycles, tags, and follows the system light/dark mode
-  and accent. Missing: the Trash view and *Restore* — recycled files come back
-  from Explorer, not from here — the shell's per-file icons, and *Open with* as
-  a list rather than the system picker. Tags are kept in an index under
+- **Windows is newer than Linux.** It browses, lists drives, opens files,
+  copies, moves, renames, recycles, tags, connects to and discovers network
+  shares, serves a folder over HTTP, and follows the system light/dark mode and
+  accent. Missing: the Trash view and *Restore* — recycled files come back from
+  Explorer, not from here — the shell's per-file icons, and *Open with* as a
+  list rather than the system picker. SFTP and FTP are Linux-only, because
+  Windows has no redirector for them. Tags are kept in an index under
   `%LOCALAPPDATA%\heimdall` rather than on the file itself, so unlike on Linux
   they do not travel with it. See [WINDOWS.md](WINDOWS.md).
 
