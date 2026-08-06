@@ -57,11 +57,19 @@ public abstract class CopypartyBackend
     public abstract string InstallFailedHint { get; }
 
     /// <summary>
-    /// Whether this failure is worth trying the next attempt for. Linux uses it
-    /// to notice PEP 668's externally-managed-environment, which is precisely
-    /// what its --break-system-packages attempt addresses.
+    /// Whether the NEXT attempt exists specifically for this failure, rather
+    /// than being another guess.
+    ///
+    /// It decides one thing: whether to say "failed, trying another way". Every
+    /// attempt is tried either way. Linux uses it to recognise PEP 668's
+    /// externally-managed-environment, which is exactly what its
+    /// --break-system-packages attempt is for — and stays quiet in that case,
+    /// because the next attempt is a targeted answer rather than the generic
+    /// flailing that message describes.
+    ///
+    /// False by default: most platforms have no failure-specific attempt.
     /// </summary>
-    public virtual bool ShouldTryNext(string output) => true;
+    public virtual bool NextAttemptAddresses(string output) => false;
 
     /// <summary>
     /// The first executable of this name on PATH, or null.
