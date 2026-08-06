@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Heimdall.Core;
 using Heimdall.Core.FileSystem;
 using Heimdall.Core.Places;
 
@@ -269,14 +270,106 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
     public ValueTask EjectAsync(string id, CancellationToken ct) => ValueTask.CompletedTask;
 
     /// <summary>
-    /// **Nothing to import yet, and it returns 0 rather than pretending.**
-    /// The Windows equivalent of Dolphin's user-places.xbel is Quick Access,
-    /// which is not a file: it lives behind a shell namespace extension and is
-    /// only readable through COM. The interface comment names Quick Access as
-    /// the target, so this is a gap rather than a decision — the built-in user
-    /// folders already cover most of what a fresh Quick Access contains.
+    /// Imports the shortcut folders Explorer keeps as files.
+    ///
+    /// **Quick Access is still not among them, and that is the honest half of
+    /// this.** It is where a Windows user's real bookmarks live, and it is not
+    /// a file — it is a shell namespace extension whose backing store is an OLE
+    /// compound jumplist, readable in practice only through COM. So this reads
+    /// the two places that ARE files: the Links folder, which is where Explorer
+    /// kept Favorites before Quick Access replaced it and which many profiles
+    /// still carry, and Network Shortcuts, which is where "Add a network
+    /// location" puts things.
+    ///
+    /// Partial beats nothing here because the alternative was returning 0 at
+    /// every startup while Linux imported its user's bookmarks — but it is
+    /// worth being clear that a user whose pins are all in Quick Access will
+    /// still see no change, and that is waiting on the same COM decision as the
+    /// Trash view and the open-with list.
     /// </summary>
-    public ValueTask<int> ImportExistingAsync(CancellationToken ct) => ValueTask.FromResult(0);
+    public ValueTask<int> ImportExistingAsync(CancellationToken ct)
+    {
+        var before = _pins.Count;
+        var builtIn = BuiltInPaths();
+
+        ImportShortcuts(Path.Combine(Home, "Links"), builtIn);
+
+        ImportShortcuts(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Microsoft", "Windows", "Network Shortcuts"),
+            builtIn);
+
+        // Anything previously imported that duplicates a built-in is dropped
+        // too, so an existing places.json is repaired rather than preserved.
+        _pins.RemoveAll(pin => builtIn.Contains(PathRules.Normalise(pin.Path)));
+
+        if (_pins.Count != before)
+        {
+            SavePins();
+            PlacesChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        return ValueTask.FromResult(_pins.Count - before);
+    }
+
+    /// <summary>
+    /// Every .lnk in a folder that points at a directory, pinned under the
+    /// shortcut's own name — "Sync.lnk" becomes "Sync", which is what the user
+    /// called it rather than what the target folder happens to be called.
+    /// </summary>
+    private void ImportShortcuts(string directory, HashSet<string> builtIn)
+    {
+        if (!Directory.Exists(directory)) return;
+
+        try
+        {
+            foreach (var shortcut in Directory.EnumerateFiles(directory, "*.lnk"))
+            {
+                var target = ShellLink.TargetOf(shortcut);
+
+                // Not a folder, or a virtual location with no path: skip it
+                // rather than pinning something that cannot be listed.
+                if (string.IsNullOrEmpty(target) || !Directory.Exists(target)) continue;
+
+                if (builtIn.Contains(PathRules.Normalise(target))) continue;
+                if (_pins.Any(p => PathRules.Same(p.Path, target))) continue;
+
+                _pins.Add(new PinnedPlace(
+                    target, Path.GetFileNameWithoutExtension(shortcut)));
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // A shortcuts folder that cannot be read is not worth failing
+            // startup over; the rest of the sidebar is unaffected.
+            Quiet.Swallowed("places", e);
+        }
+    }
+
+    /// <summary>
+    /// The paths the sidebar already shows without any pin, so importing one
+    /// does not put the same folder on screen twice.
+    /// </summary>
+    private HashSet<string> BuiltInPaths()
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { PathRules.Normalise(Home) };
+
+        foreach (var path in new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+            Downloads,
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+        })
+        {
+            if (!string.IsNullOrEmpty(path)) paths.Add(PathRules.Normalise(path));
+        }
+
+        return paths;
+    }
 
     private List<PinnedPlace> LoadPins()
     {

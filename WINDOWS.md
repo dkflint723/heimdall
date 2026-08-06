@@ -526,6 +526,36 @@ it does not mean one file.
      carries the two things that genuinely differ: where copyparty is, and how
      to install it. About sixty lines a platform against four hundred shared.
 
+7b. **The parity audit, and what it found.** With the network done, every
+   `IPlatform` member was compared against its Linux counterpart. Fifteen of
+   eighteen are implemented on both; the three nulls — `AccessEditor`, `Icons`,
+   `TrashMaintenance` — are each documented decisions rather than omissions.
+
+   The audit's value was in the members that are implemented and were still not
+   equivalent, which no null check would have caught:
+
+   - **Search ignored globs.** `LinuxSearchProvider` treats a query containing
+     `*` or `?` as a pattern and anything else as a substring. The Windows walk
+     had only the substring arm, so `*.cs` matched nothing at all — and looked
+     like an empty result rather than an unsupported syntax. **Fixed**; both now
+     use `FileSystemName.MatchesSimpleExpression` for patterns.
+   - **`ImportExistingAsync` returned 0 at every startup.** Linux imports the
+     user's KDE and GTK bookmarks. **Partly fixed**: the Links and Network
+     Shortcuts folders are `.lnk` files and are now read, by the documented
+     MS-SHLLINK format rather than through `IShellLink`. Quick Access, where a
+     Windows user's real pins live, is a shell namespace extension over an OLE
+     compound jumplist and still needs COM.
+   - **Content search has no Windows half.** Linux hands the query to Baloo when
+     KDE indexes; the fallback walk on both systems matches names only, so this
+     is a missing *extra* rather than a regression. `SupportsContentSearch`
+     correctly reports false — and is read by nothing in the UI, so neither
+     platform currently tells the user which mode they are in. The Windows
+     equivalent is the Search indexer, reachable only through an OLE DB provider.
+
+   **One COM decision now gates four features**: the Trash view, the open-with
+   list, Quick Access import and content search. That is worth stating as a
+   single decision rather than four backlog items.
+
    **Two things this cost that were not on the list.** `DnsQuery_W` does not
    resolve `.local` SRV records — the unicast resolver answers nothing for them,
    measured against a network of Chromecasts where every browse succeeded and
