@@ -100,9 +100,10 @@ public sealed class CopypartyShare : IFileSharing
                 return false;
             }
 
-            // Only worth trying the next approach if this one failed for the
-            // reason the next one addresses.
-            if (i < attempts.Count - 1 && _backend.ShouldTryNext(output))
+            // Quiet when the next attempt is the targeted answer to THIS
+            // failure, noisy when it is another guess. Every attempt runs
+            // either way; this only chooses whether to narrate.
+            if (i < attempts.Count - 1 && !_backend.NextAttemptAddresses(output))
                 progress.Report($"{attempt.Describe} failed, trying another way…");
         }
 

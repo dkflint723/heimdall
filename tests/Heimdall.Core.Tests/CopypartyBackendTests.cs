@@ -143,6 +143,33 @@ public class CopypartyBackendTests
     /// how several version managers put one on PATH, and rejecting every
     /// reparse point would break them.
     /// </summary>
+    /// <summary>
+    /// **This default is load-bearing, and it was briefly wrong.**
+    ///
+    /// It decides whether an install narrates "failed, trying another way"
+    /// between attempts. The rule is that the line appears when the next
+    /// attempt is another guess, and is suppressed when the next attempt exists
+    /// specifically for the failure that just happened — on Linux, PEP 668's
+    /// externally-managed-environment, which --break-system-packages answers
+    /// directly.
+    ///
+    /// Moving this code out of Heimdall.Linux inverted it: the hook was named
+    /// for "should we continue" and wired to the message, so the line appeared
+    /// in exactly the cases the original suppressed it. Nothing caught that,
+    /// because the Linux install path has no runtime coverage on a Windows
+    /// machine. False here is what keeps a platform with no failure-specific
+    /// attempt saying the honest thing.
+    /// </summary>
+    [Fact]
+    public void No_attempt_is_failure_specific_by_default()
+    {
+        var backend = new Probe();
+
+        Assert.False(backend.NextAttemptAddresses("externally-managed-environment"));
+        Assert.False(backend.NextAttemptAddresses("anything at all"));
+        Assert.False(backend.NextAttemptAddresses(""));
+    }
+
     [Fact]
     public void A_plain_empty_file_is_still_found()
     {

@@ -72,10 +72,12 @@ public sealed class LinuxCopyparty : CopypartyBackend
     }
 
     /// <summary>
-    /// The next attempt only helps if this one hit PEP 668, which is exactly
-    /// what --break-system-packages addresses.
+    /// The --break-system-packages attempt exists for exactly one failure: PEP
+    /// 668's externally-managed-environment, which Fedora and Debian both set.
+    /// When that is what happened, the next attempt is a targeted answer rather
+    /// than another guess, and saying "trying another way" would undersell it.
     /// </summary>
-    public override bool ShouldTryNext(string output)
+    public override bool NextAttemptAddresses(string output)
         => output.Contains("externally-managed-environment", StringComparison.OrdinalIgnoreCase);
 
     public override string NotInstalledHint =>
