@@ -15,6 +15,64 @@
         FontFamily="{DynamicResource AppFontFamily}"
         Width="1000" Height="680">
 
+  <Window.Styles>
+
+    <!-- **A TextBox that is only its text.**
+         Fluent gives a TextBox its own filled background, and swaps it for a
+         DIFFERENT fill while focused. Setting Background="Transparent" on the
+         control does not stop that: the theme's :focus and :pointerover styles
+         set the background on the template's own Border#PART_BorderElement,
+         which is a different property on a different object, so the local value
+         has nothing to override.
+
+         The symptom was a black rectangle appearing inside the rounded search
+         field the moment anyone typed in it, and only then — the field looked
+         correct until it had focus.
+
+         Every state is listed rather than relying on style order, because the
+         one that broke was a state the base selector already appeared to
+         cover. The rounded fill and border belong to the Border wrapping the
+         field; the TextBox inside is meant to contribute nothing but glyphs. -->
+    <Style Selector="TextBox.flat /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="TextBox.flat:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="TextBox.flat:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+
+    <!-- **A disabled button was the only one with a background.**
+         The same Fluent behaviour as above, in its most visible form: the
+         :disabled style fills PART_ContentPresenter with ButtonBackgroundDisabled,
+         which against this flat dark chrome is a light grey slab. So with no
+         history to go forward to, "forward" and "up" were the two buttons
+         wearing a raised fill while "back" — the one that actually worked —
+         stayed flat. Exactly backwards.
+
+         Window-wide rather than per-button: every button in this window is
+         flat by design, and the ones that can be disabled are scattered
+         (navigation, scan, connect to server).
+
+         The opacity is doing the work the fill used to. It has to be on the
+         button rather than left to Fluent's foreground dimming, because these
+         buttons are stroked Paths with an explicit Stroke — a Foreground
+         setter never reaches them, which is why removing the fill would
+         otherwise leave nothing at all to say "unavailable". -->
+    <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button:disabled">
+      <Setter Property="Opacity" Value="0.38"/>
+    </Style>
+
+  </Window.Styles>
+
   <Window.Resources>
 
     <!-- The type scale and every derived metric are deliberately NOT declared
@@ -555,6 +613,7 @@
                     <TextBox Text="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.Query}"
                              local:FocusBehavior.FocusWhen="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.IsSearching}"
                              PlaceholderText="Search files"
+                             Classes="flat"
                              Background="Transparent" BorderThickness="0"
                              MinHeight="0" Padding="0,3" VerticalContentAlignment="Center"
                              FontSize="{DynamicResource FontSizeSmall}"/>
