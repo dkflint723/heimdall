@@ -44,7 +44,7 @@ public sealed class LinuxPlatform : IPlatform
 
     public ITemplateProvider Templates { get; } = new XdgTemplates();
 
-    public IFileSharing? Sharing { get; } = new CopypartyShare();
+    public IFileSharing? Sharing { get; } = new CopypartyShare(new LinuxCopyparty());
 
     public IRemoteMounts? Remotes { get; } = new LinuxRemoteMounts();
 

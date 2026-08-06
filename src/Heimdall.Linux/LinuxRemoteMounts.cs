@@ -31,6 +31,11 @@ public sealed partial class LinuxRemoteMounts : IRemoteMounts
 
     public bool IsAvailable => Directory.Exists(_runtimeDir);
 
+    /// <summary>Unchanged from when the prompt hard-coded these.</summary>
+    public string AddressPrefill => "smb://";
+
+    public string AddressHint => "smb:// · sftp:// · ftp:// · dav://";
+
     public IReadOnlyList<RemoteMount> Discover()
     {
         var found = new List<RemoteMount>();
