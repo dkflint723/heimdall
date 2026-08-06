@@ -35,6 +35,20 @@ public interface IRemoteMounts
     /// <summary>False when no mount helper is present on this system.</summary>
     bool IsAvailable { get; }
 
+    /// <summary>
+    /// What to put in the connect prompt before the user types, and what to
+    /// offer underneath it.
+    ///
+    /// Here rather than in the view because the answer is a property of the
+    /// mounter: `smb://` is right where gio does the work and wrong where the
+    /// Windows redirector does, and a prompt that suggests `sftp://` on a
+    /// system that cannot mount it is worse than one that suggests nothing.
+    /// </summary>
+    string AddressPrefill { get; }
+
+    /// <summary>The address forms this accepts, as one short line.</summary>
+    string AddressHint { get; }
+
     /// <summary>Everything currently mounted. Cheap enough to poll.</summary>
     IReadOnlyList<RemoteMount> Discover();
 

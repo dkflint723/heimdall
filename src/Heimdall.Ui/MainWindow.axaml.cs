@@ -1558,12 +1558,16 @@ public partial class MainWindow : Window
         _prompt = PromptMode.Connect;
 
         PromptLabel.Text = "connect to";
-        PromptInput.Text = "smb://";
+
+        // From the mounter, not from here: gio takes smb:// and the Windows
+        // redirector takes \\server\share, and offering the wrong one is worse
+        // than offering nothing.
+        PromptInput.Text = _shell.ConnectPrefill;
         PromptInput.IsVisible = true;
         PromptConfirm.Content = "connect";
         PromptConfirm.IsVisible = true;
         PromptCancel.IsVisible = true;
-        PromptHint.Text = "smb:// · sftp:// · ftp:// · dav:// — esc to cancel";
+        PromptHint.Text = $"{_shell.ConnectHint} — esc to cancel";
         PromptBar.IsVisible = true;
 
         PromptInput.Focus();
