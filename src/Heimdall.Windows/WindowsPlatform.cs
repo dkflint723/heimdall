@@ -34,6 +34,19 @@ public sealed class WindowsPlatform : IPlatform
     public WindowsPlatform(string stateDirectory)
     {
         StateDirectory = stateDirectory;
+
+        // Before anything asks for git. The version-control seam resolves it
+        // through PATH, and Git for Windows is routinely installed without
+        // being put there — its installer offers exactly that, and GitHub
+        // Desktop bundles a private copy instead. The result is a listing with
+        // no decoration, which looks the same as a folder with nothing to
+        // report, so the failure never announces itself.
+        //
+        // Here because it is a fact about this operating system, and the
+        // composition root is where those are allowed to live. It edits this
+        // process's environment only — see GitOnPath.
+        if (GitOnPath.Ensure() is { } git)
+            Console.Error.WriteLine($"[heimdall] vcs: git not on PATH, found at {git}");
         Places = new WindowsPlacesProvider(stateDirectory);
         Scripts = new WindowsScriptRunner(stateDirectory);
 
