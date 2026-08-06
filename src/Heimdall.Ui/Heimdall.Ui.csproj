@@ -37,8 +37,18 @@
        references make it possible to break the Linux build from a Windows
        machine without noticing, and waiting for CI to say so is a slow way to
        find out. The compile is real; only the runtime behaviour still needs the
-       other OS. -->
+       other OS.
+
+       The RuntimeIdentifier is consulted BEFORE the host OS, because what is
+       being built is a property of the target, not of the machine doing the
+       building. `dotnet publish -r win-x64` from a Linux box has to be a
+       Windows build; defaulting it from the host produced a win-x64 binary
+       carrying Linux platform code and the default .NET icon, with nothing in
+       the publish failing to say so. An explicit -p:HeimdallPlatform still
+       wins over both. -->
   <PropertyGroup>
+    <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('win'))">Windows</HeimdallPlatform>
+    <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('linux'))">Linux</HeimdallPlatform>
     <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsLinux())' == 'true'">Linux</HeimdallPlatform>
     <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsWindows())' == 'true'">Windows</HeimdallPlatform>
   </PropertyGroup>
@@ -67,13 +77,23 @@
          Without it the binary carries the default .NET icon.
 
          Windows only, because it is a PE resource and means nothing to an ELF
-         binary. It sits here rather than beside the AvaloniaResource above
-         because HeimdallPlatform is not set until further up this file, and
-         MSBuild evaluates a condition against whatever the property held at
-         the moment it was read.
+         binary. It sits here rather than beside the AvaloniaResource near the
+         top of the file because HeimdallPlatform is not resolved until the
+         PropertyGroup above, and MSBuild evaluates a condition against
+         whatever the property held at the moment it was read.
+
+         Avalonia would otherwise ALSO pull this .ico in as a resource
+         (AvaloniaIncludeApplicationIconAsWindowIcon defaults to true), which
+         embedded all 27 KB of it a second time: a 55 KB delta between the
+         Windows and Linux builds. AppIcon.cs already sets every
+         window's icon from the avares heimdall.png, so that copy was never
+         read. Turning it off also means a missing .ico fails as a plain csc
+         icon error rather than an unhandled GenerateAvaloniaResourcesTask
+         crash with ten lines of Avalonia stack trace.
 
          Built from the hicolor SVGs by brand/make-ico.py; see that script for
          why each size is rendered from its own drawing rather than scaled. -->
     <ApplicationIcon>..\..\brand\icons\heimdall.ico</ApplicationIcon>
+    <AvaloniaIncludeApplicationIconAsWindowIcon>false</AvaloniaIncludeApplicationIconAsWindowIcon>
   </PropertyGroup>
 </Project>

@@ -15,12 +15,35 @@
 ; AppVersion and Payload are required; the compile fails with a readable message
 ; below rather than producing an installer stamped 0.0.0 or holding nothing.
 
+; Both a definedness AND a value test. `#ifndef` alone is not enough: ISCC
+; accepts /DAppVersion= with nothing after the `=` and defines the symbol with a
+; null value, so #ifndef is false, the #error below never fires, and the compile
+; SUCCEEDS -- emitting heimdall--win-x64-setup.exe stamped 0.0.0.0, which is the
+; exact outcome this guard exists to prevent.
 #ifndef AppVersion
   #error AppVersion is required: pass /DAppVersion=x.y.z
+#endif
+#if AppVersion == ""
+  #error AppVersion is empty: pass /DAppVersion=x.y.z
 #endif
 
 #ifndef Payload
   #error Payload is required: pass /DPayload=<the publish directory>
+#endif
+#if Payload == ""
+  #error Payload is empty: pass /DPayload=<the publish directory>
+#endif
+
+; VersionInfoVersion is written into the PE VERSIONINFO resource and accepts
+; only dot-separated numbers. AppVersion, AppVerName and OutputBaseFilename all
+; tolerate a semver prerelease suffix, so a v0.5.0-rc1 tag would sail through
+; every other directive and abort the compile on that one line -- after the full
+; NativeAOT link, and only ever on a tag push. Strip from the first dash so the
+; resource gets 0.5.0 while everything the user sees keeps the full string.
+#if Pos("-", AppVersion) > 0
+  #define NumericVersion Copy(AppVersion, 1, Pos("-", AppVersion) - 1)
+#else
+  #define NumericVersion AppVersion
 #endif
 
 #define AppName "Heimdall"
@@ -37,7 +60,7 @@ AppPublisher={#AppPublisher}
 AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
 AppUpdatesURL={#AppUrl}/releases
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#NumericVersion}
 
 ; Per-user by default, so installing needs no administrator and no UAC prompt.
 ; A file manager is a personal tool and there is nothing here that belongs to
@@ -103,7 +126,9 @@ Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; \
     Flags: nowait postinstall skipifsilent
 
 ; No [UninstallDelete]. Tabs, pinned places, window position, folder views,
-; recents and the tag index all live under %LOCALAPPDATA%\heimdall, not beside
-; the binary, and an uninstall deliberately leaves them there -- reinstalling or
-; upgrading should find your tabs where you left them, and silently destroying
-; the tag index is not something an uninstaller should decide on its own.
+; recents, settings, the tag index and the user's own scripts\ folder all live
+; under %LOCALAPPDATA%\heimdall, not beside the binary, and an uninstall
+; deliberately leaves them there -- reinstalling or upgrading should find your
+; tabs where you left them, and silently destroying the tag index or scripts
+; somebody wrote themselves is not something an uninstaller should decide on
+; its own.
