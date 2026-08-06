@@ -229,6 +229,19 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
+          # This job never checks out, and `gh` works out which repository it
+          # is talking to by shelling out to git. With no .git anywhere it dies
+          # on "failed to run git: fatal: not a git repository" before it can
+          # create or upload anything. Naming the repository outright is
+          # cheaper than a checkout that exists only to be read by git.
+          #
+          # distro.yml already carried this line, and the comment explaining
+          # why. When "One job owns the release" moved publishing here, the
+          # step came across and the variable did not — so v0.5.0 published
+          # with the distro packages and without the Windows installer or the
+          # plain tarball, because distro.yml still had what build.yml had
+          # lost.
+          GH_REPO: ${{ github.repository }}
         run: |
           # --prerelease is derived, not unconditional. Passing it for every tag
           # marked even a stable release as a prerelease, which suppresses the
