@@ -77,8 +77,22 @@ public class NetworkAddressTests
     [InlineData(@"\\nas\media", "media on nas")]
     [InlineData(@"\\nas\media\photos", "photos on nas")]
     [InlineData(@"\\nas", "nas")]
+    // An administrative share, taken from a verified live connection. The `$`
+    // is part of the name and survives unchanged — it is not a wildcard here.
+    [InlineData(@"\\localhost\C$", "C$ on localhost")]
     public void A_share_is_labelled_by_name_and_server(string unc, string expected)
         => Assert.Equal(expected, WindowsRemoteMounts.LabelFor(unc));
+
+    /// <summary>
+    /// The three spellings of one SMB share, all of which converge — verified
+    /// against a live connection to <c>\\localhost\C$</c>.
+    /// </summary>
+    [WindowsTheory]
+    [InlineData(@"\\localhost\C$")]
+    [InlineData("localhost/C$")]
+    [InlineData("smb://localhost/C$")]
+    public void Every_spelling_of_one_share_reaches_the_same_path(string typed)
+        => Assert.Equal(@"\\localhost\C$", WindowsRemoteMounts.ToUnc(typed));
 
     /// <summary>
     /// The WebDAV forms, all three taken from real connections. `host@8080` is
