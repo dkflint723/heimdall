@@ -121,6 +121,16 @@ public sealed class WindowsSearchProvider : ISearchProvider
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
 
+        // A pattern is matched as a pattern; anything else is treated as a
+        // substring, which is what people expect when they just type a word.
+        //
+        // Windows had only the substring half, so typing `*.cs` matched
+        // nothing at all -- no filename contains those three characters in that
+        // order -- while the same query on Linux listed every C# file. A glob
+        // is the one search syntax a person is likely to try without being told
+        // it exists, and failing it silently reads as "there are no results".
+        var glob = query.Text.Contains('*') || query.Text.Contains('?');
+
         // A null scope means "everywhere indexed", and with no index the honest
         // reading is every fixed drive.
         var roots = string.IsNullOrEmpty(query.ScopePath)
@@ -166,7 +176,8 @@ public sealed class WindowsSearchProvider : ISearchProvider
             {
                 if (entry.IsDirectory) pending.Push(entry.FullPath);
 
-                if (!entry.Name.Contains(query.Text, comparison)) continue;
+                if (!Matches(entry.Name, query.Text, glob, comparison, query.CaseSensitive))
+                    continue;
 
                 yield return entry;
 
@@ -174,6 +185,20 @@ public sealed class WindowsSearchProvider : ISearchProvider
             }
         }
     }
+
+    /// <summary>
+    /// The same rule LinuxSearchProvider applies, so a query means the same
+    /// thing on both systems.
+    ///
+    /// <see cref="FileSystemName.MatchesSimpleExpression"/> is the matcher the
+    /// enumeration itself uses for a search pattern, so `*.cs`, `note?.txt` and
+    /// `*report*` behave here exactly as they do everywhere else in Windows.
+    /// </summary>
+    internal static bool Matches(
+        string name, string text, bool glob, StringComparison comparison, bool caseSensitive)
+        => glob
+            ? FileSystemName.MatchesSimpleExpression(text, name, ignoreCase: !caseSensitive)
+            : name.Contains(text, comparison);
 
     private static FileEntry Transform(ref FileSystemEntry entry) => new(
         Name: entry.FileName.ToString(),

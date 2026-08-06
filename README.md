@@ -267,8 +267,11 @@ version numbers should not be trusted yet. Known gaps:
   shares, serves a folder over HTTP, and follows the system light/dark mode and
   accent. Missing: the Trash view and *Restore* — recycled files come back from
   Explorer, not from here — the shell's per-file icons, and *Open with* as a
-  list rather than the system picker. SFTP and FTP are Linux-only, because
-  Windows has no redirector for them. Tags are kept in an index under
+  list rather than the system picker. Search matches file *names* only: on
+  Linux, Heimdall can hand the query to Baloo and search inside files where KDE
+  indexes them. Pins in Explorer's Quick Access are not imported, though the
+  older Links and Network Shortcuts folders are. SFTP and FTP are Linux-only,
+  because Windows has no redirector for them. Tags are kept in an index under
   `%LOCALAPPDATA%\heimdall` rather than on the file itself, so unlike on Linux
   they do not travel with it. See [WINDOWS.md](WINDOWS.md).
 
