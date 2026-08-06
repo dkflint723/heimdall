@@ -136,17 +136,43 @@ public sealed class WindowsRemoteMounts : IRemoteMounts
         Reachable = IsReachable(remote),
     };
 
-    /// <summary>"media on nas", matching the phrasing the gvfs reader produces.</summary>
+    /// <summary>
+    /// "media on nas", matching the phrasing the gvfs reader produces.
+    ///
+    /// Two things are tidied on the way, both of them redirector syntax rather
+    /// than anything a person typed. A WebDAV host carries its port as
+    /// `host@8080` or its scheme as `host@SSL`, which reads as an email
+    /// address; the port is restored to the `host:8080` a person would
+    /// recognise and `@SSL` simply dropped. And a connection to the root of a
+    /// WebDAV server has `DavWWWRoot` as its share name — the redirector's own
+    /// name for "the whole server", which says nothing to anybody — so the host
+    /// stands alone instead.
+    /// </summary>
     internal static string LabelFor(string unc)
     {
         var parts = unc.TrimStart('\\').Split('\\', StringSplitOptions.RemoveEmptyEntries);
 
-        return parts.Length switch
-        {
-            0 => unc,
-            1 => parts[0],
-            _ => $"{parts[^1]} on {parts[0]}",
-        };
+        if (parts.Length == 0) return unc;
+
+        var host = Host(parts[0]);
+
+        if (parts.Length == 1) return host;
+
+        return parts[^1].Equals("DavWWWRoot", StringComparison.OrdinalIgnoreCase)
+            ? host
+            : $"{parts[^1]} on {host}";
+    }
+
+    private static string Host(string host)
+    {
+        var at = host.IndexOf('@');
+        if (at < 0) return host;
+
+        var suffix = host[(at + 1)..];
+
+        // A port becomes the punctuation everyone reads as a port; @SSL only
+        // says the redirector chose https, which the entry's protocol covers.
+        return suffix.All(char.IsAsciiDigit) ? $"{host[..at]}:{suffix}" : host[..at];
     }
 
     /// <summary>
@@ -236,6 +262,10 @@ public sealed class WindowsRemoteMounts : IRemoteMounts
     {
         var unc = ToUnc(uri);
 
+        // What is connected before, so the new arrival can be told apart from
+        // it afterwards. See the end of this method for why that is necessary.
+        var before = Discover().Select(m => m.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var status = await Task.Run(() => Connect(unc, prompt: false), ct).ConfigureAwait(false);
 
         // Only the failures a password would actually fix are worth a dialog.
@@ -251,7 +281,24 @@ public sealed class WindowsRemoteMounts : IRemoteMounts
 
         if (status != Native.NO_ERROR) throw new IOException(Explain(status, unc));
 
-        return Build(unc);
+        // **The redirector renames what it connected, so ask it rather than
+        // assume.** A WebDAV endpoint goes in as `http://host:port/` and comes
+        // back as `\\host@port\DavWWWRoot`; returning the string that was passed
+        // in produced a mount whose Path was a URL, whose Protocol read as smb
+        // because there was no `@` in it, and which reported itself unreachable
+        // because no directory answers to `http://…`. The shell then navigated
+        // to it and resolved it against the working directory.
+        //
+        // Discover() had the right answer the whole time, which is what made
+        // this survive a real test: the sidebar entry comes from there and was
+        // correct, while the navigation immediately after connecting was not.
+        // LinuxRemoteMounts polls for the new mount for the same reason -- gio
+        // also decides where a share lands.
+        var landed = Discover().FirstOrDefault(m => !before.Contains(m.Path));
+
+        // Falls back for the case with no new entry: an SMB share that was
+        // already connected, where the name asked for is the name it has.
+        return landed ?? Build(unc);
     }
 
     private static int Connect(string unc, bool prompt)

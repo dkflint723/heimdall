@@ -81,6 +81,23 @@ public class NetworkAddressTests
         => Assert.Equal(expected, WindowsRemoteMounts.LabelFor(unc));
 
     /// <summary>
+    /// The WebDAV forms, all three taken from real connections. `host@8080` is
+    /// how the redirector carries a port and reads as an email address;
+    /// `DavWWWRoot` is its own name for "the root of this server" and means
+    /// nothing to a person.
+    /// </summary>
+    [WindowsTheory]
+    // A phone serving http://192.168.4.39:8080/files.
+    [InlineData(@"\\192.168.4.39@8080\files", "files on 192.168.4.39:8080")]
+    // The root of a WebDAV server: the share name is the redirector's, not the user's.
+    [InlineData(@"\\127.0.0.1@3939\DavWWWRoot", "127.0.0.1:3939")]
+    [InlineData(@"\\box@SSL\DavWWWRoot", "box")]
+    // https on a non-default port keeps the port and loses the @SSL noise.
+    [InlineData(@"\\box@SSL\dav", "dav on box")]
+    public void A_WebDAV_share_is_labelled_in_words_a_person_uses(string unc, string expected)
+        => Assert.Equal(expected, WindowsRemoteMounts.LabelFor(unc));
+
+    /// <summary>
     /// `\\host@SSL\path` and `\\host@8080\path` are how the redirector spells an
     /// HTTP endpoint, and are the only thing here that is not SMB.
     /// </summary>
