@@ -193,15 +193,22 @@ public static class ThemeApplier
             : palette?.FontFamily is { Length: > 0 } family ? new FontFamily(family)
             : FontFamily.Default;
 
-        // Traced because the absence of this was invisible rather than wrong:
-        // the font setting did nothing for two ordering reasons at once, and a
-        // single line here would have shown both immediately.
+        ApplyDesignScheme(target);
+
+        // Logged AFTER the design scheme, not before, and that is the whole
+        // point. This line used to sit above the call and report the value it
+        // had just written — which the design scheme then replaced. So it
+        // printed applied='Segoe UI' while the window was unmistakably in
+        // JetBrains Mono, and a trace added to make a font problem visible
+        // spent its life describing a value nothing ever rendered.
+        //
+        // A diagnostic that reports an intention rather than an outcome is
+        // worse than none: it answers the question convincingly and wrongly.
+        // Read the dictionary back, after everything that writes to it.
         Console.Error.WriteLine(
             $"[heimdall] font: configured='{chosen ?? "(none)"}' "
             + $"desktop='{palette?.FontFamily ?? "(none)"}' "
             + $"applied='{target["AppFontFamily"]}'");
-
-        ApplyDesignScheme(target);
     }
 
     /// <summary>
@@ -256,8 +263,26 @@ public static class ThemeApplier
         // The mock sets 'JetBrains Mono'. What is installed here is the Nerd
         // Font packaging of the same typeface, so it is named first and the
         // plain name kept behind it for a machine that has that instead.
-        target["AppFontFamily"] =
-            new FontFamily("JetBrainsMono NF, JetBrains Mono, Cascadia Mono, Consolas");
+        //
+        // **Skipped when the user picked a font, and that exception is the
+        // reason this method takes an argument it otherwise would not need.**
+        // Everything else here deliberately overrides the desktop — that is
+        // what applying the reference verbatim means, and the desktop's colours
+        // are a default rather than a decision. A font chosen in Settings is
+        // not a default. It was being computed, logged, and then overwritten
+        // three lines later, so the setting appeared to do nothing at all: the
+        // list offered every installed family, accepted the choice, saved it,
+        // and the window carried on in JetBrains Mono.
+        //
+        // The ordering that makes the rest of this correct is exactly what made
+        // the font wrong, which is why it reads as an exception rather than a
+        // reordering. Moving the whole block earlier would hand the desktop's
+        // palette back its win over the reference.
+        if (Settings.AppSettings.Current.Views.CustomFontFamily is not { Length: > 0 })
+        {
+            target["AppFontFamily"] =
+                new FontFamily("JetBrainsMono NF, JetBrains Mono, Cascadia Mono, Consolas");
+        }
 
         // Re-derived from the new text colours. The ramp above was built from
         // the desktop's and would otherwise be left pointing at a palette that
