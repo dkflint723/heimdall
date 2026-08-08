@@ -133,7 +133,18 @@ public static class ThemeApplier
         // the same palette. Window-scoped resources are invisible to siblings.
         var target = Application.Current?.Resources ?? window.Resources;
 
-        var dark = palette?.IsDark ?? true;
+        // **One variable decides lightness, and everything else reads it.** The
+        // setting overrules the desktop when it says anything but FollowDesktop;
+        // the desktop is the default and the fallback, including when no palette
+        // could be read at all. Deliberately computed here rather than at the
+        // three places that consume it — the whole failure this file was
+        // repaired for was two things deciding lightness independently.
+        var dark = Settings.AppSettings.Current.Views.ThemeMode switch
+        {
+            Core.Settings.ThemeMode.Light => false,
+            Core.Settings.ThemeMode.Dark => true,
+            _ => palette?.IsDark ?? true,
+        };
 
         // **Fluent has to be told, or it answers this question separately and
         // differently.**

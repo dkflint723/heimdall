@@ -69,6 +69,12 @@ public sealed partial class SettingsViewModel : ObservableObject
             string.Equals(o.Name, views.CustomFontFamily, StringComparison.OrdinalIgnoreCase))
             ?? AvailableFonts[0];
         _followDesktopColours = views.FollowDesktopColours;
+        _themeModeIndex = views.ThemeMode switch
+        {
+            Core.Settings.ThemeMode.Light => 1,
+            Core.Settings.ThemeMode.Dark => 2,
+            _ => 0,
+        };
         _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
         _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
 
@@ -230,6 +236,24 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// whether the desktop's HUES come too.
     /// </summary>
     [ObservableProperty] private bool _followDesktopColours;
+
+    /// <summary>
+    /// Light, dark or follow the desktop, as a ComboBox index.
+    ///
+    /// **An index rather than the enum**, because binding SelectedItem to an
+    /// enum needs either an ObjectDataProvider-style items source or a converter
+    /// per direction, and the list here is three fixed rows that will not grow.
+    /// SelectedIndex is the honest way to say that. The order is fixed by
+    /// <see cref="ThemeModeFromIndex"/>, which is the only place it is decoded.
+    /// </summary>
+    [ObservableProperty] private int _themeModeIndex;
+
+    private Core.Settings.ThemeMode ThemeModeFromIndex() => ThemeModeIndex switch
+    {
+        1 => Core.Settings.ThemeMode.Light,
+        2 => Core.Settings.ThemeMode.Dark,
+        _ => Core.Settings.ThemeMode.FollowDesktop,
+    };
 
     /// <summary>Marks modified, added, untracked and conflicted files in a
     /// repository. Only ever visible inside one.</summary>
@@ -413,6 +437,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                     : SelectedFont.Name,
 
                 FollowDesktopColours = FollowDesktopColours,
+                ThemeMode = ThemeModeFromIndex(),
 
                 Icons = _original.Views.Icons with { Spacing = Spacing(IconSpacing) },
                 Compact = _original.Views.Compact with { Spacing = Spacing(CompactSpacing) },

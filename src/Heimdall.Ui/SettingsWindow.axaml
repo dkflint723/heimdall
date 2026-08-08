@@ -363,6 +363,20 @@
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"/>
 
+          <StackPanel Spacing="6">
+            <ComboBox SelectedIndex="{Binding ThemeModeIndex}"
+                      HorizontalAlignment="Stretch"
+                      FontSize="{DynamicResource FontSizeSmall}">
+              <ComboBoxItem Content="Follow the desktop"/>
+              <ComboBoxItem Content="Light"/>
+              <ComboBoxItem Content="Dark"/>
+            </ComboBox>
+            <TextBlock Text="Following the desktop is the default, and the only setting that keeps up when you change your desktop while Heimdall is open. The other two hold whatever you pick."
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+
           <!-- The flag behind this has been read on every theme apply for some
                time and had no control at all, so the only way to set it was to
                edit settings.json by hand. -->
@@ -370,7 +384,7 @@
                     IsChecked="{Binding FollowDesktopColours}">
             <StackPanel>
               <TextBlock Text="Follow desktop colours"/>
-              <TextBlock Text="Off, Heimdall uses its own scheme. On, your desktop's colours and accent are layered over it. Either way it follows your desktop's light or dark setting — that part is not a preference, because a dark window on a machine set to light is unreadable rather than stylish."
+              <TextBlock Text="Off, Heimdall uses its own scheme. On, your desktop's colours and accent are layered over it. This is about hues, not lightness — whichever you choose, the setting above still decides light or dark."
                          FontSize="{DynamicResource FontSizeTiny}"
                          Foreground="{DynamicResource ViewDimText}"
                          TextWrapping="Wrap"/>

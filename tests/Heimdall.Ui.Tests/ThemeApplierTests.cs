@@ -132,6 +132,74 @@ public class ThemeApplierTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// **The setting has to beat the desktop, or it is decoration.**
+    ///
+    /// Each case forces the scheme OPPOSITE to what the desktop asks for, so a
+    /// pass cannot come from the two happening to agree — which is exactly how
+    /// the lightness bug hid for months. Asserting the variant as well as the
+    /// surfaces, because both have to move together: a setting that repainted
+    /// the backgrounds and left Fluent on the desktop's answer would reproduce
+    /// the original defect through a new door.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(ThemeMode.Light, true)]
+    [InlineData(ThemeMode.Dark, false)]
+    public void A_chosen_scheme_overrules_the_desktop(ThemeMode mode, bool desktopIsDark)
+    {
+        Configure(null);
+        AppSettings.Apply(AppSettings.Current with
+        {
+            Views = AppSettings.Current.Views with { ThemeMode = mode },
+        });
+
+        var window = new Window();
+        ThemeApplier.Apply(window, new ThemePalette
+        {
+            Colours = new Dictionary<string, string>(),
+            IsDark = desktopIsDark,
+        });
+
+        var wantDark = mode == ThemeMode.Dark;
+
+        Assert.Equal(
+            wantDark ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light,
+            Avalonia.Application.Current?.RequestedThemeVariant);
+
+        var listing = Resource(window, "ViewBackground");
+        var chrome = Resource(window, "AppBackground");
+
+        if (wantDark) Assert.True(listing.R < chrome.R, "forced dark: the listing should recede");
+        else Assert.True(listing.R > chrome.R, "forced light: the listing should be the paper");
+    }
+
+    /// <summary>
+    /// And with nothing chosen it still follows the desktop, which is the
+    /// default and the case that actually protects people.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Following_the_desktop_stays_the_default(bool desktopIsDark)
+    {
+        Configure(null);
+        AppSettings.Apply(AppSettings.Current with
+        {
+            Views = AppSettings.Current.Views with { ThemeMode = ThemeMode.FollowDesktop },
+        });
+
+        var window = new Window();
+        ThemeApplier.Apply(window, new ThemePalette
+        {
+            Colours = new Dictionary<string, string>(),
+            IsDark = desktopIsDark,
+        });
+
+        Assert.Equal(
+            desktopIsDark ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light,
+            Avalonia.Application.Current?.RequestedThemeVariant);
+    }
+
     private static double Contrast(Color a, Color b)
     {
         var (la, lb) = (Luminance(a), Luminance(b));

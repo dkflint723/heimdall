@@ -152,7 +152,7 @@ Heimdall reads your desktop's configuration rather than keeping its own copy:
 
 | | |
 |---|---|
-| **Light or dark** | follows your desktop, always |
+| **Light or dark** | follows your desktop, or whichever you pick |
 | **Colour scheme and accent** | the design reference's own, or your desktop's if you ask |
 | **Icon theme** | your themed icons, with hand-drawn fallbacks where a theme has none |
 | **Font** | the design reference's typeface, or any family you choose |
@@ -171,10 +171,12 @@ accent are layered over it instead; choose a font in Settings and it is used
 throughout. Sizes and dates keep the monospaced face either way, so figures still
 line up down a column.
 
-**Light and dark are not part of that choice.** The bundled scheme comes in both
-and follows whatever your desktop is set to, whether or not you are following its
-colours. A dark window on a machine set to light is not a considered look, it is
-an unreadable one.
+**Light and dark are a separate choice**, in the same place — *Follow the
+desktop*, *Light* or *Dark*. Following the desktop is the default and the only
+one that keeps up when you change your desktop with Heimdall already open; the
+other two hold whatever you pick, whether or not that matches the rest of your
+machine. The bundled scheme is drawn for both, so neither is an inversion of the
+other.
 
 ## Keyboard
 
@@ -201,8 +203,8 @@ an unreadable one.
 
 One dialog (`Ctrl+Shift+,`) covers sorting, what a click does, previews and their
 size limits, confirmations, the status bar, which entries appear in the
-right-click menu, per-layout spacing, date style, the font, version-control marks,
-the details panel's behaviour, and how the trash is swept.
+right-click menu, per-layout spacing, date style, the font, light or dark,
+version-control marks, the details panel's behaviour, and how the trash is swept.
 
 Heimdall can also remember the view, sort order and zoom for each folder
 individually, if you would rather not set them again every time.

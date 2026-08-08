@@ -189,6 +189,25 @@ public enum NarrowPanelBehaviour
     GrowWindow,
 }
 
+/// <summary>
+/// Which lightness the bundled scheme uses.
+///
+/// **Separate from <see cref="ViewSettings.FollowDesktopColours"/>, which is
+/// about hues.** That flag decides whether the desktop's scheme and accent are
+/// layered over the bundled one; this decides only whether the result is light
+/// or dark, and the two compose — a desktop-coloured window still honours a
+/// forced lightness.
+/// </summary>
+public enum ThemeMode
+{
+    /// <summary>Whatever the desktop is set to. The default, and the only value
+    /// that keeps up when the desktop changes while Heimdall is running.</summary>
+    FollowDesktop,
+
+    Light,
+    Dark,
+}
+
 public sealed record ViewSettings
 {
     /// <summary>
@@ -231,6 +250,18 @@ public sealed record ViewSettings
     /// the choice is one flag.
     /// </summary>
     public bool FollowDesktopColours { get; init; }
+
+    /// <summary>
+    /// Light, dark, or whatever the desktop says.
+    ///
+    /// **Defaults to following the desktop, and that default matters more than
+    /// the override does.** Before there was a light scheme at all the window
+    /// was dark unconditionally, which on a machine set to light meant Fluent
+    /// wrote near-black text onto dark surfaces — 1.02:1, invisible. Following
+    /// the desktop is what stops that; being able to overrule it is a
+    /// preference on top.
+    /// </summary>
+    public ThemeMode ThemeMode { get; init; } = ThemeMode.FollowDesktop;
 
     /// <summary>Null means follow the desktop font from kdeglobals.</summary>
     public string? CustomFontFamily { get; init; }
