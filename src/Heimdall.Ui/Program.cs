@@ -28,6 +28,54 @@ internal sealed class Program
         return $"heimdall {version}\n{Environment.ProcessPath ?? "(unknown path)"}";
     }
 
+    /// <summary>
+    /// The name the Windows installer watches for, so it can tell that Heimdall
+    /// is running before it starts replacing a 28 MB executable underneath it.
+    ///
+    /// **Must match `AppMutex` in packaging/heimdall.iss**, and a test asserts
+    /// that it does — the failure mode otherwise is silent in the worst way: the
+    /// installer simply stops noticing, which looks exactly like everything
+    /// working until someone upgrades with the app open.
+    ///
+    /// Session-local rather than `Global\`, deliberately. Creating a global
+    /// mutex needs SeCreateGlobalPrivilege, which an ordinary user does not
+    /// have, so a per-user install — the default here — could never create one.
+    /// Local names are per-SESSION, not per-token, so an elevated setup started
+    /// from the same desktop still sees it, which covers the "install for all
+    /// users" path too.
+    /// </summary>
+    public const string InstanceMutexName = "Heimdall.Ui.Running";
+
+    /// <summary>
+    /// Held for the life of the process. Static so nothing collects it — a
+    /// local would be eligible the moment Main stopped using it, and the mutex
+    /// would quietly disappear while the window was still open.
+    /// </summary>
+    private static Mutex? _instanceMutex;
+
+    /// <summary>
+    /// **Not single-instance.** The mutex is a flag for the installer to read,
+    /// not a lock: a second copy is welcome to start and simply opens the
+    /// existing mutex instead. Refusing to launch would be a behaviour change
+    /// nobody asked for, smuggled in as packaging.
+    /// </summary>
+    private static void ClaimInstanceMutex()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        try
+        {
+            _instanceMutex = new Mutex(initiallyOwned: false, InstanceMutexName);
+        }
+        catch (Exception ex)
+        {
+            // Nothing here is worth failing to start over. The cost of losing it
+            // is an installer that cannot detect a running copy — which is
+            // exactly where things were before this existed.
+            Console.Error.WriteLine($"[heimdall] instance mutex unavailable: {ex.Message}");
+        }
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -39,6 +87,11 @@ internal sealed class Program
             Console.WriteLine(Describe());
             return;
         }
+
+        // After --version, which must stay free of side effects: it runs in CI
+        // and on machines with no display, and claiming a mutex to print a
+        // string would be work done for nobody.
+        ClaimInstanceMutex();
 
         // An unhandled exception on a pool thread terminates the process with
         // nothing but a core dump. Logging first turns "it vanished" into

@@ -51,6 +51,10 @@
 #define AppUrl "https://github.com/dkflint723/heimdall"
 #define AppExe "Heimdall.Ui.exe"
 
+; Kept as its own symbol so the test that compares it with the C# constant has
+; one unambiguous thing to read, rather than parsing it out of a [Setup] line.
+#define AppMutex "Heimdall.Ui.Running"
+
 [Setup]
 AppId={{8F3C1E42-6B7A-4D59-9E2C-A1F4B8D70C36}
 AppName={#AppName}
@@ -69,6 +73,18 @@ VersionInfoVersion={#NumericVersion}
 ; that on the first page.
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
+
+; **Stop before replacing a running Heimdall.** Without this the installer began
+; overwriting a 28 MB executable that might be open, and relied on Restart
+; Manager noticing -- which is luck rather than design, and when it does not
+; work the result is a half-written binary and a "close the application" dialog
+; arriving after the damage.
+;
+; The name must match Program.InstanceMutexName; a test asserts they are equal,
+; because the failure mode is silent. A renamed mutex on either side does not
+; break anything visibly -- the installer just quietly stops noticing, which is
+; indistinguishable from working until somebody upgrades with the app open.
+AppMutex={#AppMutex}
 
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
