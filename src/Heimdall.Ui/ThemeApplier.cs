@@ -38,6 +38,81 @@ public static class ThemeApplier
         ("ChipBackground",      "#22FFFFFF", "#18000000"),
     ];
 
+    /// <summary>
+    /// The design reference's palette, in both lightnesses.
+    ///
+    /// **The light column is not the dark one inverted, and the surfaces are
+    /// where that shows.** In the dark scheme the listing is the DARKEST of the
+    /// three surfaces and the chrome the lightest, so the content recedes and
+    /// the frame sits in front of it. Invert the numbers and you get a listing
+    /// darker than the window around it, which reads as a hole. A light
+    /// interface wants the opposite arrangement — the listing is paper, the
+    /// lightest thing on screen, with the sidebar and chrome stepping down away
+    /// from it. So the three-surface STRUCTURE is preserved and their ORDER is
+    /// reversed, which is the only way both schemes end up looking deliberate.
+    ///
+    /// The neutrals keep their violet bias in both columns rather than becoming
+    /// plain grey; that bias is what makes them read as chosen, and dropping it
+    /// on the light side would leave the accent looking bolted on.
+    ///
+    /// **Checked, not eyeballed.** Every text-on-surface pair here clears WCAG
+    /// AA, worst case 5.12:1 — the accent on chrome, which is the pair the dark
+    /// column only reaches 3.41:1 on. The light column is the stronger of the
+    /// two and was not weakened to match.
+    /// </summary>
+    private static readonly (string Key, string Dark, string Light)[] Design =
+    [
+        // Surfaces. Dark, from the mock's own markup: window and chrome
+        // #2b2b32, sidebar #26262d, listing and the active tab #23232b.
+        ("AppBackground",   "#2b2b32", "#e8e8ef"),
+        ("ChromeBrush",     "#2b2b32", "#e8e8ef"),
+        ("PanelBackground", "#26262d", "#eff0f5"),
+        ("ViewBackground",  "#23232b", "#fcfcfe"),
+        ("ViewAlternate",   "#26262d", "#f4f4f8"),
+
+        ("WindowText",      "#e7e7ec", "#1e1e26"),
+        ("ViewText",        "#e7e7ec", "#1e1e26"),
+
+        // Dark: #8b8b95 measured 4.45:1 against PanelBackground — five
+        // hundredths under WCAG AA for body text, and this role carries the
+        // sidebar's group headings and drive sizes. #909099 is 4.75:1 and is
+        // not a colour anybody can tell apart from the old one. Against
+        // ViewBackground the original already passed at 4.62:1, so that was the
+        // panel case only. Light: #5f5f6d clears every surface by a wider
+        // margin, because on a pale ground there is room to.
+        ("ViewDimText",     "#909099", "#5f5f6d"),
+
+        ("SeparatorColour", "#34343c", "#d5d5e0"),
+        ("BorderColour",    "#34343c", "#d5d5e0"),
+
+        // **The accent has to darken for the light column.** #6d6df0 is a
+        // mid-violet: it sits 3.78:1 on the dark listing, which is thin but
+        // legible, and only 2.9:1 on a white one, which is not. #4f4fd0 is the
+        // same hue walked down until it clears AA on all three light surfaces.
+        // The dark column keeps the mock's value.
+        ("AccentColour",    "#6d6df0", "#4f4fd0"),
+
+        // The checked segment is rgba(109,109,240,.22) in the mock, which is
+        // the tint AccentDim is bound to everywhere it is used. Same 22% on the
+        // light side, over a pale ground instead of a dark one.
+        ("AccentDim",       "#386d6df0", "#384f4fd0"),
+
+        ("ChipBackground",  "#31313a", "#e2e2ec"),
+
+        // **Hover flips from a white wash to a black one.** A translucent white
+        // over a pale surface is very nearly nothing; the point of the wash is
+        // that it works whatever is underneath, and on light that means going
+        // down rather than up.
+        ("HoverBackground", "#14ffffff", "#12000000"),
+
+        // Selection is the accent at 30% either way. The TEXT on it cannot be
+        // the same colour in both: near-white over a pale lavender fill is the
+        // one place a straight inversion would have produced something
+        // genuinely unreadable.
+        ("SelectionBackground", "#4d6d6df0", "#3d4f4fd0"),
+        ("SelectionText",       "#e7e7ec",   "#14141c"),
+    ];
+
     private static readonly (string Resource, string Role)[] Mapping =
     [
         ("AppBackground",       ThemeRole.WindowBackground),
@@ -60,6 +135,31 @@ public static class ThemeApplier
 
         var dark = palette?.IsDark ?? true;
 
+        // **Fluent has to be told, or it answers this question separately and
+        // differently.**
+        //
+        // Not every colour on screen comes from the table below. A ListBoxItem's
+        // foreground — which is what a filename in the listing actually inherits,
+        // since that TextBlock sets no Foreground of its own — comes from
+        // FluentTheme, and FluentTheme picks its own values from the requested
+        // theme variant. App.axaml asks for Default, which follows the OS.
+        //
+        // So the palette said one thing and Fluent said another, and nothing
+        // reconciled them. On a machine set to LIGHT, the shipping build painted
+        // the design scheme's dark surfaces and then let Fluent write nearly
+        // black filenames onto them: measured 1.02:1, which is not "hard to
+        // read", it is invisible. It went unnoticed because the machine it was
+        // built on is set to dark, where the two happen to agree.
+        //
+        // One decision, applied to both. Whatever picks `dark` above now picks
+        // the variant too, so they cannot drift apart again.
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = dark
+                ? Avalonia.Styling.ThemeVariant.Dark
+                : Avalonia.Styling.ThemeVariant.Light;
+        }
+
         // A sane value for every role, so nothing downstream is ever unset.
         foreach (var (key, darkValue, lightValue) in Fallback)
             target[key] = Brush(dark ? darkValue : lightValue);
@@ -79,7 +179,7 @@ public static class ThemeApplier
         // The default is unchanged, because the default is still this scheme.
         // What changes is that the desktop can now be layered ON TOP when asked,
         // which is what all that derivation was written for.
-        ApplyDesignScheme(target);
+        ApplyDesignScheme(target, dark);
 
         // The desktop gets a say only when the user asks for one. Off by
         // default: the scheme above is a considered look, and a file manager
@@ -268,46 +368,19 @@ public static class ThemeApplier
     /// gets a vote.
     ///
     /// **What this costs**, so it is not discovered later: the window no longer
-    /// follows the desktop's colour scheme, accent or font, and it does not
-    /// follow a light scheme at all — these values are the mock's dark one. The
-    /// live re-theming still runs, it just gets overwritten here.
+    /// follows the desktop's colour scheme, accent or font. It does follow the
+    /// desktop's light/dark preference — see <see cref="Design"/> — because that
+    /// is a different question from which hues to use, and answering it wrongly
+    /// means a pitch-black window on a machine set to light.
     ///
     /// **To revert**, delete the call above. Nothing else references this.
     /// </summary>
-    private static void ApplyDesignScheme(IResourceDictionary target)
+    private static void ApplyDesignScheme(IResourceDictionary target, bool dark)
     {
         static SolidColorBrush B(string hex) => new(Color.Parse(hex));
 
-        // Surfaces, from the mock's own markup: window and chrome #2b2b32,
-        // sidebar #26262d, listing and the active tab #23232b.
-        target["AppBackground"] = B("#2b2b32");
-        target["ChromeBrush"] = B("#2b2b32");
-        target["PanelBackground"] = B("#26262d");
-        target["ViewBackground"] = B("#23232b");
-        target["ViewAlternate"] = B("#26262d");
-
-        target["WindowText"] = B("#e7e7ec");
-        target["ViewText"] = B("#e7e7ec");
-        // #8b8b95 measured 4.45:1 against PanelBackground — five hundredths
-        // under WCAG AA for body text, and this role carries the sidebar's group
-        // headings and drive sizes. #909099 is 4.75:1 and is not a colour
-        // anybody can tell apart from the old one. Against ViewBackground the
-        // original already passed at 4.62:1, so this is the panel case only.
-        target["ViewDimText"] = B("#909099");
-
-        target["SeparatorColour"] = B("#34343c");
-        target["BorderColour"] = B("#34343c");
-
-        // The checked segment is rgba(109,109,240,.22) in the mock, which is
-        // the tint AccentDim is bound to everywhere it is used.
-        target["AccentColour"] = B("#6d6df0");
-        target["AccentDim"] = B("#386d6df0");
-
-        target["ChipBackground"] = B("#31313a");
-        target["HoverBackground"] = B("#14ffffff");
-
-        target["SelectionBackground"] = B("#4d6d6df0");
-        target["SelectionText"] = B("#e7e7ec");
+        foreach (var (key, darkValue, lightValue) in Design)
+            target[key] = B(dark ? darkValue : lightValue);
 
         // **Two faces, split by what the text is for.**
         //

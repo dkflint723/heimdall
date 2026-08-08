@@ -51,6 +51,104 @@ public class ThemeApplierTests : IDisposable
     private static FontFamily? Applied(Window window)
         => (Avalonia.Application.Current?.Resources ?? window.Resources)["AppFontFamily"] as FontFamily;
 
+    private static Color Resource(Window window, string key)
+        => ((ISolidColorBrush)(Avalonia.Application.Current?.Resources
+                               ?? window.Resources)[key]!).Color;
+
+    /// <summary>
+    /// **The palette and Fluent must agree about light and dark, and for a long
+    /// time nothing made them.**
+    ///
+    /// Two things decide colours here. This file writes the resources the markup
+    /// binds to; FluentTheme supplies everything the markup does NOT name — and
+    /// a filename in the listing is one of those, because its TextBlock sets no
+    /// Foreground and inherits ListBoxItem's. Fluent picks its values from the
+    /// requested theme variant, which App.axaml leaves following the OS.
+    ///
+    /// So on a machine set to LIGHT, the shipped build painted the design
+    /// scheme's dark surfaces and let Fluent write near-black filenames onto
+    /// them: 1.02:1, which is not "low contrast", it is invisible. It survived
+    /// because the machine it was developed on is set to dark, where the two
+    /// happen to agree — every screenshot looked right.
+    ///
+    /// Asserting on the variant is the point. A test that only checked the
+    /// resource values would have passed throughout the entire life of the bug.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_palette_and_the_control_theme_agree_about_lightness(bool dark)
+    {
+        Configure(null);
+
+        var window = new Window();
+        ThemeApplier.Apply(window, new ThemePalette
+        {
+            Colours = new Dictionary<string, string>(),
+            IsDark = dark,
+        });
+
+        Assert.Equal(
+            dark ? Avalonia.Styling.ThemeVariant.Dark : Avalonia.Styling.ThemeVariant.Light,
+            Avalonia.Application.Current?.RequestedThemeVariant);
+
+        // And the surfaces went the same way, so the two cannot be passing for
+        // opposite reasons. A dark scheme's listing is darker than its chrome;
+        // a light scheme's listing is the lightest thing on screen.
+        var listing = Resource(window, "ViewBackground");
+        var chrome = Resource(window, "AppBackground");
+
+        if (dark) Assert.True(listing.R < chrome.R, "dark: the listing should recede");
+        else Assert.True(listing.R > chrome.R, "light: the listing should be the paper");
+    }
+
+    /// <summary>
+    /// The text has to be readable on the surface it lands on, in both schemes.
+    /// Contrast is the property that actually matters and the one a hex value
+    /// cannot be eyeballed for — 4.45:1 and 4.75:1 look identical and only one
+    /// of them passes.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Body_text_clears_AA_on_every_surface(bool dark)
+    {
+        Configure(null);
+
+        var window = new Window();
+        ThemeApplier.Apply(window, new ThemePalette
+        {
+            Colours = new Dictionary<string, string>(),
+            IsDark = dark,
+        });
+
+        foreach (var surface in new[] { "ViewBackground", "ViewAlternate", "PanelBackground" })
+        foreach (var text in new[] { "ViewText", "ViewDimText" })
+        {
+            var ratio = Contrast(Resource(window, text), Resource(window, surface));
+
+            Assert.True(ratio >= 4.5,
+                $"{text} on {surface} is {ratio:F2}:1 in the {(dark ? "dark" : "light")} scheme");
+        }
+    }
+
+    private static double Contrast(Color a, Color b)
+    {
+        var (la, lb) = (Luminance(a), Luminance(b));
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
+    private static double Luminance(Color c)
+    {
+        static double Channel(byte v)
+        {
+            var s = v / 255.0;
+            return s <= 0.04045 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+
+        return 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+    }
+
     [AvaloniaFact]
     public void A_configured_font_survives_the_design_scheme()
     {

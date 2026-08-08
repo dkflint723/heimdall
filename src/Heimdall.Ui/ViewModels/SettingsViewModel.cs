@@ -68,6 +68,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _selectedFont = AvailableFonts.FirstOrDefault(o =>
             string.Equals(o.Name, views.CustomFontFamily, StringComparison.OrdinalIgnoreCase))
             ?? AvailableFonts[0];
+        _followDesktopColours = views.FollowDesktopColours;
         _absoluteDates = views.Details.DateStyle == Core.Settings.DateStyle.Absolute;
         _showFolderItemCounts = views.Details.FolderSize != Core.Settings.FolderSizeMode.None;
 
@@ -213,6 +214,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     public IReadOnlyList<FontOption> AvailableFonts { get; }
 
     [ObservableProperty] private FontOption _selectedFont;
+
+    /// <summary>
+    /// Whether the desktop's own colours are layered over the bundled scheme.
+    ///
+    /// **The flag is older than this control.** It has been read on every theme
+    /// apply since the scheme was inverted to run first, and worked — but
+    /// nothing ever offered it, so the only way to turn it on was to hand-edit
+    /// settings.json, while the README described it as though there were a
+    /// switch. There is one now.
+    ///
+    /// Light and dark are NOT this setting. Which of the two the bundled scheme
+    /// uses always follows the desktop, because a pitch-black window on a
+    /// machine set to light is a bug rather than a preference. This chooses
+    /// whether the desktop's HUES come too.
+    /// </summary>
+    [ObservableProperty] private bool _followDesktopColours;
 
     /// <summary>Marks modified, added, untracked and conflicted files in a
     /// repository. Only ever visible inside one.</summary>
@@ -394,6 +411,8 @@ public sealed partial class SettingsViewModel : ObservableObject
                 CustomFontFamily = SelectedFont is null || SelectedFont.IsFollowDesktop
                     ? null
                     : SelectedFont.Name,
+
+                FollowDesktopColours = FollowDesktopColours,
 
                 Icons = _original.Views.Icons with { Spacing = Spacing(IconSpacing) },
                 Compact = _original.Views.Compact with { Spacing = Spacing(CompactSpacing) },

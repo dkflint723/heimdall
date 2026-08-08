@@ -152,7 +152,8 @@ Heimdall reads your desktop's configuration rather than keeping its own copy:
 
 | | |
 |---|---|
-| **Colour scheme and accent** | the design reference's dark palette, or your desktop's if you ask |
+| **Light or dark** | follows your desktop, always |
+| **Colour scheme and accent** | the design reference's own, or your desktop's if you ask |
 | **Icon theme** | your themed icons, with hand-drawn fallbacks where a theme has none |
 | **Font** | the design reference's typeface, or any family you choose |
 | **Single or double click** | follows your desktop setting |
@@ -165,9 +166,15 @@ Change your icon theme and Heimdall changes with it. Nothing needs restarting.
 Colour and typeface are the exception, and a deliberate one: the bundled scheme
 is the default, because a file manager that repaints itself to match your desktop
 the first time you launch it is a surprise rather than a courtesy. Turn on
-*Follow desktop colours* and your scheme and accent are layered over it instead;
-choose a font in Settings and it is used throughout. Sizes and dates keep the
-monospaced face either way, so figures still line up down a column.
+*Follow desktop colours* — Settings, under *View modes* — and your scheme and
+accent are layered over it instead; choose a font in Settings and it is used
+throughout. Sizes and dates keep the monospaced face either way, so figures still
+line up down a column.
+
+**Light and dark are not part of that choice.** The bundled scheme comes in both
+and follows whatever your desktop is set to, whether or not you are following its
+colours. A dark window on a machine set to light is not a considered look, it is
+an unreadable one.
 
 ## Keyboard
 

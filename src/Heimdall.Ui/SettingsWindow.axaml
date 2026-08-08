@@ -359,6 +359,24 @@
                        TextWrapping="Wrap"/>
           </StackPanel>
 
+          <TextBlock Text="Colour"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <!-- The flag behind this has been read on every theme apply for some
+               time and had no control at all, so the only way to set it was to
+               edit settings.json by hand. -->
+          <CheckBox FontSize="{DynamicResource FontSizeSmall}"
+                    IsChecked="{Binding FollowDesktopColours}">
+            <StackPanel>
+              <TextBlock Text="Follow desktop colours"/>
+              <TextBlock Text="Off, Heimdall uses its own scheme. On, your desktop's colours and accent are layered over it. Either way it follows your desktop's light or dark setting — that part is not a preference, because a dark window on a machine set to light is unreadable rather than stylish."
+                         FontSize="{DynamicResource FontSizeTiny}"
+                         Foreground="{DynamicResource ViewDimText}"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
+          </CheckBox>
+
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
           <TextBlock Text="Details panel"
