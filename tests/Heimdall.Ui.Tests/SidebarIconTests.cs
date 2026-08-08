@@ -31,7 +31,7 @@ public class SidebarIconTests
     public static TheoryData<string> Tokens =>
     [
         "home", "desktop", "download", "file-text", "photo", "music", "video",
-        "trash", "bookmark", "server", "usb", "device-desktop",
+        "trash", "bookmark", "server", "usb", "disc", "device-desktop",
         "recent-files", "recent-locations",
     ];
 
@@ -43,9 +43,18 @@ public class SidebarIconTests
 
         SidebarIcon.SetToken(shape, token);
 
+        // NotNull is the whole assertion, and it is enough: a token that is not
+        // in the table leaves Data null, and a malformed path makes
+        // Geometry.Parse throw rather than return something empty.
+        //
+        // **There was a bounds check here too, and it was wrong for the same
+        // reason the optical-box test above was.** Avalonia's Geometry.Bounds
+        // ignores ARC extents, so `disc` — a circle and a hub, arcs and nothing
+        // else — measured 0x0 and failed the moment it was added. Written after
+        // that lesson had already been learned and written down twenty lines
+        // up, which is its own argument for keeping assertions to what they can
+        // actually observe.
         Assert.NotNull(shape.Data);
-        Assert.True(shape.Data!.Bounds.Width > 0 && shape.Data.Bounds.Height > 0,
-            $"'{token}' parsed to an empty geometry");
     }
 
     // **There was an optical-box test here, measuring that every icon fills the

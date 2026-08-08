@@ -210,6 +210,18 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
             var removable = mountPoint.StartsWith("/run/media", StringComparison.Ordinal)
                          || mountPoint.StartsWith("/media", StringComparison.Ordinal);
 
+            // Optical media, by the filesystem it carries or the device it came
+            // from. Both are needed: a data CD is iso9660 and a video disc is
+            // udf, while a blank or audio disc may present neither — /dev/sr* is
+            // what the kernel calls an optical device regardless.
+            //
+            // Removable too, whatever the mount point says. An optical disc is
+            // the most ejectable thing there is, and CanEject follows this flag.
+            var optical = fsType is "iso9660" or "udf"
+                       || source.StartsWith("/dev/sr", StringComparison.Ordinal);
+
+            removable |= optical;
+
             long? capacity = null, free = null;
             try
             {
@@ -225,7 +237,7 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
                 Label = LabelFor(source, mountPoint, labels),
                 Path = mountPoint,
                 Kind = removable ? PlaceKind.RemovableDevice : PlaceKind.Device,
-                Icon = removable ? "usb" : "device-desktop",
+                Icon = optical ? "disc" : removable ? "usb" : "device-desktop",
                 CapacityBytes = capacity,
                 FreeBytes = free,
                 CanEject = removable,

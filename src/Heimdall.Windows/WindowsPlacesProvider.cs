@@ -209,7 +209,10 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
             Icon = drive.DriveType switch
             {
                 DriveType.Network => "server",
-                DriveType.Removable or DriveType.CDRom => "usb",
+                // Before Removable: an optical drive is removable too, and the
+                // first arm that matches wins.
+                DriveType.CDRom => "disc",
+                DriveType.Removable => "usb",
                 _ => "device-desktop",
             },
             CapacityBytes = capacity,

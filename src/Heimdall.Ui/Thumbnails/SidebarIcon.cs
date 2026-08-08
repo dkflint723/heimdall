@@ -128,13 +128,21 @@ public static class SidebarIcon
         //
         // Was a box sitting on a cross, which named nothing.
         //
-        // **This also serves optical drives**, because both places providers map
-        // DriveType.CDRom to this token alongside Removable — so a BD-ROM bay
-        // gets a flash drive. Splitting it means a `disc` token and two lines in
-        // each provider; left as one generic "removable" until it is worth it.
         ["usb"] =
             "M9 6 H19.5 a2 2 0 0 1 2 2 V16 a2 2 0 0 1 -2 2 H9 Z "
             + "M3 9 H9 V15 H3 Z M17.5 12 h0.6",
+
+        // A disc and its hub, for optical drives — which used to borrow the USB
+        // stick, so a BD-ROM bay showed a flash drive.
+        //
+        // **Deliberately only two elements, and that is a collision decision.**
+        // `server` two groups below is also a full-width circle, so the disc has
+        // to differ by what is INSIDE it: the globe carries an equator and a
+        // meridian lens, this carries one centred ring. Adding a highlight arc
+        // or a second ring would close that gap again.
+        ["disc"] =
+            "M3.5 12 a8.5 8.5 0 1 0 17 0 a8.5 8.5 0 1 0 -17 0 "
+            + "M9.9 12 a2.1 2.1 0 1 0 4.2 0 a2.1 2.1 0 1 0 -4.2 0",
 
         // **A drive caddy seen head-on**, after four rounds of trying to draw
         // the hardware literally. Sloped shoulders, a seam across the middle,
