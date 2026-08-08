@@ -6,10 +6,11 @@ does not — but the colour scheme and icon theme come from `kdeglobals`, so on 
 non-KDE desktop it will use its built-in defaults.
 
 **Windows runs.** It browses, lists drives, opens files, copies, moves,
-renames, recycles, and follows the system light/dark mode and accent.
-Still missing: the Trash view and Restore, tags, and shell icons — see
-[WINDOWS.md](WINDOWS.md) for what each is waiting on. `Heimdall.Ui` picks its
-platform assembly from the build machine's OS.
+renames, recycles, connects to and discovers network shares, and follows the
+system light/dark mode and accent. The Recycle Bin is browsable and *Restore*
+puts a file back where it came from. Still missing: the shell's per-file icons,
+and content search — see [WINDOWS.md](WINDOWS.md) for what each is waiting on.
+`Heimdall.Ui` picks its platform assembly from the build machine's OS.
 
 Publishing on Windows needs the **MSVC C++ build tools**, and `vswhere.exe` on
 `PATH` so the NativeAOT toolchain lookup can find them:
@@ -21,6 +22,24 @@ dotnet publish src/Heimdall.Ui -c Release -r win-x64 -p:PublishAot=true
 
 As on Linux, **the publish directory is the deliverable** — the executable needs
 `libSkiaSharp.dll`, `libHarfBuzzSharp.dll` and `av_libglesv2.dll` beside it.
+
+To get the **installer** rather than the directory, without waiting for CI:
+
+```bash
+packaging/build-windows.sh 0.5.2
+```
+
+That does the publish above and hands the result to Inno Setup, leaving
+`dist/heimdall-0.5.2-win-x64-setup.exe` and its checksum — the same two files
+the release page carries, from the same `heimdall.iss`. It puts `vswhere` on
+`PATH` itself, finds Inno Setup 6 or 7 wherever it was installed, and refuses to
+package a publish that is missing one of the three libraries above.
+
+**The version is required and has no default.** It is stamped into the binary,
+the filename and the Add/Remove Programs entry, so a local build that guessed
+one would claim to be a release that does not exist — and `heimdall --version`
+is how you tell which copy you are running. Pick something above whatever is
+installed, or Windows treats the install as a downgrade.
 
 The choice is a `HeimdallPlatform` property, defaulted from the OS and
 overridable, so either configuration can be compiled from either machine:
@@ -263,6 +282,12 @@ without isolating.
 **A private repo's releases are private too.** Anyone you send the link to needs
 access to the repository. To hand a build to someone outside, either attach the
 tarball directly or make the repo public.
+
+**When CI is not available** — an exhausted Actions budget, an offline machine,
+or wanting to try a change before tagging it — `packaging/build-windows.sh`
+produces the Windows installer locally from the same script the workflow uses.
+There is no Linux equivalent, because the publish directory plus `install.sh` is
+already the deliverable there and needs no compiler beyond the SDK.
 
 ---
 

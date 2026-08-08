@@ -482,3 +482,9 @@ $RECYCLE.BIN/
 *.swp
 *.rpm
 *.rpm
+
+# Release artefacts. Where heimdall.iss writes the Windows installer, and where
+# packaging/build-windows.sh leaves it. CI never needed this — the runner is
+# thrown away — but a local build leaves a 15 MB signed-nothing .exe sitting in
+# the tree, and the stock ignore list above covers *.msi and not *.exe.
+dist/
