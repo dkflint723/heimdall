@@ -121,18 +121,39 @@ public static class SidebarIcon
             "M3.5 12 a8.5 8.5 0 1 0 17 0 a8.5 8.5 0 1 0 -17 0 M3.5 12 H20.5 "
             + "M12 3.5 c3.6 2.9 3.6 14.1 0 17 c-3.6 -2.9 -3.6 -14.1 0 -17 Z",
 
-        // Was a box sitting on a cross, which named nothing. Body and connector.
+        // A stick with its connector, drawn to sit beside `device-desktop`
+        // rather than merely near it: the same 2-unit corner radius and the same
+        // `h0.6` lamp. The two share a construction, so the Devices group reads
+        // as one family instead of two unrelated objects.
+        //
+        // Was a box sitting on a cross, which named nothing.
+        //
+        // **This also serves optical drives**, because both places providers map
+        // DriveType.CDRom to this token alongside Removable — so a BD-ROM bay
+        // gets a flash drive. Splitting it means a `disc` token and two lines in
+        // each provider; left as one generic "removable" until it is worth it.
         ["usb"] =
-            "M7.5 8.5 H16.5 V20.25 H7.5 Z M10 8.5 V4 H14 V8.5",
+            "M9 6 H19.5 a2 2 0 0 1 2 2 V16 a2 2 0 0 1 -2 2 H9 Z "
+            + "M3 9 H9 V15 H3 Z M17.5 12 h0.6",
 
-        // The lamp is the third element, and it earns its place: without it a
-        // drive is a rectangle with a slot, and `desktop` two rows above is a
-        // rectangle with a stand. Seen live in the sidebar the two silhouettes
-        // read as the same object. Minimal is the fewest strokes that still name
-        // the thing, and at two strokes this one had stopped naming it.
+        // **A drive caddy seen head-on**, after four rounds of trying to draw
+        // the hardware literally. Sloped shoulders, a seam across the middle,
+        // two indicator lamps.
+        //
+        // The sloped top is what makes it work: every other icon in this set is
+        // built from horizontals, verticals and circles, so an angled edge is a
+        // silhouette none of them can be confused with — and a silhouette is the
+        // only thing that reliably survives being drawn at 16px.
+        //
+        // The literal attempts all failed for the same reason. An M.2 board is
+        // recognised by its hatched packages, its key notch and its mounting
+        // hole, and at this size those are a grey smear, a nick and a filled
+        // dot. What is left after they blur is a striped rectangle.
         ["device-desktop"] =
-            "M3.5 7 H20.5 V17 H3.5 Z M6.5 14 H10 "
-            + "M16.75 14 a1.25 1.25 0 1 0 2.5 0 a1.25 1.25 0 1 0 -2.5 0",
+            "M2.5 12 H21.5 "
+            + "M6.4 5 L2.5 12 V17.5 a2 2 0 0 0 2 2 H19.5 a2 2 0 0 0 2 -2 V12 "
+            + "L17.6 5 a2 2 0 0 0 -1.75 -1 H8.15 a2 2 0 0 0 -1.75 1 Z "
+            + "M6.25 15.75 h0.6 M9.75 15.75 h0.6",
 
         ["recent-files"] =
             "M3.5 12 a8.5 8.5 0 1 0 17 0 a8.5 8.5 0 1 0 -17 0 M12 7 V12.25 L15.75 14.5",
