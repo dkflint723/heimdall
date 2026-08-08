@@ -90,6 +90,7 @@ public static class IconLoader
         Resolved.Clear();
         Drawn.Clear();
         Fallbacks.Clear();
+        FileTypeIcon.Clear();
     }
 
     /// <summary>

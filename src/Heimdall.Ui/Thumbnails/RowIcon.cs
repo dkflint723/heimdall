@@ -78,7 +78,7 @@ public static class RowIcon
 
             if (IconLoader.Provider is null)
             {
-                Paint(IconLoader.Fallback(value.IsDirectory));
+                Paint(FileTypeIcon.For(value.Name, value.IsDirectory));
                 return;
             }
 
@@ -90,7 +90,7 @@ public static class RowIcon
             // the process outright.
             // The drawn glyph goes up immediately so a row is never blank while
             // the theme lookup runs.
-            Paint(IconLoader.Fallback(value.IsDirectory));
+            Paint(FileTypeIcon.For(value.Name, value.IsDirectory));
 
             var file = await Task.Run(
                     () => IconLoader.ResolveFile(value.FullPath, value.IsDirectory, size), token)
