@@ -135,15 +135,19 @@
             <TextBlock Text="{Binding Info.Name}" TextWrapping="Wrap"
                        FontSize="{DynamicResource FontSizeBase}" FontWeight="SemiBold"/>
 
-            <StackPanel Orientation="Horizontal" Spacing="8">
+            <!-- DockPanel, so the kind can actually trim. In a horizontal
+                 StackPanel it is measured with infinite width and never told it
+                 has run out of room, which makes CharacterEllipsis inert. -->
+            <DockPanel>
+              <TextBlock Text="{Binding Info.Summary}" DockPanel.Dock="Right"
+                         Margin="8,0,0,0"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         Foreground="{DynamicResource ViewDimText}"/>
               <TextBlock Text="{Binding Info.Kind}"
                          FontSize="{DynamicResource FontSizeSmall}"
                          Foreground="{DynamicResource ViewDimText}"
                          TextTrimming="CharacterEllipsis"/>
-              <TextBlock Text="{Binding Info.Summary}"
-                         FontSize="{DynamicResource FontSizeSmall}"
-                         Foreground="{DynamicResource ViewDimText}"/>
-            </StackPanel>
+            </DockPanel>
 
             <Border Height="1" Background="{DynamicResource SeparatorColour}"
                     IsVisible="{Binding Info.HasSelection}"/>
@@ -1508,8 +1512,7 @@
                         <Border Width="3" HorizontalAlignment="Left" Margin="1"
                                 Background="{DynamicResource AccentColour}"
                                 IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8"
-                                    VerticalAlignment="Center" Margin="6,0,6,0">
+                        <DockPanel VerticalAlignment="Center" Margin="6,0,6,0">
                           <!-- Same slot and same rules as the details column:
                                fixed width so names stay aligned marked or not,
                                and the whole slot only exists in a repository. -->
@@ -1525,15 +1528,23 @@
                                an undersized icon in it — neither mode's
                                proportions. Requested at 48 so the source is never
                                smaller than the box. -->
+                          <!-- Margins rather than the StackPanel's Spacing="8",
+                               which a DockPanel has no equivalent for. -->
                           <Panel Width="{DynamicResource CompactIconSize}"
-                                 Height="{DynamicResource CompactIconSize}">
+                                 Height="{DynamicResource CompactIconSize}"
+                                 Margin="8,0">
                             <Image th:RowIcon.Entry="{Binding}" th:RowIcon.Size="48"
                                    Stretch="Uniform"/>
                           </Panel>
+                          <!-- The icon docks, the name takes what is left. In
+                               the StackPanel this replaced, the name was
+                               measured with infinite width and its ellipsis
+                               never appeared — a long filename in compact view
+                               simply ran past the cell and was clipped. -->
                           <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
                                      FontSize="{DynamicResource FontSizeBase}"
                                      TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
+                        </DockPanel>
                       </Panel>
                     </Panel>
                   </DataTemplate>

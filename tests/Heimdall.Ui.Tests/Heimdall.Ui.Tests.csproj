@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+
+    <!-- Same reasoning as the other test projects: Directory.Build.props turns
+         on the trim, AOT and single-file analysers for the shipped binary, and
+         a test host is not shipped. -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+    <PublishTrimmed>false</PublishTrimmed>
+
+    <!-- The headless platform draws into a bitmap rather than onto a screen, so
+         this runs on a CI box with no display. That is the point: the layer
+         holding most of this application had no tests because everything in it
+         needs a Window.
+
+         Exe, not Library: xunit v3 test projects are executables that host
+         their own runner. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <!-- **xunit v3 here, v2 in the other two test projects.**
+       Avalonia.Headless.XUnit 12.1 is built against v3, and the two versions
+       cannot coexist in ONE assembly — every [InlineData] resolves ambiguously.
+       Across separate assemblies they are fine, and `dotnet test` runs both.
+       Upgrading the other projects for uniformity would be churn in tests that
+       work, for no benefit beyond matching version numbers. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Heimdall.Ui/Heimdall.Ui.csproj" />
+    <ProjectReference Include="../../src/Heimdall.Core/Heimdall.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The window's markup, embedded so MarkupRulesTests reads the real file
+       rather than hunting for it relative to a test host's working directory.
+       Re-embedded on every build, so it cannot drift from what ships. -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../src/Heimdall.Ui/MainWindow.axaml" LogicalName="MainWindow.axaml" />
+  </ItemGroup>
+
+</Project>

@@ -7,6 +7,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Heimdall.Core.Tests/Heimdall.Core.Tests.csproj" />
+    <Project Path="tests/Heimdall.Ui.Tests/Heimdall.Ui.Tests.csproj" />
     <Project Path="tests/Heimdall.Windows.Tests/Heimdall.Windows.Tests.csproj" />
   </Folder>
 </Solution>
