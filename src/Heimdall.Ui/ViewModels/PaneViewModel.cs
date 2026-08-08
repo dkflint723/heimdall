@@ -79,49 +79,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         RefreshTemplates();
     }
 
-    // ---- user scripts --------------------------------------------------
 
-    public ObservableCollection<ScriptCommand> Scripts { get; } = new();
 
-    public bool HasScripts => Scripts.Count > 0;
 
-        public void RefreshScripts()
-    {
-        Scripts.Clear();
-        if (_scripts is null) return;
 
-        foreach (var script in _scripts.Discover()) Scripts.Add(script);
-        OnPropertyChanged(nameof(HasScripts));
-    }
-
-    [RelayCommand]
-    public void OpenScriptsFolder()
-    {
-        if (_scripts is not null) _launcher?.Open(_scripts.ScriptsDirectory);
-    }
-
-    [RelayCommand]
-    public async Task RunScriptAsync(ScriptCommand? script)
-    {
-        if (_scripts is null || script is null) return;
-
-        Status = $"running {script.Name}…";
-
-        try
-        {
-            var output = await _scripts
-                .RunAsync(script, CurrentPath, SelectionPaths(), CancellationToken.None)
-                .ConfigureAwait(false);
-
-            // The watcher picks up whatever the script changed on disk, so the
-            // listing does not need refreshing here.
-            await Dispatcher.UIThread.InvokeAsync(() => Status = output);
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = $"{script.Name}: {ex.Message}");
-        }
-    }
 
     public BulkObservableCollection<FileEntry> Entries { get; } = new();
 
@@ -255,64 +216,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     private bool _restoringView;
 
-    // ---- type-ahead -------------------------------------------------------
 
-    private string _typeAhead = "";
-    private DateTime _typeAheadAt;
 
-    /// <summary>How long a partial prefix survives before the next keystroke
-    /// starts a new search. Long enough to type a word, short enough that a
-    /// keystroke a minute later is obviously a fresh start.</summary>
-    private static readonly TimeSpan TypeAheadWindow = TimeSpan.FromSeconds(1);
-
-    /// <summary>
-    /// Jumps to the first entry whose name begins with what has been typed.
-    ///
-    /// Consecutive keystrokes accumulate — d, o, c finds "Documents" rather than
-    /// jumping three times — and the SAME letter pressed again cycles through
-    /// the entries starting with it, which is the convention every file manager
-    /// and list control shares.
-    ///
-    /// Selection is the whole mechanism: the ListBoxes bind SelectedItem and
-    /// scroll to it themselves, so there is nothing to scroll here.
-    /// </summary>
-    public void TypeAhead(string text)
-    {
-        if (string.IsNullOrEmpty(text) || Entries.Count == 0) return;
-
-        var now = DateTime.UtcNow;
-
-        // A pause starts a new search rather than extending a stale prefix.
-        if (now - _typeAheadAt > TypeAheadWindow) _typeAhead = "";
-        _typeAheadAt = now;
-
-        var repeat = _typeAhead.Length == 1
-            && text.Length == 1
-            && char.ToUpperInvariant(_typeAhead[0]) == char.ToUpperInvariant(text[0]);
-
-        if (!repeat) _typeAhead += text;
-
-        // Cycling continues past the current row; a new prefix re-anchors at the
-        // top, so it always finds the FIRST match rather than the next one after
-        // wherever the selection happened to be.
-        var current = SelectedEntry is { } selected ? Entries.IndexOf(selected) : -1;
-        var start = repeat && current >= 0 ? current + 1 : 0;
-
-        for (var offset = 0; offset < Entries.Count; offset++)
-        {
-            var index = (start + offset) % Entries.Count;
-
-            if (!Entries[index].Name.StartsWith(_typeAhead, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            SelectedEntry = Entries[index];
-            return;
-        }
-
-        // No match. The prefix stays, so continuing to type does not suddenly
-        // start matching against a shorter one — but a miss should not move the
-        // selection somewhere arbitrary either.
-    }
 
     /// <summary>
     /// Grid is virtualized now, so it has no limit. Measured 100,000 items in
@@ -670,105 +575,17 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnViewportWidthChanged(double value) => NotifyColumns();
 
-    // ---- preview -------------------------------------------------------
-
-    [ObservableProperty] private bool _isPreviewVisible;
-    [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _previewImage;
-    [ObservableProperty] private string _previewText = "";
     [ObservableProperty] private string _previewTitle = "";
     [ObservableProperty] private string _previewDetail = "";
 
-    public bool HasPreviewImage => PreviewImage is not null;
-    public bool HasPreviewText => PreviewText.Length > 0;
 
     private CancellationTokenSource? _previewCts;
 
-    [RelayCommand]
-    public void TogglePreview()
-    {
-        IsPreviewVisible = !IsPreviewVisible;
-        if (IsPreviewVisible) _ = RefreshPreviewAsync();
-    }
 
-    partial void OnPreviewImageChanged(Avalonia.Media.Imaging.Bitmap? value)
-        => OnPropertyChanged(nameof(HasPreviewImage));
 
-    partial void OnPreviewTextChanged(string value)
-        => OnPropertyChanged(nameof(HasPreviewText));
 
-    private async Task RefreshPreviewAsync()
-    {
-        _previewCts?.Cancel();
-        _previewCts?.Dispose();
-        _previewCts = new CancellationTokenSource();
-        var ct = _previewCts.Token;
 
-        PreviewImage = null;
-        PreviewText = "";
 
-        if (SelectedEntry is not { } entry)
-        {
-            PreviewTitle = "";
-            PreviewDetail = "nothing selected";
-            return;
-        }
-
-        PreviewTitle = entry.Name;
-        PreviewDetail = entry.IsDirectory
-            ? "folder"
-            : $"{entry.Length:N0} bytes · {entry.LastWriteTime:yyyy-MM-dd HH:mm}";
-
-        if (entry.IsDirectory) return;
-
-        try
-        {
-            var bitmap = await Thumbnails.ThumbnailLoader
-                .LoadAsync(entry.FullPath, 512, ct).ConfigureAwait(false);
-
-            if (bitmap is not null)
-            {
-                await Dispatcher.UIThread.InvokeAsync(() => PreviewImage = bitmap);
-                return;
-            }
-
-            // Not an image — show the head of the file if it looks like text.
-            // Capped hard: previewing a gigabyte log should cost the same as
-            // previewing a config file.
-            if (entry.Length is > 0 and < 8_000_000 && LooksTextual(entry.Name))
-            {
-                var text = await ReadHeadAsync(entry.FullPath, 4000, ct).ConfigureAwait(false);
-                await Dispatcher.UIThread.InvokeAsync(() => PreviewText = text);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => PreviewDetail = ex.Message);
-        }
-    }
-
-    private static bool LooksTextual(string name)
-    {
-        var ext = Path.GetExtension(name);
-
-        if (ext.Length == 0) return true;
-
-        return ext.ToLowerInvariant() is
-            ".txt" or ".md" or ".log" or ".json" or ".xml" or ".yaml" or ".yml" or
-            ".cs" or ".py" or ".sh" or ".ps1" or ".c" or ".h" or ".cpp" or ".rs" or
-            ".go" or ".js" or ".ts" or ".html" or ".css" or ".ini" or ".conf" or
-            ".toml" or ".csv" or ".sql" or ".axaml" or ".xaml" or ".csproj" or ".props";
-    }
-
-    private static async Task<string> ReadHeadAsync(string path, int chars, CancellationToken ct)
-    {
-        using var reader = new StreamReader(path);
-        var buffer = new char[chars];
-        var read = await reader.ReadAsync(buffer, ct).ConfigureAwait(false);
-        return new string(buffer, 0, read);
-    }
 
     /// <summary>An empty listing used to look identical to one still loading.</summary>
     public bool IsEmpty => IsLoaded && !IsLoading && Entries.Count == 0;
@@ -1253,172 +1070,16 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void OpenTerminalHere() => _launcher?.OpenTerminal(CurrentPath);
 
-    // Self-contained: the pane owns its clipboard rather than raising an event
-    // for the window to service. The old chain had three links and no way to
-    // tell which one had broken when copy silently did nothing.
 
-    [RelayCommand]
-    public Task CopySelectionToClipboardAsync() => WriteClipboardAsync(ClipboardAction.Copy);
 
-    [RelayCommand]
-    public Task CutSelectionToClipboardAsync() => WriteClipboardAsync(ClipboardAction.Cut);
 
-    private async Task WriteClipboardAsync(ClipboardAction action)
-    {
-        if (_clipboard is null) { Status = "clipboard unavailable"; return; }
 
-        var paths = SelectionPaths();
-        if (paths.Count == 0) { Status = "nothing selected"; return; }
 
-        try
-        {
-            var ok = await _clipboard.SetFilesAsync(action, paths).ConfigureAwait(false);
-            var verb = action == ClipboardAction.Cut ? "cut" : "copied";
 
-            await Dispatcher.UIThread.InvokeAsync(() =>
-                Status = ok ? $"{paths.Count} item(s) {verb}" : "clipboard unavailable");
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = $"copy failed: {ex.Message}");
-        }
-    }
 
-    [RelayCommand]
-    public async Task PasteAsync()
-    {
-        if (_clipboard is null) { Status = "clipboard unavailable"; return; }
 
-        try
-        {
-            var payload = await _clipboard.GetFilesAsync().ConfigureAwait(false);
 
-            if (payload is null)
-            {
-                await Dispatcher.UIThread.InvokeAsync(() => Status = "clipboard has no files");
-                return;
-            }
 
-            await Dispatcher.UIThread.InvokeAsync(() =>
-                PasteInto(payload.Paths, payload.Action == ClipboardAction.Cut));
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = $"paste failed: {ex.Message}");
-        }
-    }
-
-    [RelayCommand]
-    public async Task NewFolderAsync()
-    {
-        var baseName = Path.Combine(CurrentPath, "New folder");
-        var target = Directory.Exists(baseName) ? XdgDeduplicate(baseName) : baseName;
-
-        try
-        {
-            Directory.CreateDirectory(target);
-            await RefreshAsync().ConfigureAwait(true);
-
-            // Straight into rename — the same hand-off NewFromTemplateAsync has
-            // always done, and for the same reason: "New folder" is a placeholder
-            // nobody wants to keep, and making them find it and press F2 is a
-            // second step for something they already told us they were doing.
-            BeginRenameOf(target);
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
-        }
-    }
-
-    /// <summary>Selects a freshly created path and opens the rename prompt on
-    /// it. Shared by new folder, new file and new-from-template.</summary>
-    private void BeginRenameOf(string path)
-    {
-        var created = _all.FirstOrDefault(e => e.FullPath == path);
-
-        if (created.FullPath is not null) RenameRequested?.Invoke(this, created);
-    }
-
-    /// <summary>
-    /// Creates an empty file of the chosen kind and renames it immediately.
-    /// </summary>
-    [RelayCommand]
-    public async Task NewFileAsync(NewFileKind? kind)
-    {
-        if (kind is null) return;
-
-        try
-        {
-            var target = Path.Combine(CurrentPath, "New file" + kind.Extension);
-            var unique = target;
-            var counter = 2;
-
-            while (File.Exists(unique) || Directory.Exists(unique))
-            {
-                unique = Path.Combine(CurrentPath,
-                    $"New file {counter++}{kind.Extension}");
-            }
-
-            await Task.Run(() => File.Create(unique).Dispose()).ConfigureAwait(true);
-
-            // A script nobody can run is half a file. Guarded because
-            // SetUnixFileMode throws on Windows rather than being ignored.
-            if (kind.Executable && OperatingSystem.IsLinux())
-            {
-                File.SetUnixFileMode(unique,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
-                    | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
-                    | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-            }
-
-            await RefreshAsync().ConfigureAwait(true);
-
-            BeginRenameOf(unique);
-        }
-        catch (Exception ex)
-        {
-            Status = $"could not create file: {ex.Message}";
-        }
-    }
-
-    /// <summary>The built-in kinds, for the menu.</summary>
-    public IReadOnlyList<NewFileKind> NewFileKinds => FileKinds.Common;
-
-    private static string XdgDeduplicate(string path)
-    {
-        for (var i = 2; i < 1000; i++)
-        {
-            var candidate = $"{path} {i}";
-            if (!Directory.Exists(candidate) && !File.Exists(candidate)) return candidate;
-        }
-        return path + " " + Guid.NewGuid().ToString("N")[..6];
-    }
-
-    /// <summary>Copy or move into a specific folder — used when a drop lands on
-    /// a folder row rather than on the listing's background.</summary>
-    public void PasteIntoFolder(string destination, IReadOnlyList<string> paths, bool move)
-    {
-        if (_ops is null || paths.Count == 0) return;
-
-        var handle = move
-            ? _ops.Move(paths, destination, _ => ValueTask.FromResult(ConflictResolution.KeepBoth))
-            : _ops.Copy(paths, destination, _ => ValueTask.FromResult(ConflictResolution.KeepBoth));
-
-        Track(handle);
-    }
-
-    /// <summary>Runs a copy or move into this directory, from the view's paste.</summary>
-    public void PasteInto(IReadOnlyList<string> paths, bool move)
-    {
-        if (_ops is null || paths.Count == 0) return;
-
-        var handle = move
-            ? _ops.Move(paths, CurrentPath, _ => ValueTask.FromResult(ConflictResolution.KeepBoth))
-            : _ops.Copy(paths, CurrentPath, _ => ValueTask.FromResult(ConflictResolution.KeepBoth));
-
-        Track(handle);
-    }
 
     [RelayCommand]
     public Task RefreshAsync() => LoadAsync(CurrentPath);
@@ -1428,67 +1089,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         => SelectedEntry is { } entry ? OpenAsync(entry) : Task.CompletedTask;
 
 
-    /// <summary>Delete key. Recoverable, so no confirmation prompt.</summary>
-    [RelayCommand]
-    public void TrashSelected()
-    {
-        if (_ops is null) return;
 
-        var paths = SelectionPaths();
-        if (paths.Count == 0) return;
 
-        Track(_ops.Trash(paths));
-    }
 
-    /// <summary>Shift+Delete. Irreversible — the view must confirm first.</summary>
-    [RelayCommand]
-    public void DeleteSelected()
-    {
-        if (_ops is null) return;
 
-        var paths = SelectionPaths();
-        if (paths.Count == 0) return;
-
-        Track(_ops.Delete(paths));
-    }
-
-    [RelayCommand]
-    public void BeginRename()
-    {
-        if (SelectedEntry is { } entry) RenameRequested?.Invoke(this, entry);
-    }
-
-    public async Task RenameAsync(FileEntry entry, string newName)
-    {
-        if (_ops is null) return;
-
-        try
-        {
-            await _ops.RenameAsync(entry.FullPath, newName, CancellationToken.None)
-                      .ConfigureAwait(false);
-            await Dispatcher.UIThread.InvokeAsync(() => _ = RefreshAsync());
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
-        }
-    }
-
-    [RelayCommand]
-    public async Task UndoAsync()
-    {
-        if (_ops is null || !_ops.CanUndo) return;
-
-        try
-        {
-            await _ops.UndoAsync(CancellationToken.None).ConfigureAwait(false);
-            await Dispatcher.UIThread.InvokeAsync(() => _ = RefreshAsync());
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
-        }
-    }
 
 
     partial void OnCurrentPathChanged(string value)
@@ -1706,57 +1310,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }, TaskScheduler.Default);
     }
 
-    // ---- sorting -------------------------------------------------------
 
-    /// <summary>
-    /// Click a column heading to sort by it; click again to reverse. The sort
-    /// state was implemented, persisted per tab and completely unreachable —
-    /// there was no control anywhere that set it.
-    /// </summary>
-    [RelayCommand]
-    public void SortBy(string? field)
-    {
-        var target = field switch
-        {
-            "size" => SortField.Size,
-            "modified" => SortField.Modified,
-            "kind" => SortField.Kind,
-            _ => SortField.Name,
-        };
 
-        if (Sort == target) SortDescending = !SortDescending;
-        else { Sort = target; SortDescending = false; }
 
-        NotifySortGlyphs();
-    }
 
-    private string Glyph(SortField field)
-        => Sort != field ? "" : SortDescending ? " \u25BE" : " \u25B4";
-
-    public string NameSortGlyph => Glyph(SortField.Name);
-    public string SizeSortGlyph => Glyph(SortField.Size);
-    public string ModifiedSortGlyph => Glyph(SortField.Modified);
-
-    private void NotifySortGlyphs()
-    {
-        OnPropertyChanged(nameof(IsSortedByName));
-        OnPropertyChanged(nameof(IsSortedBySize));
-        OnPropertyChanged(nameof(IsSortedByModified));
-        OnPropertyChanged(nameof(IsSortedByKind));
-
-        OnPropertyChanged(nameof(NameSortGlyph));
-        OnPropertyChanged(nameof(SizeSortGlyph));
-        OnPropertyChanged(nameof(ModifiedSortGlyph));
-    }
-
-    // ---- breadcrumbs ---------------------------------------------------
-
-    /// <summary>
-    /// The path as clickable ancestors, Dolphin-style. Navigating two levels up
-    /// is one click rather than two, and the shape of the location is readable
-    /// without parsing a string.
-    /// </summary>
-    public ObservableCollection<PathSegment> Breadcrumbs { get; } = new();
 
     /// <summary>Swaps the crumbs for an editable box — Ctrl+L, or clicking the
     /// empty space beside them, exactly as Dolphin does it.</summary>
@@ -1764,199 +1321,25 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     private readonly PathCompleter _completer = new();
 
-    /// <summary>
-    /// Extends the typed path to the next matching folder. Bound to Tab while
-    /// the path box is open.
-    /// </summary>
-    [RelayCommand]
-    public void CompletePath()
-    {
-        if (!IsPathEditing) return;
-
-        if (_completer.Complete(PathText ?? "") is not { } completed)
-        {
-            Status = "no matching folder";
-            return;
-        }
-
-        // Set through the field so OnPathTextChanged does not treat our own
-        // write as the user typing and reset the cycle.
-        _completingPath = true;
-        try { PathText = completed; }
-        finally { _completingPath = false; }
-    }
 
     private bool _completingPath;
 
-    partial void OnPathTextChanged(string value)
-    {
-        // Typing invalidates the candidate list; completing does not.
-        if (!_completingPath) _completer.Reset();
-    }
 
-    [RelayCommand]
-    public void BeginEditPath()
-    {
-        _completer.Reset();
 
-        PathText = CurrentPath;
-        IsPathEditing = true;
-    }
 
-    private void RebuildBreadcrumbs()
-    {
-        Breadcrumbs.Clear();
-        if (string.IsNullOrEmpty(CurrentPath)) return;
 
-        // A recent listing has no hierarchy to walk up, so it gets one crumb
-        // naming itself. Splitting it on '/' would produce "heimdall:recent"
-        // and "files" as if they were folders.
-        if (VirtualPaths.IsVirtual(CurrentPath))
-        {
-            Breadcrumbs.Add(new PathSegment(
-                VirtualPaths.Label(CurrentPath), CurrentPath,
-                new RelayCommand(() => { }), true));
-            return;
-        }
 
-        // Ancestors already answers this on both platforms — it starts at the
-        // root, "/" or "C:\", and walks down to the path itself.
-        //
-        // It replaces a split on '/' that prefixed a hardcoded "/" crumb. On
-        // Windows that produced "/ / C:\Users\flint": the split found no '/' to
-        // break on, so the whole path stayed one unclickable crumb, behind a
-        // root that does not exist there. Linux is unchanged — Ancestors("/x/y")
-        // is ["/", "/x", "/x/y"], which is the same three crumbs as before.
-        var levels = PathRules.Ancestors(CurrentPath);
 
-        for (var i = 0; i < levels.Count; i++)
-        {
-            var target = levels[i];
 
-            // LeafName, not the raw segment: it gives a root back as itself, so
-            // the first crumb reads "/" or "C:\" rather than blank.
-            Breadcrumbs.Add(new PathSegment(
-                PathRules.LeafName(target), target,
-                new RelayCommand(() => Detached(NavigateAsync(target), "navigate")),
-                i == levels.Count - 1));
-        }
-    }
 
-    /// <summary>
-    /// Enter in the path box. A command rather than a code-behind KeyDown
-    /// handler because there is now one path box per split side, and named
-    /// controls inside a template cannot be reached from code-behind.
-    /// </summary>
-    [RelayCommand]
-    public Task NavigateToPathText()
-    {
-        IsPathEditing = false;
-        return string.IsNullOrWhiteSpace(PathText) ? Task.CompletedTask : NavigateAsync(PathText.Trim());
-    }
 
-    /// <summary>
-    /// Escape, or clicking away: put back what is actually being shown.
-    ///
-    /// Guarded, because it is now reachable from lost-focus as well as Escape.
-    /// NavigateToPathText clears IsPathEditing before it reads PathText, so an
-    /// unguarded revert would fire in that gap and overwrite the path the user
-    /// just typed — Enter would appear to navigate nowhere.
-    /// </summary>
-    [RelayCommand]
-    public void RevertPathText()
-    {
-        if (!IsPathEditing) return;
 
-        PathText = CurrentPath;
-        IsPathEditing = false;
-    }
-
-    /// <summary>
-    /// Copy alongside. The operations layer already resolves a name collision
-    /// by keeping both, which is exactly what duplicating means — so this is a
-    /// copy whose destination is where the files already are.
-    /// </summary>
-    // ---- templates -------------------------------------------------------
-
-    public ObservableCollection<FileTemplate> Templates { get; } = new();
-
-    public bool HasTemplates => Templates.Count > 0;
-
-    /// <summary>Re-read on every menu open: a template is a file the user drops
-    /// into a folder, and needing a restart to see it would be baffling.</summary>
-        public void RefreshTemplates()
-    {
-        Templates.Clear();
-        if (_templates is null) return;
-
-        foreach (var template in _templates.Discover()) Templates.Add(template);
-        OnPropertyChanged(nameof(HasTemplates));
-    }
-
-    [RelayCommand]
-    public async Task NewFromTemplateAsync(FileTemplate? template)
-    {
-        if (template is null || _ops is null) return;
-
-        try
-        {
-            // A copy, then straight into rename — the name is the only thing
-            // the user actually wants to decide.
-            var target = Path.Combine(CurrentPath, Path.GetFileName(template.Path));
-            var unique = target;
-            var counter = 2;
-
-            while (File.Exists(unique) || Directory.Exists(unique))
-            {
-                unique = Path.Combine(CurrentPath,
-                    $"{Path.GetFileNameWithoutExtension(target)} {counter++}{Path.GetExtension(target)}");
-            }
-
-            await Task.Run(() => File.Copy(template.Path, unique)).ConfigureAwait(true);
-            await RefreshAsync().ConfigureAwait(true);
-
-            BeginRenameOf(unique);
-        }
-        catch (Exception ex)
-        {
-            Status = $"could not create from template: {ex.Message}";
-        }
-    }
-
-    [RelayCommand]
-    public void DuplicateSelected()
-    {
-        if (_ops is null) return;
-
-        var paths = SelectionPaths();
-        if (paths.Count == 0) { Status = "select something to duplicate"; return; }
-
-        Track(_ops.Copy(paths, CurrentPath,
-            _ => ValueTask.FromResult(ConflictResolution.KeepBoth)));
-    }
-
-    // ---- sorting, reachable from the menu as well as the headers ----------
-
-    public bool IsSortedByName => Sort == SortField.Name;
-    public bool IsSortedBySize => Sort == SortField.Size;
-    public bool IsSortedByModified => Sort == SortField.Modified;
-    public bool IsSortedByKind => Sort == SortField.Kind;
 
     [RelayCommand] private void SortByName() => SortBy("name");
     [RelayCommand] private void SortBySize() => SortBy("size");
     [RelayCommand] private void SortByModified() => SortBy("modified");
 
-    /// <summary>Sorting by type was implemented from the start and had no way
-    /// to be reached — there is no type column to click.</summary>
-    [RelayCommand]
-    private void SortByKind()
-    {
-        if (Sort == SortField.Kind) SortDescending = !SortDescending;
-        else { Sort = SortField.Kind; SortDescending = false; }
-    }
 
-    [RelayCommand]
-    private void ToggleSortDirection() => SortDescending = !SortDescending;
 
     [RelayCommand]
     public void ClearFilter()
@@ -2190,211 +1573,14 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ---- live updates --------------------------------------------------
 
-    /// <summary>
-    /// Watches the open directory so changes made by anything else — Dolphin,
-    /// a terminal, a download finishing — appear without a manual refresh.
-    /// Updates are applied entry by entry; re-enumerating on every event would
-    /// throw away the whole point of streaming the listing in the first place.
-    /// </summary>
-    private IDisposable? _repoWatcher;
 
-    /// <summary>
-    /// Watches the repository's own metadata, not the folder on screen.
-    ///
-    /// **`git commit` and `git checkout` do not touch the working tree the way
-    /// the folder watcher can see.** A commit writes `.git/index` and
-    /// `.git/HEAD` and moves no file the listing is showing, so every mark
-    /// stayed stale until a navigation or F5. A checkout rewrites both AND the
-    /// tree, which is exactly why this shares `QueueVcsRefresh`'s debounce
-    /// rather than refreshing directly — otherwise one branch switch would fire
-    /// a `git status` per file it touched.
-    /// </summary>
-    private void StartWatchingRepository(string? root)
-    {
-        _repoWatcher?.Dispose();
-        _repoWatcher = null;
 
-        if (root is null) return;
 
-        // `.git` is a FILE in a submodule or a linked worktree, holding a gitdir
-        // pointer rather than the metadata itself. Watching it would then be
-        // watching the wrong thing, so those are left to F5 rather than followed
-        // to their real directory — a resolver for one line of indirection is
-        // more machinery than the case is worth today.
-        var metadata = Path.Combine(root, ".git");
-        if (!Directory.Exists(metadata)) return;
 
-        // Safe because `Watch` is NON-RECURSIVE (`IncludeSubdirectories = false`).
-        // Watching `.git` recursively would mean watching `objects/`, where a
-        // single fetch writes thousands of files — and inotify has a per-user
-        // watch ceiling. Direct children are exactly what is wanted: HEAD,
-        // index, ORIG_HEAD.
 
-        try
-        {
-            _repoWatcher = _fs.Watch(metadata, _ =>
-                Dispatcher.UIThread.Post(QueueVcsRefresh));
-        }
-        catch
-        {
-            // Unwatchable metadata is not fatal; the marks simply wait for F5.
-        }
-    }
 
-    private void StartWatching(string path)
-    {
-        _watcher?.Dispose();
-        _watcher = null;
 
-        try
-        {
-            var generation = _generation;
-            _watcher = _fs.Watch(path, change =>
-                Dispatcher.UIThread.Post(() => ApplyChange(path, generation, change)));
-        }
-        catch
-        {
-            // A directory we cannot watch still lists fine; F5 remains.
-        }
-    }
-
-    private void ApplyChange(string watchedPath, int generation, FileSystemChange change)
-    {
-        // Events can arrive after the user has navigated away, or mid-load.
-        if (IsLoading || generation != _generation || CurrentPath != watchedPath) return;
-
-        // Direct children only — nothing nested is on screen.
-        if (Path.GetDirectoryName(change.Path) != watchedPath) return;
-
-        switch (change.Kind)
-        {
-            case ChangeKind.Removed:
-                RemoveByPath(change.Path);
-                break;
-
-            case ChangeKind.Renamed:
-                if (change.OldPath is { } old) RemoveByPath(old);
-                _ = AddOrUpdateAsync(change.Path, generation);
-                break;
-
-            default:
-                _ = AddOrUpdateAsync(change.Path, generation);
-                break;
-        }
-
-        // The row's size and timestamp are updated above, but its version
-        // control mark is not — that comes from a subprocess, and re-running it
-        // per event would be the per-row `git status` this design exists to
-        // avoid. Queue it instead.
-        QueueVcsRefresh();
-    }
-
-    private DispatcherTimer? _vcsRefresh;
-
-    /// <summary>
-    /// Re-reads version-control status a moment after the folder settles.
-    ///
-    /// **Debounced, and that is the whole point.** A build, a checkout or a
-    /// branch switch fires hundreds of watcher events in a second; one
-    /// `git status` each would be the same mistake as spawning `xdg-mime` per
-    /// row, which once turned a listing into 44 seconds. Each event restarts
-    /// the timer, so the subprocess runs once after the storm rather than once
-    /// per raindrop.
-    /// </summary>
-    /// <summary>
-    /// Public so a settings save can take effect immediately.
-    ///
-    /// Turning the decorations off must clear what is already on screen, and
-    /// turning them on must populate it — waiting for the next navigation is
-    /// the same trap as a setting that lands in a resource and never gets its
-    /// applier re-run.
-    /// </summary>
-    public void RefreshDecorations() => QueueVcsRefresh();
-
-    private void QueueVcsRefresh()
-    {
-        if (Vcs is null || VirtualPaths.IsVirtual(CurrentPath)) return;
-
-        if (_vcsRefresh is null)
-        {
-            _vcsRefresh = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-
-            // Attached ONCE. Wiring it on every call would stack handlers and
-            // fire one refresh per event after all — the exact thing the
-            // debounce is here to prevent.
-            _vcsRefresh.Tick += (_, _) =>
-            {
-                _vcsRefresh!.Stop();
-                _ = RefreshVcsAsync(CurrentPath, _generation);
-            };
-        }
-
-        _vcsRefresh.Stop();
-        _vcsRefresh.Start();
-    }
-
-    private void RemoveByPath(string path)
-    {
-        var masterIndex = _all.FindIndex(e => e.FullPath == path);
-        if (masterIndex >= 0) _all.RemoveAt(masterIndex);
-
-        for (var i = 0; i < Entries.Count; i++)
-        {
-            if (Entries[i].FullPath != path) continue;
-            Entries.RemoveAt(i);
-            break;
-        }
-
-        UpdateCountStatus();
-    }
-
-    private async Task AddOrUpdateAsync(string path, int generation)
-    {
-        var name = Path.GetFileName(path);
-        if (!ShowHidden && name.StartsWith('.')) return;
-
-        FileEntry? entry;
-
-        try
-        {
-            entry = await _fs.GetEntryAsync(path, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            // **This runs on every filesystem event, and it is fire-and-forget.**
-            // A file created and deleted between the notification and the stat is
-            // ordinary — a build writing temporaries does it constantly — but
-            // without this the throw became an unobserved task exception rather
-            // than a shrug.
-            Heimdall.Core.Quiet.Swallowed("watch", ex);
-            return;
-        }
-
-        if (entry is not { } value) return;
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            // Re-checked after the await: a listing may have started while we
-            // were off fetching the entry, and inserting into it would duplicate
-            // whatever the enumeration is about to produce.
-            if (IsLoading || generation != _generation) return;
-
-            RemoveByPathSilently(path);
-
-            var masterAt = FindSortedIndex(_all, value);
-            _all.Insert(masterAt, value);
-
-            if (MatchesFilter(value))
-            {
-                var visibleAt = FindSortedIndex(Entries, value);
-                Entries.Insert(visibleAt, value);
-            }
-
-            UpdateCountStatus();
-        });
-    }
 
     private void RemoveByPathSilently(string path)
     {
@@ -2453,15 +1639,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         Entries.ReplaceAll(items);
     }
 
-    // ---- grouping ---------------------------------------------------------
 
-    [ObservableProperty] private GroupMode _groupBy = GroupMode.None;
-
-    public bool IsGroupedByName => GroupBy == GroupMode.Name;
-    public bool IsGroupedBySize => GroupBy == GroupMode.Size;
-    public bool IsGroupedByModified => GroupBy == GroupMode.Modified;
-    public bool IsGroupedByKind => GroupBy == GroupMode.Kind;
-    public bool IsUngrouped => GroupBy == GroupMode.None;
 
     [RelayCommand] private void GroupByNone() => GroupBy = GroupMode.None;
     [RelayCommand] private void GroupByName() => GroupBy = GroupMode.Name;
@@ -2469,18 +1647,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     [RelayCommand] private void GroupByModified() => GroupBy = GroupMode.Modified;
     [RelayCommand] private void GroupByKind() => GroupBy = GroupMode.Kind;
 
-    partial void OnGroupByChanged(GroupMode value)
-    {
-        OnPropertyChanged(nameof(IsUngrouped));
-        OnPropertyChanged(nameof(IsGroupedByName));
-        OnPropertyChanged(nameof(IsGroupedBySize));
-        OnPropertyChanged(nameof(IsGroupedByModified));
-        OnPropertyChanged(nameof(IsGroupedByKind));
-
-        if (!_suppressReload) ApplyFilter();
-    
-        RememberFolderView();
-    }
 
     /// <summary>
     /// The header a row should carry, or null. Computed once per rebuild rather
@@ -2493,8 +1659,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     // make the ordering depend on when each comparison happened.
     private DateTimeOffset _groupNow = DateTimeOffset.Now;
 
-    public string? HeaderFor(string fullPath)
-        => _groupHeaders.TryGetValue(fullPath, out var label) ? label : null;
 
     /// <summary>Raised when headers change, so realized rows re-read them.</summary>
     public event EventHandler? GroupingChanged;
@@ -2525,49 +1689,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         GroupingChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private int Compare(FileEntry a, FileEntry b)
-    {
-        // Directories first, always — the convention every file manager follows
-        // and users notice immediately when it's missing.
-        if (a.IsDirectory != b.IsDirectory)
-            return a.IsDirectory ? -1 : 1;
-
-        // The group is a PRIMARY key. Without this, grouping by size while
-        // sorted by name interleaves the bands and every group holds one file.
-        if (GroupBy != GroupMode.None)
-        {
-            var group = Grouping.CompareGroups(a, b, GroupBy, _groupNow);
-            if (group != 0) return group;
-        }
-
-        // Span comparison rather than Extension.ToString(): sorting 200k entries
-        // by kind would otherwise allocate a string per comparison, millions of
-        // them for one sort.
-        var result = Sort switch
-        {
-            SortField.Size     => a.Length.CompareTo(b.Length),
-            SortField.Modified => a.LastWriteTime.CompareTo(b.LastWriteTime),
-            SortField.Kind     => a.Extension.CompareTo(b.Extension, StringComparison.OrdinalIgnoreCase),
-            _                  => 0,
-        };
-
-        // Natural order, so file2 comes before file10. Ordinal comparison is
-        // right for bytes and wrong for names people chose — but it is now a
-        // preference, because Dolphin makes it one and some people genuinely
-        // want the alphabetical order their shell gives them.
-        if (result == 0)
-        {
-            var general = Settings.AppSettings.Current.General;
-
-            result = general.NaturalSorting
-                ? NaturalOrder.Compare(a.Name, b.Name)
-                : string.Compare(a.Name, b.Name, general.CaseSensitiveSorting
-                    ? StringComparison.Ordinal
-                    : StringComparison.OrdinalIgnoreCase);
-        }
-
-        return SortDescending ? -result : result;
-    }
 
     private void NotifyNavigationState()
     {

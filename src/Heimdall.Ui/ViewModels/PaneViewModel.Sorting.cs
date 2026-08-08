@@ -1,0 +1,121 @@
+using CommunityToolkit.Mvvm.Input;
+using Heimdall.Core;
+using Heimdall.Core.FileSystem;
+using Heimdall.Core.Session;
+
+namespace Heimdall.Ui.ViewModels;
+
+/// <summary>Sort order, and the glyphs the column headers show for it.</summary>
+public sealed partial class PaneViewModel
+{
+    // ---- sorting -------------------------------------------------------
+
+    /// <summary>
+    /// Click a column heading to sort by it; click again to reverse. The sort
+    /// state was implemented, persisted per tab and completely unreachable —
+    /// there was no control anywhere that set it.
+    /// </summary>
+    [RelayCommand]
+    public void SortBy(string? field)
+    {
+        var target = field switch
+        {
+            "size" => SortField.Size,
+            "modified" => SortField.Modified,
+            "kind" => SortField.Kind,
+            _ => SortField.Name,
+        };
+
+        if (Sort == target) SortDescending = !SortDescending;
+        else { Sort = target; SortDescending = false; }
+
+        NotifySortGlyphs();
+    }
+
+    private string Glyph(SortField field)
+        => Sort != field ? "" : SortDescending ? " \u25BE" : " \u25B4";
+
+    public string NameSortGlyph => Glyph(SortField.Name);
+
+    public string SizeSortGlyph => Glyph(SortField.Size);
+
+    public string ModifiedSortGlyph => Glyph(SortField.Modified);
+
+    private void NotifySortGlyphs()
+    {
+        OnPropertyChanged(nameof(IsSortedByName));
+        OnPropertyChanged(nameof(IsSortedBySize));
+        OnPropertyChanged(nameof(IsSortedByModified));
+        OnPropertyChanged(nameof(IsSortedByKind));
+
+        OnPropertyChanged(nameof(NameSortGlyph));
+        OnPropertyChanged(nameof(SizeSortGlyph));
+        OnPropertyChanged(nameof(ModifiedSortGlyph));
+    }
+
+    // ---- sorting, reachable from the menu as well as the headers ----------
+
+    public bool IsSortedByName => Sort == SortField.Name;
+
+    public bool IsSortedBySize => Sort == SortField.Size;
+
+    public bool IsSortedByModified => Sort == SortField.Modified;
+
+    public bool IsSortedByKind => Sort == SortField.Kind;
+
+    /// <summary>Sorting by type was implemented from the start and had no way
+    /// to be reached — there is no type column to click.</summary>
+    [RelayCommand]
+    private void SortByKind()
+    {
+        if (Sort == SortField.Kind) SortDescending = !SortDescending;
+        else { Sort = SortField.Kind; SortDescending = false; }
+    }
+
+    [RelayCommand]
+    private void ToggleSortDirection() => SortDescending = !SortDescending;
+
+    private int Compare(FileEntry a, FileEntry b)
+    {
+        // Directories first, always — the convention every file manager follows
+        // and users notice immediately when it's missing.
+        if (a.IsDirectory != b.IsDirectory)
+            return a.IsDirectory ? -1 : 1;
+
+        // The group is a PRIMARY key. Without this, grouping by size while
+        // sorted by name interleaves the bands and every group holds one file.
+        if (GroupBy != GroupMode.None)
+        {
+            var group = Grouping.CompareGroups(a, b, GroupBy, _groupNow);
+            if (group != 0) return group;
+        }
+
+        // Span comparison rather than Extension.ToString(): sorting 200k entries
+        // by kind would otherwise allocate a string per comparison, millions of
+        // them for one sort.
+        var result = Sort switch
+        {
+            SortField.Size     => a.Length.CompareTo(b.Length),
+            SortField.Modified => a.LastWriteTime.CompareTo(b.LastWriteTime),
+            SortField.Kind     => a.Extension.CompareTo(b.Extension, StringComparison.OrdinalIgnoreCase),
+            _                  => 0,
+        };
+
+        // Natural order, so file2 comes before file10. Ordinal comparison is
+        // right for bytes and wrong for names people chose — but it is now a
+        // preference, because Dolphin makes it one and some people genuinely
+        // want the alphabetical order their shell gives them.
+        if (result == 0)
+        {
+            var general = Settings.AppSettings.Current.General;
+
+            result = general.NaturalSorting
+                ? NaturalOrder.Compare(a.Name, b.Name)
+                : string.Compare(a.Name, b.Name, general.CaseSensitiveSorting
+                    ? StringComparison.Ordinal
+                    : StringComparison.OrdinalIgnoreCase);
+        }
+
+        return SortDescending ? -result : result;
+    }
+}
