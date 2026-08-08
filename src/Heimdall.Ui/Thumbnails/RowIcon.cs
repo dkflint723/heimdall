@@ -79,6 +79,7 @@ public static class RowIcon
             if (IconLoader.Provider is null)
             {
                 Paint(FileTypeIcon.For(value.Name, value.IsDirectory));
+                await ShowContentsIfAnyAsync(value, Paint, token).ConfigureAwait(true);
                 return;
             }
 
@@ -121,6 +122,63 @@ public static class RowIcon
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[heimdall] icon failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Repaints a folder with papers in it once we know there are some.
+    ///
+    /// **The listing is deliberately stat-free, and this is a stat.** FileEntry
+    /// carries what the directory enumeration already handed over and nothing
+    /// more, precisely so a listing costs one syscall rather than one per row —
+    /// so knowing whether a folder has anything in it has to be bought
+    /// separately, per realized row, cancellable, and off the UI thread. That is
+    /// the same bargain thumbnails and metadata already make.
+    ///
+    /// **Any() rather than a count.** The enumeration stops at the first entry
+    /// instead of walking the folder, which is the difference between a probe and
+    /// a scan on a directory with fifty thousand files in it.
+    ///
+    /// **Adding the sheets rather than taking them away** is why the plain
+    /// folder is the empty one. The bare icon is already on screen when this
+    /// starts, so the only thing that ever changes is a folder gaining papers —
+    /// where the other way round every folder in the listing would flash a full
+    /// stack and then be stripped of it. The cost is that a folder we cannot
+    /// open, or one whose probe is cancelled by a fast scroll, is drawn as
+    /// empty when it is really unknown; the papers appearing late is a smaller
+    /// lie than the whole listing flickering.
+    /// </summary>
+    private static async Task ShowContentsIfAnyAsync(
+        FileEntry entry, Action<IImage> paint, CancellationToken token)
+    {
+        if (!entry.IsDirectory) return;
+
+        // **Not on a share.** Opening a directory is a network round trip on
+        // SMB or WebDAV, and this runs once per realized row — a screenful of
+        // folders is a screenful of round trips, paid again on every scroll
+        // that recycles the containers. A remote folder keeps the plain icon,
+        // which is exactly what it had before any of this existed. The same
+        // judgement, from the same list, that decides the preview size limit.
+        if (ThumbnailLoader.IsRemote(entry.FullPath)) return;
+
+        try
+        {
+            var full = await Task.Run(() =>
+            {
+                try { return Directory.EnumerateFileSystemEntries(entry.FullPath).Any(); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            }, token).ConfigureAwait(true);
+
+            if (full && !token.IsCancellationRequested)
+                paint(FileTypeIcon.For(entry.Name, isDirectory: true, hasContents: true));
+        }
+        catch (OperationCanceledException)
+        {
+            // Scrolled away before the probe finished. The ordinary folder icon
+            // is already on screen, which is the right thing to leave there.
         }
     }
 }

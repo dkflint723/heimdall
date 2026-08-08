@@ -95,7 +95,26 @@ public static class FileTypeIcon
     private static readonly HashSet<FileCategory> FilledMarks =
         [FileCategory.Video, FileCategory.Image];
 
-    private static readonly Dictionary<FileCategory, IImage> Cache = new();
+    /// <summary>
+    /// **A folder with something in it has a page standing out of the top.**
+    /// The plain folder stays exactly as it was and now means empty, because
+    /// the ordinary case should be the ordinary drawing — the variant is the
+    /// one that earns the extra ink.
+    ///
+    /// It is <see cref="PageBody"/> and <see cref="PageFold"/> again, shorter
+    /// and lifted, which is the point: a folder should be drawn holding the
+    /// same object the file icons are, not a generic rectangle. The turned
+    /// corner is what makes it a page rather than a card, and it is the one
+    /// detail that still resolves when the whole icon is eighteen pixels tall —
+    /// so the sheet is deliberately wide enough to give the fold room.
+    ///
+    /// The bottom runs past the pocket line to y=11 so the front panel, drawn
+    /// after it, covers the join.
+    /// </summary>
+    private const string FolderSheet = "M6.5 4.25 H15 L19 8.25 V11 H6.5 Z";
+    private const string FolderSheetFold = "M15 4.25 L19 8.25 H15 Z";
+
+    private static readonly Dictionary<(FileCategory, bool), IImage> Cache = new();
 
     /// <summary>Drops every drawing. Called when the palette changes.</summary>
     public static void Clear() => Cache.Clear();
@@ -105,12 +124,12 @@ public static class FileTypeIcon
     /// drawings and brushes, which is the same constraint IconLoader.Load
     /// carries and for the same reason.
     /// </summary>
-    public static IImage For(string name, bool isDirectory)
-        => Draw(FileCategories.For(name, isDirectory));
+    public static IImage For(string name, bool isDirectory, bool hasContents = false)
+        => Draw(FileCategories.For(name, isDirectory), hasContents);
 
-    private static IImage Draw(FileCategory category)
+    private static IImage Draw(FileCategory category, bool full)
     {
-        if (Cache.TryGetValue(category, out var cached)) return cached;
+        if (Cache.TryGetValue((category, full), out var cached)) return cached;
 
         var hue = Hues.TryGetValue(category, out var found) ? found : Hues[FileCategory.Generic];
         var light = Lighten(hue, 0.55);
@@ -120,8 +139,17 @@ public static class FileTypeIcon
         if (category == FileCategory.Folder)
         {
             // The back panel is the shaded one, so the pocket in front of it
-            // reads as nearer rather than as a second flat rectangle.
+            // reads as nearer rather than as a second flat rectangle. The page
+            // goes between the two, which is what makes it look held rather
+            // than stuck on.
             group.Children.Add(Fill(FolderBack, new SolidColorBrush(Darken(hue, 0.42))));
+
+            if (full)
+            {
+                group.Children.Add(Fill(FolderSheet, new SolidColorBrush(Lighten(hue, 0.74))));
+                group.Children.Add(Fill(FolderSheetFold, new SolidColorBrush(Lighten(hue, 0.84))));
+            }
+
             group.Children.Add(Fill(FolderFront, Graded(hue, 10, 19.75)));
             group.Children.Add(Stroke("M2.5 10 H21.5", light, 1.2));
         }
@@ -152,7 +180,7 @@ public static class FileTypeIcon
             },
         };
 
-        Cache[category] = image;
+        Cache[(category, full)] = image;
         return image;
     }
 

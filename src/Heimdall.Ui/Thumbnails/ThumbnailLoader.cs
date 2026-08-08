@@ -66,8 +66,12 @@ public static class ThumbnailLoader
     /// A remote file costs network to read, which is the entire reason the two
     /// limits are separate: a 50 MB photo on an SMB share is a very different
     /// proposition from the same file on the local disk.
+    ///
+    /// Public because <see cref="RowIcon"/> needs the same judgement for the
+    /// same reason, and the roots are already gathered here — asking the
+    /// question twice from two lists is how they come to disagree.
     /// </summary>
-    private static bool IsRemote(string path)
+    public static bool IsRemote(string path)
     {
         foreach (var root in RemoteRoots)
             if (path.StartsWith(root, StringComparison.Ordinal)) return true;
