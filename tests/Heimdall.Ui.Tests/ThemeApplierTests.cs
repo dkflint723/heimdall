@@ -100,6 +100,62 @@ public class ThemeApplierTests : IDisposable
     }
 
     /// <summary>
+    /// **The desktop is ignored until it is asked for.** The bundled scheme is
+    /// the base, so a machine with a bright Plasma theme still opens looking
+    /// like Heimdall. This is the half that keeps the inversion from being a
+    /// visible change for anyone who never opens Settings.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_desktop_palette_is_ignored_by_default()
+    {
+        Configure(null);
+
+        var window = new Window();
+        ThemeApplier.Apply(window, Loud());
+
+        Assert.Equal("#ff23232b", Colour(window, "ViewBackground"));
+    }
+
+    /// <summary>
+    /// And the half that makes it worth doing: with the flag on, the desktop's
+    /// colours reach the screen. Every one of these was computed and thrown
+    /// away before — the reader ran, the derivations ran, and the reference
+    /// scheme overwrote all of it.
+    /// </summary>
+    [AvaloniaFact]
+    public void With_the_flag_on_the_desktop_palette_wins()
+    {
+        AppSettings.Apply(AppSettings.Current with
+        {
+            Views = AppSettings.Current.Views with { FollowDesktopColours = true },
+        });
+
+        var window = new Window();
+        ThemeApplier.Apply(window, Loud());
+
+        Assert.Equal("#ff102030", Colour(window, "ViewBackground"));
+        Assert.Equal("#ffddeeff", Colour(window, "ViewText"));
+    }
+
+    /// <summary>A palette nothing could be mistaken for.</summary>
+    private static ThemePalette Loud() => new()
+    {
+        Colours = new Dictionary<string, string>
+        {
+            [ThemeRole.ViewBackground] = "#102030",
+            [ThemeRole.ViewText] = "#DDEEFF",
+            [ThemeRole.WindowBackground] = "#203040",
+            [ThemeRole.WindowText] = "#DDEEFF",
+        },
+        FontFamily = "Segoe UI",
+        IsDark = true,
+    };
+
+    private static string? Colour(Window window, string key)
+        => ((Avalonia.Application.Current?.Resources ?? window.Resources)[key] as ISolidColorBrush)
+            ?.Color.ToString()?.ToLowerInvariant();
+
+    /// <summary>
     /// Apply runs on every palette read — startup, a desktop theme change and a
     /// settings save all reach it — so it has to be idempotent. A previous
     /// ordering bug in this method was only visible on the second call.

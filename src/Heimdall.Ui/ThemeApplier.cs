@@ -60,18 +60,41 @@ public static class ThemeApplier
 
         var dark = palette?.IsDark ?? true;
 
-        // Start from our own scheme so any role the desktop omits still has a
-        // sane value, then overlay whatever it did provide.
+        // A sane value for every role, so nothing downstream is ever unset.
         foreach (var (key, darkValue, lightValue) in Fallback)
             target[key] = Brush(dark ? darkValue : lightValue);
 
-        if (palette is not null)
+        // **The reference scheme is the BASE now, not the last word.**
+        //
+        // It used to run last and overwrite everything: of the seventeen
+        // resources derived from the desktop palette below, thirteen were
+        // replaced outright and the four survivors are used by no markup in the
+        // window. So this file read the desktop's colours, spent a hundred lines
+        // deriving separators, bands, bevels and an age ramp from them, and threw
+        // all of it away — leaving IThemeProvider, KdeThemeProvider and
+        // WindowsThemeProvider, some five hundred lines between them, delivering
+        // exactly one live value: palette.SingleClick.
+        //
+        // Applying it first inverts that without changing how anything looks.
+        // The default is unchanged, because the default is still this scheme.
+        // What changes is that the desktop can now be layered ON TOP when asked,
+        // which is what all that derivation was written for.
+        ApplyDesignScheme(target);
+
+        // The desktop gets a say only when the user asks for one. Off by
+        // default: the scheme above is a considered look, and a file manager
+        // that repaints itself to match Plasma the first time it is launched is
+        // a surprise, not a feature.
+        if (!Settings.AppSettings.Current.Views.FollowDesktopColours || palette is null)
         {
-            foreach (var (resource, role) in Mapping)
-            {
-                if (palette.Colours.TryGetValue(role, out var hex) && Brush(hex) is { } brush)
-                    target[resource] = brush;
-            }
+            Finish(target, palette);
+            return;
+        }
+
+        foreach (var (resource, role) in Mapping)
+        {
+            if (palette.Colours.TryGetValue(role, out var hex) && Brush(hex) is { } brush)
+                target[resource] = brush;
         }
 
         if (target["AccentColour"] is ISolidColorBrush accent)
@@ -149,10 +172,35 @@ public static class ThemeApplier
             target["ChromeBrush"] = new SolidColorBrush(back.Color);
         }
 
-        // The file-age ramp is derived here rather than hardcoded: fixed pale
-        // blues disappear on a light scheme. Fresh files get full text colour,
+        // A tag chip background that works on both light and dark: a wash of
+        // the view text colour rather than a fixed translucent white, which is
+        // invisible on a pale scheme.
+        if (target["ViewText"] is ISolidColorBrush chipText)
+        {
+            target["ChipBackground"] = new SolidColorBrush(
+                Color.FromArgb(dark ? (byte)26 : (byte)20,
+                    chipText.Color.R, chipText.Color.G, chipText.Color.B));
+        }
+
+        Finish(target, palette);
+    }
+
+    /// <summary>
+    /// The parts that must run whichever scheme won, in the order they depend
+    /// on each other.
+    ///
+    /// Both paths through <see cref="Apply"/> end here, which is the point: the
+    /// age ramp has to be derived from the colours that FINALLY landed, and the
+    /// trace has to report the font that finally landed. Getting either from a
+    /// value written earlier is exactly the bug that let a broken font setting
+    /// ship — the log named the chosen font while the window rendered another.
+    /// </summary>
+    private static void Finish(IResourceDictionary target, ThemePalette? palette)
+    {
+        // The file-age ramp is derived rather than hardcoded: fixed pale blues
+        // disappear on a light scheme. Fresh files get full text colour,
         // ancient ones fade past the dim colour — a lightness ramp that holds
-        // under any desktop theme.
+        // under any scheme, this one or a desktop's.
         if (target["ViewText"] is ISolidColorBrush text &&
             target["ViewDimText"] is ISolidColorBrush dim)
         {
@@ -168,16 +216,6 @@ public static class ThemeApplier
             ViewModels.AgeConverters.SetRamp(ramp);
         }
 
-        // A tag chip background that works on both light and dark: a wash of
-        // the view text colour rather than a fixed translucent white, which is
-        // invisible on a pale scheme.
-        if (target["ViewText"] is ISolidColorBrush chipText)
-        {
-            target["ChipBackground"] = new SolidColorBrush(
-                Color.FromArgb(dark ? (byte)26 : (byte)20,
-                    chipText.Color.R, chipText.Color.G, chipText.Color.B));
-        }
-
         // Always set, so the markup can bind unconditionally. A configured font
         // wins over the desktop's, which is the whole point of configuring one;
         // blank means follow Plasma, which stays the default.
@@ -186,25 +224,30 @@ public static class ThemeApplier
         // settings save all reach it — so this cannot fall out of step.
         MainWindow.SystemSingleClick = palette?.SingleClick;
 
+        // Precedence, most specific first. ApplyDesignScheme has already put the
+        // reference typeface in, so the last arm is "leave it alone" rather than
+        // a value — which is why this reads as two overrides and not a chain.
         var chosen = Settings.AppSettings.Current.Views.CustomFontFamily;
 
-        target["AppFontFamily"] =
-            chosen is { Length: > 0 }        ? new FontFamily(chosen)
-            : palette?.FontFamily is { Length: > 0 } family ? new FontFamily(family)
-            : FontFamily.Default;
+        if (chosen is { Length: > 0 })
+        {
+            target["AppFontFamily"] = new FontFamily(chosen);
+        }
+        else if (Settings.AppSettings.Current.Views.FollowDesktopColours
+                 && palette?.FontFamily is { Length: > 0 } family)
+        {
+            target["AppFontFamily"] = new FontFamily(family);
+        }
 
-        ApplyDesignScheme(target);
-
-        // Logged AFTER the design scheme, not before, and that is the whole
-        // point. This line used to sit above the call and report the value it
-        // had just written — which the design scheme then replaced. So it
-        // printed applied='Segoe UI' while the window was unmistakably in
-        // JetBrains Mono, and a trace added to make a font problem visible
-        // spent its life describing a value nothing ever rendered.
+        // Logged from the dictionary, after everything that writes to it. This
+        // line used to run before the design scheme and report the value it had
+        // just written — which was then replaced — so it printed
+        // applied='Segoe UI' while the window was unmistakably in JetBrains
+        // Mono. A trace added to make a font problem visible spent its life
+        // describing a value nothing ever rendered.
         //
         // A diagnostic that reports an intention rather than an outcome is
         // worse than none: it answers the question convincingly and wrongly.
-        // Read the dictionary back, after everything that writes to it.
         Console.Error.WriteLine(
             $"[heimdall] font: configured='{chosen ?? "(none)"}' "
             + $"desktop='{palette?.FontFamily ?? "(none)"}' "
@@ -244,7 +287,12 @@ public static class ThemeApplier
 
         target["WindowText"] = B("#e7e7ec");
         target["ViewText"] = B("#e7e7ec");
-        target["ViewDimText"] = B("#8b8b95");
+        // #8b8b95 measured 4.45:1 against PanelBackground — five hundredths
+        // under WCAG AA for body text, and this role carries the sidebar's group
+        // headings and drive sizes. #909099 is 4.75:1 and is not a colour
+        // anybody can tell apart from the old one. Against ViewBackground the
+        // original already passed at 4.62:1, so this is the panel case only.
+        target["ViewDimText"] = B("#909099");
 
         target["SeparatorColour"] = B("#34343c");
         target["BorderColour"] = B("#34343c");
@@ -278,11 +326,8 @@ public static class ThemeApplier
         // the font wrong, which is why it reads as an exception rather than a
         // reordering. Moving the whole block earlier would hand the desktop's
         // palette back its win over the reference.
-        if (Settings.AppSettings.Current.Views.CustomFontFamily is not { Length: > 0 })
-        {
-            target["AppFontFamily"] =
-                new FontFamily("JetBrainsMono NF, JetBrains Mono, Cascadia Mono, Consolas");
-        }
+        target["AppFontFamily"] =
+            new FontFamily("JetBrainsMono NF, JetBrains Mono, Cascadia Mono, Consolas");
 
         // Re-derived from the new text colours. The ramp above was built from
         // the desktop's and would otherwise be left pointing at a palette that

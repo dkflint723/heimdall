@@ -219,6 +219,19 @@ public sealed record ViewSettings
     /// </summary>
     public bool KeepWidthAfterPanelClose { get; init; }
 
+    /// <summary>
+    /// Whether the desktop's colours and font are layered over the application's
+    /// own scheme.
+    ///
+    /// **Off by default, and that is the whole shape of the decision.** The
+    /// bundled scheme is a considered look; a file manager that repaints itself
+    /// to match Plasma the first time it starts is a surprise rather than a
+    /// courtesy. But the reader for those colours already exists on both
+    /// platforms and used to be computed and discarded, so the cost of offering
+    /// the choice is one flag.
+    /// </summary>
+    public bool FollowDesktopColours { get; init; }
+
     /// <summary>Null means follow the desktop font from kdeglobals.</summary>
     public string? CustomFontFamily { get; init; }
 
