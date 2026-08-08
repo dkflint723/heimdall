@@ -219,6 +219,31 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<FontOption> AvailableFonts { get; }
 
+    /// <summary>
+    /// The running build, shown in the dialog's footer.
+    ///
+    /// **Here rather than in an About window** because that is the whole
+    /// feature: one line, in a dialog that already exists, next to everything
+    /// else somebody opens Settings to check. A window whose only job is to
+    /// state a version number is a window to design, position, dismiss and
+    /// translate.
+    ///
+    /// Both halves come from Program, which is also what `--version` prints, so
+    /// the two cannot disagree — asking the assembly twice by two routes is
+    /// exactly how a window and a command line end up naming different builds.
+    /// </summary>
+    public string VersionLine => $"Heimdall {Program.Version}";
+
+    /// <summary>
+    /// The file the running process came from, as the footer's tooltip.
+    ///
+    /// The version on its own does not answer "which copy am I running", which
+    /// is the question that actually gets asked — a stale <c>~/.local</c>
+    /// install shadowed a packaged one for three days, and both reported
+    /// plausible numbers.
+    /// </summary>
+    public string VersionPath => Program.RunningFrom;
+
     [ObservableProperty] private FontOption _selectedFont;
 
     /// <summary>

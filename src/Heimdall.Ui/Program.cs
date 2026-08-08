@@ -21,12 +21,24 @@ internal sealed class Program
     /// AssemblyName metadata survives trimming and NativeAOT, which is how this
     /// ships.
     /// </summary>
-    private static string Describe()
-    {
-        var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+    /// <summary>
+    /// `GetName().Version` rather than reflecting over assembly attributes:
+    /// AssemblyName metadata survives trimming and NativeAOT, which is how this
+    /// ships. Split out from <see cref="Describe"/> so the settings dialog shows
+    /// the same number by the same route — two ways of asking the version is
+    /// how you end up with a window and a `--version` that disagree.
+    /// </summary>
+    internal static string Version =>
+        typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown";
 
-        return $"heimdall {version}\n{Environment.ProcessPath ?? "(unknown path)"}";
-    }
+    /// <summary>
+    /// The file this process is actually running from. **The reason the version
+    /// alone is not enough**: a stale `~/.local` install shadowed an RPM for
+    /// three days, and both copies reported plausible versions.
+    /// </summary>
+    internal static string RunningFrom => Environment.ProcessPath ?? "(unknown path)";
+
+    private static string Describe() => $"heimdall {Version}\n{RunningFrom}";
 
     /// <summary>
     /// The name the Windows installer watches for, so it can tell that Heimdall

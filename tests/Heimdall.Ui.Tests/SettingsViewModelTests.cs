@@ -75,6 +75,30 @@ public class SettingsViewModelTests
         Assert.Equal(colours, vm.Result.Views.FollowDesktopColours);
     }
 
+    /// <summary>
+    /// The footer names a real build, and names it by the same route
+    /// <c>--version</c> does.
+    ///
+    /// **Two ways of asking the assembly its version is how a window and a
+    /// command line end up disagreeing**, and a version display that is wrong is
+    /// worse than none — it is quoted into bug reports and believed. So this
+    /// checks the value is the one Program publishes, not merely that the
+    /// property returns a non-empty string.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_footer_shows_the_same_build_as_the_command_line()
+    {
+        var vm = new SettingsViewModel(With(ThemeMode.FollowDesktop, followColours: false));
+
+        Assert.Equal($"Heimdall {Heimdall.Ui.Program.Version}", vm.VersionLine);
+        Assert.Equal(Heimdall.Ui.Program.RunningFrom, vm.VersionPath);
+
+        // And that it is a version rather than the "unknown" fallback, which
+        // would otherwise let the assertions above pass while the dialog showed
+        // nothing useful.
+        Assert.Matches(@"^Heimdall \d+\.\d+\.\d+$", vm.VersionLine);
+    }
+
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
