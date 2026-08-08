@@ -34,7 +34,17 @@ public static class PaneScale
     // which is what Ctrl+scroll and the per-layout zoom both ride on.
     private static readonly (string Key, double Value)[] IconMetrics =
     [
-        ("ThumbSize", 24),
+        // **The details row icon sets the row height, not the label.**
+        // rowHeight is max(body * 2.1, thumb + pad), and at 100% that was
+        // max(29.4, 38) — so 26 was deciding it outright and the text never got
+        // a vote. An icon at 1.86x the type size is a launcher's proportion, not
+        // a listing's; Explorer and Dolphin sit nearer 1.3x.
+        //
+        // 18 puts the icon at 1.29x the 14px body and hands the decision back to
+        // the text: max(29.4, 30). Rows go from 38 to 30 at 100%, which is about
+        // eight more files on screen in a full-height window, and the icon still
+        // reads at a glance because it is an icon rather than a thumbnail.
+        ("ThumbSize", 18),
         ("IconSize", 16),
         ("TileSize", 72),
 
@@ -66,7 +76,7 @@ public static class PaneScale
             yield return (key, Math.Round(value * iconScale, 1));
 
         var body = 14 * fontScale;
-        var thumb = 26 * iconScale;
+        var thumb = 18 * iconScale;
         var tile = 84 * iconScale;
 
         // ---- one breathing-room constant, used by all three modes ----------

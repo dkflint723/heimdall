@@ -308,9 +308,34 @@ public static class ThemeApplier
         target["SelectionBackground"] = B("#4d6d6df0");
         target["SelectionText"] = B("#e7e7ec");
 
-        // The mock sets 'JetBrains Mono'. What is installed here is the Nerd
-        // Font packaging of the same typeface, so it is named first and the
-        // plain name kept behind it for a machine that has that instead.
+        // **Two faces, split by what the text is for.**
+        //
+        // Monospace everywhere was the reference, and it cost more than it
+        // looked. Every glyph is set to the width of the widest one, so a
+        // proportional face fits roughly 15-20% more label in the same space —
+        // measured directly here when a test set Georgia and "OS Disk (C:)" fit
+        // where "OS Disk (…" had been truncating. Three separate clipping faults
+        // this week traced back to labels needing more room than they had.
+        //
+        // So: proportional for anything READ — filenames, sidebar labels, the
+        // breadcrumb, menus. Monospace kept for anything COMPARED DOWN A COLUMN
+        // — sizes, dates, permissions, hashes — where equal advance widths are
+        // the entire point and digits have to stack. That is the job monospace
+        // exists for, and it keeps the character of the design exactly where it
+        // earns its keep.
+        //
+        // Segoe UI Variable is Windows 11's own text face and reads a little
+        // narrower than plain Segoe UI at small sizes; the rest of the stack is
+        // the ordinary fallback chain, ending at whatever the system calls its
+        // UI font.
+        target["AppFontFamily"] =
+            new FontFamily("Segoe UI Variable Text, Segoe UI, Inter, Cantarell, Noto Sans, sans-serif");
+
+        // The reference typeface, still here and still doing a job. Bound by the
+        // size and modified columns, so a listing keeps its digits aligned.
+        // Deliberately NOT affected by the font setting: choosing a face for the
+        // interface is a preference, whereas a column of numbers that no longer
+        // lines up is a defect.
         //
         // **Skipped when the user picked a font, and that exception is the
         // reason this method takes an argument it otherwise would not need.**
@@ -326,7 +351,7 @@ public static class ThemeApplier
         // the font wrong, which is why it reads as an exception rather than a
         // reordering. Moving the whole block earlier would hand the desktop's
         // palette back its win over the reference.
-        target["AppFontFamily"] =
+        target["AppMonoFamily"] =
             new FontFamily("JetBrainsMono NF, JetBrains Mono, Cascadia Mono, Consolas");
 
         // Re-derived from the new text colours. The ramp above was built from

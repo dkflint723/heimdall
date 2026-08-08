@@ -1135,19 +1135,11 @@
                       <Run Text="name"/><Run Text="{Binding NameSortGlyph}"/>
                     </TextBlock>
                   </Button>
-                  <TextBlock Grid.Column="2" Width="{DynamicResource ColPathNarrow}" Margin="8,0,0,0" Text="info"
-                             IsVisible="{Binding ShowMetadata}"
-                             FontSize="{DynamicResource FontSizeSmall}"
-                             Foreground="{DynamicResource ViewDimText}"/>
-                  <!-- Shares column 2 with "info": the two are mutually
-                       exclusive, because ShowMetadata is false in a recent
-                       listing and ShowParentPath is only true there. -->
+                  <!-- Column 2 is the recent listing's "path" only. It used to
+                       share the slot with an "info" column carrying a
+                       type-specific fact; that one is gone. -->
                   <TextBlock Grid.Column="2" Width="{DynamicResource ColPathWide}" Margin="8,0,0,0" Text="path"
                              IsVisible="{Binding ShowParentPath}"
-                             FontSize="{DynamicResource FontSizeSmall}"
-                             Foreground="{DynamicResource ViewDimText}"/>
-                  <TextBlock Grid.Column="3" Width="{DynamicResource ColPermissions}" Margin="8,0,0,0" Text="permissions" TextAlignment="Right"
-                             IsVisible="{Binding ShowPermissions}"
                              FontSize="{DynamicResource FontSizeSmall}"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <Button Grid.Column="4" Width="{DynamicResource ColSize}" Command="{Binding SortByCommand}" CommandParameter="size"
@@ -1328,13 +1320,6 @@
                                      FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
                                      TextTrimming="CharacterEllipsis"/>
                         </DockPanel>
-                        <!-- Type-specific fact: pixel dimensions for images, child count
-                             for folders. First to drop when space runs out. -->
-                        <TextBlock Grid.Column="2" Width="{DynamicResource ColPathNarrow}" Margin="8,0,0,0"
-                                   th:RowMetadata.Entry="{Binding}"
-                                   IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowMetadata}"
-                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Foreground="{DynamicResource ViewDimText}"
-                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         <!-- Where the row actually lives. Only in a recent
                              listing, where entries span the filesystem and the
                              name alone identifies nothing. -->
@@ -1345,15 +1330,9 @@
                                    FontSize="{DynamicResource FontSizeSmall}"
                                    Foreground="{DynamicResource ViewDimText}"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                        <!-- POSIX mode, formatted as ls -l prints it. -->
-                        <TextBlock Grid.Column="3" Width="{DynamicResource ColPermissions}" Margin="8,0,0,0" TextAlignment="Right"
-                                   th:RowMetadata.Access="{Binding}"
-                                   IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowPermissions}"
-                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Opacity="0.5"
-                                   VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="4" Width="{DynamicResource ColSize}" Text="{Binding Converter={x:Static vm:FileConverters.Size}}" TextAlignment="Right"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowSize}"
-                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace" Foreground="{DynamicResource ViewDimText}"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="{DynamicResource AppMonoFamily}" Foreground="{DynamicResource ViewDimText}"
                                    VerticalAlignment="Center"/>
                         <!-- Shaded by age: a single-hue lightness ramp, and the date itself
                              is still right there, so the colour is a shortcut rather than
@@ -1362,7 +1341,7 @@
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowModified}"
                                    Foreground="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Brush}}"
                                    ToolTip.Tip="{Binding LastWriteTime, Converter={x:Static vm:AgeConverters.Description}}"
-                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="monospace"
+                                   FontSize="{DynamicResource FontSizeSmall}" FontFamily="{DynamicResource AppMonoFamily}"
                                    VerticalAlignment="Center"/>
                       </Grid>
                     </Panel>
