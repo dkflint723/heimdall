@@ -1127,12 +1127,13 @@
                             </ListBox.ItemsPanel>
                             <ListBox.ItemTemplate>
                               <DataTemplate x:DataType="fs:FileEntry">
-                                <Panel>
+                                <!-- Hit-testable: see the details row. -->
+                                <Panel Background="Transparent">
                                   <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
-                                          Margin="4,1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                          Margin="4,1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                                   <Border Width="3" HorizontalAlignment="Left" CornerRadius="2"
                                           Margin="4,3" Background="{DynamicResource AccentColour}"
-                                          IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                          IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                                   <Grid ColumnDefinitions="*,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,18,0">
                                     <TextBlock Grid.Column="0" Text="{Binding Name}"
                                                FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
@@ -1299,15 +1300,35 @@
                                       FontSize="{DynamicResource FontSizeSmall}"
                                       FontWeight="SemiBold"
                                       Foreground="{DynamicResource ViewDimText}"/>
-                    <Panel>
+                    <!-- **Transparent, so the whole row can be clicked.** A Panel
+                         with no Background is not hit-testable in Avalonia:
+                         pointer events pass straight through it. Only the
+                         TextBlocks were targets, so a double-click landed on a
+                         name or an icon or on nothing at all — and the row is
+                         mostly nothing, since a filename rarely fills it.
+
+                         That is the "opening a folder feels delayed" report.
+                         Nothing was slow: measured from the physical press, a
+                         hit on the name opens in 0 ms and lists in 31 ms. A
+                         miss does not open at all, so it reads as lag rather
+                         than as a dead zone, and the fix for lag — click again
+                         — eventually works by luck.
+
+                         It also explains why selection seemed to help: once
+                         selected, the AccentDim border below becomes visible,
+                         and a visible background IS hit-testable. So the row
+                         went from dead to live after the first successful
+                         click, which is a strange thing to notice and an easy
+                         thing to misread as a timing problem. -->
+                    <Panel Background="Transparent">
                       <!-- Selection marker drawn by us rather than by the control theme.
                            A 3px bar plus a fill means selection reads by position as well
                            as by colour, which the theme default does not. -->
                       <Border Background="{DynamicResource AccentDim}"
-                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                       <Border Width="3" HorizontalAlignment="Left"
                               Background="{DynamicResource AccentColour}"
-                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                       <Grid Height="{DynamicResource RowHeight}" Margin="12,0,18,0" ClipToBounds="True">
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -1474,18 +1495,19 @@
                     <!-- Outer cell carries the user's spacing; the row inside
                          keeps its own size, so the selection highlight hugs the
                          row rather than stretching across the gap. -->
-                    <Panel Width="{DynamicResource CompactCellWidth}"
+                    <!-- Hit-testable: see the details row. -->
+                    <Panel Background="Transparent" Width="{DynamicResource CompactCellWidth}"
                            Height="{DynamicResource CompactCellHeight}">
                       <Panel Width="{DynamicResource CompactWidth}"
                              Height="{DynamicResource CompactRowHeight}"
                              HorizontalAlignment="Left" VerticalAlignment="Top">
                         <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
-                                Margin="1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                Margin="1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                         <!-- Same edge bar as the details rows: selection must read
                              by position as well as by colour. -->
                         <Border Width="3" HorizontalAlignment="Left" Margin="1"
                                 Background="{DynamicResource AccentColour}"
-                                IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                                IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                         <StackPanel Orientation="Horizontal" Spacing="8"
                                     VerticalAlignment="Center" Margin="6,0,6,0">
                           <!-- Same slot and same rules as the details column:
@@ -1561,13 +1583,14 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="fs:FileEntry">
-                    <Panel Width="{DynamicResource TileWidth}" Height="{DynamicResource TileHeight}" Margin="3">
+                    <!-- Hit-testable: see the details row. -->
+                    <Panel Background="Transparent" Width="{DynamicResource TileWidth}" Height="{DynamicResource TileHeight}" Margin="3">
                       <Border Background="{DynamicResource AccentDim}" CornerRadius="6"
-                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                       <!-- A tile has no left edge to bar, so selection gets an outline —
                            same principle as the row marker, different geometry. -->
                       <Border BorderBrush="{DynamicResource AccentColour}" BorderThickness="2" CornerRadius="6"
-                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}"/>
+                              IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                       <StackPanel Margin="8,6" VerticalAlignment="Top" Spacing="2">
                         <Panel Width="{DynamicResource TileSize}" Height="{DynamicResource TileSize}"
                                HorizontalAlignment="Center">
