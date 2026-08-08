@@ -9,8 +9,8 @@
 It reads your desktop's own settings — icon theme, click behaviour, trash,
 bookmarks and file types — rather than keeping its own copy of them.
 
-Colours and typeface are currently pinned to the design reference rather than
-following your desktop; see [Fitting your desktop](#fitting-your-desktop).
+Colours and typeface default to the design reference rather than your desktop,
+and can follow it instead; see [Fitting your desktop](#fitting-your-desktop).
 Windows is newer than Linux and still has gaps — see [Status](#status).
 
 </div>
@@ -32,10 +32,6 @@ Copy or move between them from the right-click menu.
 that folder, or press `Ctrl+L` to type a path. Typing offers completions as you
 go, and `Tab` cycles through them.
 
-**Column strip.** Turn on *Path columns above list* for a horizontal strip of
-parent folders above the listing, so you can step sideways through a deep tree
-without losing your place.
-
 **Type to jump.** Start typing in any listing and the selection moves to the first
 matching name — no dialog, no search box.
 
@@ -45,9 +41,9 @@ matching name — no dialog, no search box.
 
 **Three layouts**, from the toolbar or `F8`:
 
-- **List** — one file per row, with sortable columns for size, type, permissions
-  and date. Columns drop out gracefully as the pane narrows rather than being
-  squeezed into uselessness.
+- **List** — one file per row, with sortable columns for size and date. Columns
+  drop out gracefully as the pane narrows rather than being squeezed into
+  uselessness.
 - **Compact** — names in vertical columns, for fitting a lot of files on screen.
 - **Grid** — large icons and thumbnails.
 
@@ -62,8 +58,8 @@ blown up into a blur.
 
 **Grouping** by name, size, type or date, from the right-click menu.
 
-**Details panel** (`F11`) — preview, full path, size, type, dates, permissions and
-tags for whatever is selected. In split view each side gets its own, so the panel
+**Details panel** (`F11`) — preview, full path, size, type, dates and permissions
+for whatever is selected. In split view each side gets its own, so the panel
 always describes the side you are looking at. If the window is too narrow to show
 it usefully, Heimdall can widen the window to make room and shrink it back when
 you close it.
@@ -81,10 +77,6 @@ than all appearing at the end.
 
 **Recent files** and **recent locations**, banded by day. Any entry can be
 forgotten individually, which removes the record and never the file.
-
-**Tags.** Tag any file or folder, colour-coded, reachable from the sidebar. Tags
-live on the file itself as extended attributes, so they travel with it and other
-tools can read them.
 
 **Pin a folder** with `Ctrl+D` to keep it in the sidebar.
 
@@ -160,9 +152,9 @@ Heimdall reads your desktop's configuration rather than keeping its own copy:
 
 | | |
 |---|---|
-| **Colour scheme and accent** | currently the design reference's dark palette |
+| **Colour scheme and accent** | the design reference's dark palette, or your desktop's if you ask |
 | **Icon theme** | your themed icons, with hand-drawn fallbacks where a theme has none |
-| **Font** | currently the design reference's typeface |
+| **Font** | the design reference's typeface, or any family you choose |
 | **Single or double click** | follows your desktop setting |
 | **Trash** | the standard desktop trash, shared with every other application |
 | **Bookmarks** | the same places list your other file manager uses |
@@ -170,12 +162,12 @@ Heimdall reads your desktop's configuration rather than keeping its own copy:
 
 Change your icon theme and Heimdall changes with it. Nothing needs restarting.
 
-Colour and typeface are the exception, and a deliberate one. The machinery to
-follow your scheme, accent and font live is all still there and still runs — it
-is then overwritten by `ApplyDesignScheme`, so the window matches the design
-reference exactly, in its dark palette, on every desktop and in every scheme.
-Reverting that is a one-line change, documented where it happens in
-`src/Heimdall.Ui/ThemeApplier.cs`.
+Colour and typeface are the exception, and a deliberate one: the bundled scheme
+is the default, because a file manager that repaints itself to match your desktop
+the first time you launch it is a surprise rather than a courtesy. Turn on
+*Follow desktop colours* and your scheme and accent are layered over it instead;
+choose a font in Settings and it is used throughout. Sizes and dates keep the
+monospaced face either way, so figures still line up down a column.
 
 ## Keyboard
 
@@ -237,7 +229,7 @@ UAC prompt, and it removes from *Installed apps* like anything else. The first
 page offers *Install for all users* if you would rather have it on the machine
 than the account.
 
-Uninstalling leaves your tabs, pinned places, folder views and tags where they
+Uninstalling leaves your tabs, pinned places and folder views where they
 are, under `%LOCALAPPDATA%\heimdall` — so reinstalling or upgrading picks up
 where you left off. Delete that folder by hand if you want them gone, but note
 that it also holds your settings, your recent folders and the `scripts\` folder
@@ -263,7 +255,7 @@ version numbers should not be trusted yet. Known gaps:
   updating on their own.
 - **Selection mode, configurable shortcuts and multiple windows** are not built.
 - **Windows is newer than Linux.** It browses, lists drives, opens files,
-  copies, moves, renames, recycles, tags, connects to and discovers network
+  copies, moves, renames, recycles, connects to and discovers network
   shares, serves a folder over HTTP, and follows the system light/dark mode and
   accent. The Recycle Bin is browsable, and *Restore* puts a file back where it
   came from — beside whatever has since taken the name, rather than over it.
@@ -271,9 +263,7 @@ version numbers should not be trusted yet. Known gaps:
   Linux, Heimdall can hand the query to Baloo and search inside files where KDE
   indexes them. Pins in Explorer's Quick Access are not imported, though the
   older Links and Network Shortcuts folders are. SFTP and FTP are Linux-only,
-  because Windows has no redirector for them. Tags are kept in an index under
-  `%LOCALAPPDATA%\heimdall` rather than on the file itself, so unlike on Linux
-  they do not travel with it. See [WINDOWS.md](WINDOWS.md).
+  because Windows has no redirector for them. See [WINDOWS.md](WINDOWS.md).
 
 Bugs and ideas are welcome on the
 [issue tracker](https://github.com/dkflint723/heimdall/issues).
