@@ -136,9 +136,14 @@ public sealed class WindowsPlatform : IPlatform
     public IIconThemeProvider? Icons => null;
 
     /// <summary>
-    /// Null. Listing, restoring and emptying the Recycle Bin all need the same
-    /// COM surface as trashing itself, and none of it is required to browse
-    /// files.
+    /// **Was null on the grounds that the Recycle Bin needs COM, and that COM
+    /// under NativeAOT would fail at runtime rather than at compile time.**
+    /// The first half was true and the second was never tested: a
+    /// source-generated IShellItem enumeration of the bin works correctly in a
+    /// published AOT binary. Measuring it also showed the shell is not the
+    /// right tool for this interface's three requirements — the bin's own
+    /// metadata carries the original path, the size and the deletion time as
+    /// plain fields, which is what <see cref="RecycleBin"/> reads.
     /// </summary>
-    public ITrashMaintenance? TrashMaintenance => null;
+    public ITrashMaintenance? TrashMaintenance { get; } = new WindowsTrashMaintenance();
 }

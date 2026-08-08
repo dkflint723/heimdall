@@ -121,12 +121,20 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
             });
         }
 
-        // **No Trash entry, deliberately.** The Linux provider ends with one
-        // pointing at heimdall:trash, but the Recycle Bin needs the COM surface
-        // that IFileOperations.Trash and ITrashMaintenance both still lack. An
-        // entry that opens an empty view and cannot restore anything is worse
-        // than no entry: it looks like the trash is empty. Add it with the
-        // implementation, not before.
+        // Withheld until it worked, which is the whole reason it is here now.
+        // The note this replaces said an entry that opens an empty view and
+        // cannot restore anything is worse than no entry, because it looks like
+        // the trash is empty rather than like a missing feature. The same
+        // virtual path as Linux, because the view behind it is shared and reads
+        // through ITrashMaintenance — which Windows now implements.
+        places.Add(new Place
+        {
+            Id = "trash",
+            Label = "Recycle Bin",
+            Path = "heimdall:trash",
+            Kind = PlaceKind.Bookmark,
+            Icon = "trash",
+        });
 
         return places;
     }

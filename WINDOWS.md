@@ -556,6 +556,37 @@ it does not mean one file.
    list, Quick Access import and content search. That is worth stating as a
    single decision rather than four backlog items.
 
+7c. **The COM decision, measured — and it was never a decision.** The claim
+   above, and §7's "COM in particular needs source-generated interop or it will
+   fail at runtime, not compile time", were reasoning rather than results.
+   Nobody had run it.
+
+   A spike settled it: an `IShellItem` enumeration of the Recycle Bin, declared
+   with `[GeneratedComInterface]` and resolved through `StrategyBasedComWrappers`,
+   works in a **published NativeAOT binary**. It returned the bin's display
+   name, bound `BHID_EnumItems`, and enumerated a real deleted file with both
+   its original path and its `$R` payload. Source-generated COM is exactly the
+   route the doc named, and it does what the doc doubted.
+
+   So the gate is open, and three of the four features are now ordinary work
+   rather than blocked work. That is the whole value of the spike: an
+   assumption held four features hostage for a release, and testing it cost an
+   afternoon.
+
+   **The Trash view shipped without COM anyway, and that is not a contradiction.**
+   Having proved the shell was available, it turned out to be the wrong tool for
+   this particular interface. `ITrashMaintenance` wants a size and a deletion
+   date per entry to run a policy sweep, and a restore that lands *beside* a
+   name someone has taken back and reports where it went. The bin's own
+   metadata carries the first two as plain fields; the shell's undelete verb
+   decides the third for itself and reports nothing. `$I`/`$R` is the same
+   shape as freedesktop's payload-plus-sidecar, so Windows satisfies the
+   interface almost line for line — see `RecycleBin`.
+
+   Measuring first is what made that judgement available. Without the spike the
+   only honest options were "assume COM fails" or "assume it works"; with it,
+   the choice was made on which tool fits.
+
    **Two things this cost that were not on the list.** `DnsQuery_W` does not
    resolve `.local` SRV records — the unicast resolver answers nothing for them,
    measured against a network of Chromecasts where every browse succeeded and
