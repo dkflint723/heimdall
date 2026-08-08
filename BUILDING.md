@@ -36,7 +36,10 @@ WSL recipe for running the Linux suite from the Windows machine.
 
 **Rebuild without the override before running.** Both configurations write to the
 same `bin/Debug/net10.0/`, so the cross-check leaves the other platform's binary
-where you launch from. It starts and then dies at the platform seam with
+where you launch from. **Building in WSL does the same thing by a different
+route** — a checkout under `/mnt/d` is the same directory Windows builds into,
+so a `dotnet build` on the Linux side replaces the Windows binary with a real
+Linux one, no override involved. It starts and then dies at the platform seam with
 `PlatformNotSupportedException: No platform implementation for this operating
 system yet` — a true statement about a binary built for the other OS, and a
 thoroughly misleading one about your machine. A bare `dotnet build` fixes it.
