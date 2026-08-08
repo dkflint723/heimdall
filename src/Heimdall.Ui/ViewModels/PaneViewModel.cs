@@ -972,17 +972,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public bool IsGridView => View == ViewMode.Grid;
     public bool IsCompactView => View == ViewMode.Compact;
 
-    /// <summary>The chain is orthogonal to the layout — it can sit above either.</summary>
-    [ObservableProperty] private bool _showColumnStrip;
-
-    partial void OnShowColumnStripChanged(bool value)
-    {
-        if (_suppressReload) return;
-
-        if (value) _ = Miller.ShowAsync(CurrentPath);
-        else _miller?.Clear();
-    }
-
     [RelayCommand]
     public void ShowAsDetails() => View = ViewMode.Details;
 
@@ -1010,42 +999,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _ = label;
 
         View = mode;
-    }
-
-    private MillerViewModel? _miller;
-
-    /// <summary>Built lazily — a pane that never enters column view never pays for it.</summary>
-    public MillerViewModel Miller => _miller ??= CreateMiller();
-
-    private MillerViewModel CreateMiller()
-    {
-        var miller = new MillerViewModel(_fs, () => ShowHidden, Compare);
-
-        // The chain reports its deepest selected directory, and that becomes
-        // CurrentPath. Every existing operation — paste, new folder, rename,
-        // the context menu — therefore keeps working without knowing this view
-        // exists at all.
-        miller.DirectoryChanged += (_, path) =>
-        {
-            if (CurrentPath == path) return;
-
-            PathText = path;
-
-            // LoadAsync would rebuild the chain we are currently inside, so the
-            // listing is loaded directly. CurrentPath is set by it.
-            _ = LoadListingAsync(path);
-        };
-
-        miller.EntryChanged += (_, entry) =>
-        {
-            SelectedEntry = entry;
-            var active = SelectedEntries;
-
-            active.Clear();
-            if (entry is { } value) active.Add(value);
-        };
-
-        return miller;
     }
 
     partial void OnViewChanged(ViewMode oldValue, ViewMode newValue)
@@ -1759,7 +1712,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             SortDescending = tab.SortDescending;
             ShowHidden = tab.ShowHidden;
             View = tab.View;
-            ShowColumnStrip = tab.ShowColumnStrip;
             GroupBy = tab.GroupBy;
 
             // Guarded: a session written before these existed deserialises as
@@ -1825,7 +1777,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         SortDescending = SortDescending,
         ShowHidden = ShowHidden,
         View = View,
-        ShowColumnStrip = ShowColumnStrip,
         GroupBy = GroupBy,
         // **All three read from `_scales`, including details.** The live
         // `FontScale`/`IconScale` hold whichever layout is ON SCREEN, so writing
@@ -2264,24 +2215,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     private async Task LoadAsync(string path)
     {
         if (string.IsNullOrEmpty(path)) return;
-
-        // The column strip walks a folder hierarchy, and a recent listing has
-        // none. Guarded here rather than inside Miller, because this is the
-        // only caller that can know the path is virtual.
-        // Guarded separately from the listing, and not merely for tidiness: the
-        // strip is context and the listing is the point. A folder whose parents
-        // cannot be walked must still open.
-        if (ShowColumnStrip && !VirtualPaths.IsVirtual(path))
-        {
-            try
-            {
-                await Miller.ShowAsync(path).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Heimdall.Core.Quiet.Swallowed("columns", ex);
-            }
-        }
 
         await LoadListingAsync(path).ConfigureAwait(false);
     }
@@ -2857,7 +2790,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _repoWatcher?.Dispose();
         _previewCts?.Cancel();
         _previewCts?.Dispose();
-        _miller?.Clear();
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = null;

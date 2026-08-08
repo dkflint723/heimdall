@@ -33,8 +33,11 @@ public sealed record TabState
     public bool ShowHidden { get; init; }
     public ViewMode View { get; init; } = ViewMode.Details;
 
-    /// <summary>The Miller navigation strip, independent of the layout.</summary>
-    public bool ShowColumnStrip { get; init; }
+    // ShowColumnStrip was here. The column browser it belonged to is gone, and
+    // the field goes with it rather than being kept "in case" — a session file
+    // written by an older build still carries the property, and
+    // System.Text.Json ignores what it cannot bind, so old sessions load
+    // cleanly without it. Nothing to migrate.
 
     /// <summary>
     /// Type and icon scale, per tab. A reference listing beside a working one

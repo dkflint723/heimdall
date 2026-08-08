@@ -337,9 +337,6 @@
                   <CheckBox Content="Details panel  (f11)"
                             FontSize="{DynamicResource FontSizeSmall}"
                             IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"/>
-                  <CheckBox Content="Path columns above list"
-                            FontSize="{DynamicResource FontSizeSmall}"
-                            IsChecked="{Binding ActiveTab.ShowColumnStrip}"/>
 
                   <!-- A view setting, so it belongs with the view settings
                        rather than occupying every path bar permanently. -->
@@ -1084,78 +1081,6 @@
 
               <DockPanel>
 
-              <!-- Miller columns as a navigation strip above the listing, not
-                   instead of it. The chain is for getting around; the list
-                   below keeps the detail columns, multi-select and every
-                   operation working on a plain list. -->
-              <Border DockPanel.Dock="Top"
-                      Height="{DynamicResource ColumnStripHeight}"
-                      BorderThickness="0,0,0,0.5" BorderBrush="{DynamicResource SeparatorColour}"
-                      IsVisible="{Binding ShowColumnStrip}">
-              <!-- A deep chain scrolls off to the right; the newest column has
-                   to be brought into view or descending appears to do nothing. -->
-              <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                            VerticalScrollBarVisibility="Disabled"
-                            local:ScrollIntoView.Target="{Binding Miller.Focused}">
-                <ItemsControl ItemsSource="{Binding Miller.Columns}">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                      <StackPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:MillerColumnViewModel">
-                      <Border Width="210" BorderThickness="0,0,0.5,0" BorderBrush="{DynamicResource SeparatorColour}">
-                          <ListBox ItemsSource="{Binding Entries}"
-                                   SelectedItem="{Binding SelectedEntry}"
-                                   Background="Transparent" Padding="0">
-                            <ListBox.Styles>
-                              <Style Selector="ListBoxItem">
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="MinHeight" Value="0"/>
-                              </Style>
-                              <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                                <Setter Property="Background" Value="Transparent"/>
-                              </Style>
-                              <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter">
-                                <Setter Property="Background" Value="Transparent"/>
-                              </Style>
-                              <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
-                                <Setter Property="Background" Value="Transparent"/>
-                              </Style>
-                            </ListBox.Styles>
-                            <ListBox.ItemsPanel>
-                              <ItemsPanelTemplate>
-                                <VirtualizingStackPanel/>
-                              </ItemsPanelTemplate>
-                            </ListBox.ItemsPanel>
-                            <ListBox.ItemTemplate>
-                              <DataTemplate x:DataType="fs:FileEntry">
-                                <!-- Hit-testable: see the details row. -->
-                                <Panel Background="Transparent">
-                                  <Border Background="{DynamicResource AccentDim}" CornerRadius="4"
-                                          Margin="4,1" IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
-                                  <Border Width="3" HorizontalAlignment="Left" CornerRadius="2"
-                                          Margin="4,3" Background="{DynamicResource AccentColour}"
-                                          IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
-                                  <Grid ColumnDefinitions="*,Auto" Height="{DynamicResource RowHeight}" Margin="12,0,18,0">
-                                    <TextBlock Grid.Column="0" Text="{Binding Name}"
-                                               FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="1" Text="&#x203A;" FontSize="{DynamicResource FontSizeBase}"
-                                               Opacity="0.35" VerticalAlignment="Center"
-                                               IsVisible="{Binding IsDirectory}"/>
-                                  </Grid>
-                                </Panel>
-                              </DataTemplate>
-                            </ListBox.ItemTemplate>
-                          </ListBox>
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </ScrollViewer>
-              </Border>
 
               <!-- Trash actions. Docked ABOVE the column header so it shows in
                    every layout, not just details — the header itself is bound to

@@ -2064,24 +2064,6 @@ public partial class MainWindow : Window
         // keystroke would mean tunnelling and stealing a key the listing has a
         // legitimate claim to. Ctrl+wheel and Ctrl +/- cover it.
 
-        // Left/Right walk the Miller chain when it is showing and the listing
-        // does not own the keystroke. Without this the strip is mouse-only,
-        // which is the opposite of the point of a column view.
-        if (_shell.ActiveTab is { ShowColumnStrip: true } chained
-            && e.KeyModifiers == KeyModifiers.None
-            && e.Key is Key.Left or Key.Right
-            && FocusManager?.GetFocusedElement() is not TextBox)
-        {
-            var current = chained.Miller.Focused ?? chained.Miller.Columns.LastOrDefault();
-
-            if (current is not null
-                && chained.Miller.Step(current, e.Key == Key.Right ? 1 : -1) is not null)
-            {
-                e.Handled = true;
-                return;
-            }
-        }
-
         // Tab moves between sides rather than traversing focus, matching
         // Dolphin. Only when split, so it keeps its normal meaning otherwise —
         // and never while typing, or it would jump panes mid-edit.
