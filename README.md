@@ -267,8 +267,7 @@ version numbers should not be trusted yet. Known gaps:
   shares, serves a folder over HTTP, and follows the system light/dark mode and
   accent. The Recycle Bin is browsable, and *Restore* puts a file back where it
   came from — beside whatever has since taken the name, rather than over it.
-  Missing: the shell's per-file icons, and *Open with* as a
-  list rather than the system picker. Search matches file *names* only: on
+  Missing: the shell's per-file icons. Search matches file *names* only: on
   Linux, Heimdall can hand the query to Baloo and search inside files where KDE
   indexes them. Pins in Explorer's Quick Access are not imported, though the
   older Links and Network Shortcuts folders are. SFTP and FTP are Linux-only,

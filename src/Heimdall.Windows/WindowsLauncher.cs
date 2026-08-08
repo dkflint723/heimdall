@@ -66,23 +66,31 @@ public sealed class WindowsLauncher : IApplicationLauncher
     }
 
     /// <summary>
-    /// **Empty, and the interface allows it** — "empty if the desktop provides
-    /// no way to enumerate them". The shell's handler list lives behind
-    /// IAssocHandler, which is COM, so this is a gap awaiting that decision
-    /// rather than a claim that no application can open the file.
-    /// <see cref="OpenWith"/> still works, because the shell's own picker does
-    /// not need the list to be enumerated first.
+    /// The shell's own handler list, which is what Explorer's "Open with"
+    /// submenu is built from — so the names match what the user already sees
+    /// elsewhere on their machine, default first.
+    ///
+    /// Was empty, on the grounds that this needed COM and COM under NativeAOT
+    /// was the risky combination. The interface does permit empty — "empty if
+    /// the desktop provides no way to enumerate them" — but that was never
+    /// true here; nobody had tested the assumption. See <see cref="AssocHandlers"/>.
     /// </summary>
-    public IReadOnlyList<LaunchOption> GetOpenWithOptions(string path) => [];
+    public IReadOnlyList<LaunchOption> GetOpenWithOptions(string path)
+        => AssocHandlers.For(path);
 
     /// <summary>
-    /// Falls through to the shell's "Open with" dialog. With
-    /// <see cref="GetOpenWithOptions"/> empty there is no specific option to
-    /// honour yet, and showing the picker is the useful thing to do with the
-    /// request — it is what the user asked for, one dialog further along.
+    /// Hands the file to the chosen handler, and falls back to the shell's
+    /// picker if that cannot be done.
+    ///
+    /// The fallback matters more than it looks: the option was built from a
+    /// list that may be a minute old, so the application behind it can have
+    /// been uninstalled since the menu opened. Showing the picker is then still
+    /// what the user asked for, one dialog further along.
     /// </summary>
     public void OpenWith(string path, LaunchOption option)
     {
+        if (!string.IsNullOrEmpty(option.Id) && AssocHandlers.Invoke(path, option.Id)) return;
+
         try
         {
             var info = new ProcessStartInfo("rundll32.exe") { UseShellExecute = true };
