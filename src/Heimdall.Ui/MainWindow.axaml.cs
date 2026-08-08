@@ -87,7 +87,6 @@ public partial class MainWindow : Window
 
         Thumbnails.ThumbnailLoader.Provider = platform.Thumbnails;
         Thumbnails.RowMetadata.Provider = platform.Metadata;
-        Thumbnails.RowTags.Store = platform.Tags;
         Thumbnails.IconLoader.Provider = platform.Icons;
 
         if (platform.Icons is { } icons)
@@ -170,7 +169,7 @@ public partial class MainWindow : Window
         _shell = new ShellViewModel(
             platform.FileSystem, platform.Operations, _store,
             platform.Places, platform.Launcher, clipboard, platform.Search,
-            platform.Scripts, platform.Tags, platform.Templates, platform.Sharing)
+            platform.Scripts, platform.Templates, platform.Sharing)
         {
             GeometryProvider = CaptureGeometry,
         };
@@ -381,7 +380,7 @@ public partial class MainWindow : Window
         for (var visual = source as Visual; visual is not null;
              visual = visual.GetVisualParent())
         {
-            // Content, not background: the name, the icon, a tag chip's label.
+            // Content, not background: the name and the icon.
             // Grabbing one of these means "take this file", so a band must not
             // start here or dragging a file out would become impossible.
             if (row is null && visual is TextBlock or Image or Avalonia.Controls.Shapes.Path)
@@ -1471,9 +1470,6 @@ public partial class MainWindow : Window
         pane.RenameRequested -= OnRenameRequested;
         pane.RenameRequested += OnRenameRequested;
 
-        pane.NewTagRequested -= OnNewTagRequested;
-        pane.NewTagRequested += OnNewTagRequested;
-
         pane.PropertyChanged -= OnPaneFilterToggled;
         pane.PropertyChanged += OnPaneFilterToggled;
     }
@@ -1490,7 +1486,7 @@ public partial class MainWindow : Window
 
     // ---- inline prompt -------------------------------------------------
 
-    private enum PromptMode { None, Rename, ConfirmDelete, ConfirmTrash, ConfirmEmptyTrash, NewTag, Connect }
+    private enum PromptMode { None, Rename, ConfirmDelete, ConfirmTrash, ConfirmEmptyTrash, Connect }
 
     private PromptMode _prompt = PromptMode.None;
     private FileEntry _renameTarget;
@@ -1549,10 +1545,6 @@ public partial class MainWindow : Window
                 _ = target?.RenameAsync(entry, name);
                 break;
 
-            case PromptMode.NewTag when !string.IsNullOrWhiteSpace(name):
-                _ = target?.ToggleTagAsync(name.Trim());
-                break;
-
             case PromptMode.Connect when !string.IsNullOrWhiteSpace(name):
                 _ = _shell.ConnectToAsync(name.Trim());
                 break;
@@ -1590,27 +1582,6 @@ public partial class MainWindow : Window
         PromptInput.CaretIndex = PromptInput.Text.Length;
     }
 
-    private void OnNewTagRequested(object? sender, EventArgs e)
-    {
-        if (PromptBar is null || PromptInput is null) return;
-
-        _prompt = PromptMode.NewTag;
-
-        var count = _shell.ActiveTab is { } t
-            ? (t.Selection.Count > 0 ? t.Selection.Count : t.SelectedEntry is null ? 0 : 1)
-            : 0;
-
-        PromptLabel.Text = $"tag {count} selected item(s)";
-        PromptInput.Text = "";
-        PromptInput.IsVisible = true;
-        PromptConfirm.Content = "apply tag";
-        PromptConfirm.IsVisible = true;
-        PromptCancel.IsVisible = true;
-        PromptHint.Text = "applied to the selection · esc to cancel";
-        PromptBar.IsVisible = true;
-
-        PromptInput.Focus();
-    }
 
     /// <summary>
     /// Emptying the trash is the only action here with no undo AND no per-item
@@ -2040,7 +2011,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_prompt is PromptMode.Rename or PromptMode.NewTag) return;
+        if (_prompt is PromptMode.Rename) return;
 
         // Any focused text box owns the keyboard. Checking the type rather
         // than named controls, because the path and filter boxes now live

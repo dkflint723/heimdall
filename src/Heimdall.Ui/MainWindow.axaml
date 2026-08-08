@@ -91,7 +91,7 @@
     <!-- Colours come from the desktop scheme at runtime (see ThemeApplier);
          nothing is hardcoded here. The rule they must satisfy is unchanged:
          hue never carries meaning on its own, so selection also gets an edge
-         bar, tags carry their names, and file age is a lightness ramp. That is
+         bar and file age is a lightness ramp. That is
          what makes adopting an arbitrary system theme safe. -->
 
     <!-- Both halves of a split render from this one template. The split is two
@@ -998,42 +998,6 @@
                   </Style>
                 </MenuItem.Styles>
               </MenuItem>
-              <MenuItem Header="Tags" IsVisible="{Binding ActiveTab.HasTagStore}">
-                <MenuItem Header="New tag…" Command="{Binding ActiveTab.BeginNewTagCommand}"/>
-                <Separator/>
-                <!-- Each option carries its own command, so the setter binds to
-                     the item and never walks up the tree. x:DataType on the
-                     Style is mandatory: without it the setters resolve against
-                     the window's type and fail silently inside a ContextMenu. -->
-                <MenuItem Header="Apply existing" ItemsSource="{Binding ActiveTab.KnownTags}">
-                  <MenuItem.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TagOption">
-                      <TextBlock Text="{Binding Name}"/>
-                    </DataTemplate>
-                  </MenuItem.ItemTemplate>
-                  <MenuItem.Styles>
-                    <Style Selector="MenuItem > MenuItem" x:DataType="vm:TagOption">
-                      <Setter Property="Command" Value="{Binding Command}"/>
-                    </Style>
-                  </MenuItem.Styles>
-                </MenuItem>
-
-                <!-- Removal was reachable before only by clicking a tag under
-                     "Apply existing" that everything selected already had, which
-                     nobody would guess. Its own menu, saying what it does. -->
-                <MenuItem Header="Remove" ItemsSource="{Binding ActiveTab.RemovableTags}">
-                  <MenuItem.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TagOption">
-                      <TextBlock Text="{Binding Name}"/>
-                    </DataTemplate>
-                  </MenuItem.ItemTemplate>
-                  <MenuItem.Styles>
-                    <Style Selector="MenuItem > MenuItem" x:DataType="vm:TagOption">
-                      <Setter Property="Command" Value="{Binding Command}"/>
-                    </Style>
-                  </MenuItem.Styles>
-                </MenuItem>
-              </MenuItem>
               <MenuItem Header="Scripts folder…"
                         Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
               <!-- Only in the two recent listings, where it is the one action
@@ -1282,7 +1246,7 @@
                         <DockPanel Grid.Column="1" VerticalAlignment="Center"
                                    ClipToBounds="True">
                           <!-- Version-control marker. The LETTER carries the meaning and
-                               the colour is decoration, same rule as the tag chips: hue
+                               the colour is decoration, never the only signal: hue
                                alone would be invisible to a colourblind reader.
                                Fixed width so names stay aligned whether or not a row is
                                marked, and the whole column only exists inside a
@@ -1293,23 +1257,6 @@
                                      FontSize="{DynamicResource FontSizeSmall}"
                                      FontWeight="Bold" TextAlignment="Center"
                                      VerticalAlignment="Center"/>
-                          <!-- Tag chips: always a name, with colour as decoration. A bare
-                               swatch would put the whole meaning in hue. -->
-                          <ItemsControl DockPanel.Dock="Right" Margin="8,0,0,0"
-                                        th:RowTags.Entry="{Binding}" VerticalAlignment="Center">
-                            <ItemsControl.ItemsPanel>
-                              <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                              <DataTemplate x:DataType="th:TagChip">
-                                <Border CornerRadius="3" Padding="5,1" Background="{DynamicResource ChipBackground}"
-                                        BorderThickness="0,0,0,2" BorderBrush="{Binding Colour}">
-                                  <TextBlock Text="{Binding Name}" FontSize="{DynamicResource FontSizeTiny}"
-                                             Opacity="0.8"/>
-                                </Border>
-                              </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                          </ItemsControl>
                           <!-- Left, not stretched. As the DockPanel's fill child this
                                claimed the entire name column, so the gap beside a short
                                filename was still the label — there was nothing in a row
@@ -1701,7 +1648,7 @@
 
 
     <!-- One wide sidebar with every section present at once. The point of the
-         workspace layout is that the things you organise by — places, tags,
+         workspace layout is that the things you organise by — places,
          devices — are never behind a panel toggle. -->
     <Border DockPanel.Dock="Left" Background="{DynamicResource PanelBackground}"
             BorderThickness="0,0,1,0" BorderBrush="{DynamicResource SeparatorColour}"
@@ -1797,7 +1744,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
-              <!-- Network, sharing, tags and frequent folders. -->
+              <!-- Network, sharing and frequent folders. -->
               <StackPanel Margin="0,14,0,0">
                 <!-- Servers announcing themselves on the LAN. copyparty does
                      this when started with -z, which is how Heimdall starts its own
@@ -2024,10 +1971,10 @@
                   </ItemsControl>
                 </StackPanel>
 
-                <!-- Recent. Above tags so the order matches Dolphin, where
-                     Recent sits between the remote entries and Devices. Always
-                     shown, unlike tags and frequent: these two are places that
-                     exist whether or not they currently hold anything. -->
+                <!-- Recent. Ordered to match Dolphin, where Recent sits between
+                     the remote entries and Devices. Always shown: these two are
+                     places that exist whether or not they currently hold
+                     anything. -->
                 <StackPanel Margin="0,14,0,0">
                   <TextBlock Text="RECENT" Margin="12,0,12,6"
                              FontSize="{DynamicResource FontSizeTiny}"
@@ -2077,50 +2024,6 @@
                   </Button>
                 </StackPanel>
 
-                <!-- Tags. Moved down here from beside places at the user's
-                     request; the rationale for the old position was that tags
-                     are a way of organising and belonged with the places. -->
-                <StackPanel Margin="0,14,0,0" IsVisible="{Binding Sidebar.HasTags}">
-                  <TextBlock Text="TAGS" Margin="12,0,12,6"
-                             FontSize="{DynamicResource FontSizeTiny}"
-                             FontWeight="Medium" LetterSpacing="1.1"
-                             Foreground="{DynamicResource ViewDimText}"/>
-                  <ItemsControl ItemsSource="{Binding Sidebar.Tags}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:TagOption">
-                        <Button Command="{Binding Command}"
-                                Background="Transparent" BorderThickness="0"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left" Padding="12,7">
-                          <Button.ContextMenu>
-                            <ContextMenu>
-                              <!-- Removes the tag from the SELECTION, which is
-                                   what a tag in a sidebar can act on. -->
-                              <MenuItem Header="Remove from selection"
-                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).RemoveTagFromSelectionCommand}"
-                                        CommandParameter="{Binding Name}"/>
-                              <Separator/>
-                              <!-- Stops offering it. Files that carry it keep
-                                   it — this list is a suggestion, not the
-                                   truth, and deleting an xattr across files you
-                                   cannot see from here would have no undo. -->
-                              <MenuItem Header="Forget this tag"
-                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ForgetTagCommand}"
-                                        CommandParameter="{Binding Name}"/>
-                            </ContextMenu>
-                          </Button.ContextMenu>
-                          <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Border Width="9" Height="9" CornerRadius="2"
-                                    VerticalAlignment="Center"
-                                    Background="{Binding Name, Converter={x:Static th:TagBrush.ForName}}"/>
-                            <TextBlock Text="{Binding Name}"
-                                       FontSize="{DynamicResource FontSizeBase}"/>
-                          </StackPanel>
-                        </Button>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </StackPanel>
 
               </StackPanel>
 

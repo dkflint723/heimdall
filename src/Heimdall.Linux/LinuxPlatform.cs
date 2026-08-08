@@ -18,7 +18,6 @@ public sealed class LinuxPlatform : IPlatform
     public LinuxPlatform(string stateDirectory)
     {
         Places = new LinuxPlacesProvider(stateDirectory);
-        Tags = new LinuxTagStore(stateDirectory);
         Icons = new XdgIconTheme(Theme?.Read()?.IconTheme);
     }
 
@@ -39,8 +38,6 @@ public sealed class LinuxPlatform : IPlatform
     public IAccessEditor? AccessEditor => _properties;
 
     public IScriptRunner Scripts { get; } = new LinuxScriptRunner();
-
-    public ITagStore Tags { get; }
 
     public ITemplateProvider Templates { get; } = new XdgTemplates();
 

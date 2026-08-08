@@ -26,16 +26,6 @@ public sealed class WindowsFileOperations : IFileOperations
 
     private readonly ConcurrentStack<IUndoable> _undo = new();
 
-    /// <summary>
-    /// Tags are keyed by path here, unlike the Linux extended attributes that
-    /// ride along with the file, so the operations that change a path have to
-    /// tell the index. Null is allowed so the operations remain testable on
-    /// their own.
-    /// </summary>
-    private readonly WindowsTagStore? _tags;
-
-    public WindowsFileOperations(WindowsTagStore? tags = null) => _tags = tags;
-
     public bool CanUndo => !_undo.IsEmpty;
 
     public IOperationHandle Copy(
@@ -179,12 +169,6 @@ public sealed class WindowsFileOperations : IFileOperations
                     if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
                     else File.Delete(path);
 
-                    // Only after the delete succeeded, and only for a permanent
-                    // one — a recycled file can come back, and forgetting its
-                    // tags would mean restoring it from Explorer returned an
-                    // untagged file.
-                    _tags?.Forget(path);
-
                     handle.ItemFinished();
                 }
 
@@ -262,9 +246,8 @@ public sealed class WindowsFileOperations : IFileOperations
 
         // Before the undo entry, so a rename that is immediately undone leaves
         // the index where it started rather than one step behind.
-        _tags?.Retarget(path, target);
 
-        _undo.Push(new UndoRename(target, path, _tags));
+        _undo.Push(new UndoRename(target, path));
         return ValueTask.CompletedTask;
     }
 
@@ -340,9 +323,9 @@ public sealed class WindowsFileOperations : IFileOperations
                 var redirects = new List<(string From, string To)>();
 
                 // Where each top-level source actually ended up, and what was
-                // left behind. Both the undo and the tag index used to
-                // reconstruct the landing site as destination + name, which is
-                // only true when nothing was deduplicated or skipped.
+                // left behind. The undo used to reconstruct the landing site as
+                // destination + name, which is only true when nothing was
+                // deduplicated or skipped.
                 var landings = new List<(string Source, string Target)>();
                 var skipped = new List<(string Source, string Target)>();
 
@@ -420,26 +403,10 @@ public sealed class WindowsFileOperations : IFileOperations
                             Directory.Delete(directory);
                 }
 
-                if (move)
-                {
-                    // Per landing, not per planned item: Retarget already
-                    // follows everything beneath a folder, so moving a tagged
-                    // tree costs one call rather than one per file in it.
-                    foreach (var (source, landed) in landings)
-                        _tags?.Retarget(source, landed);
-
-                    // That prefix walk cannot know which items inside a folder
-                    // were skipped, and a skipped file never left — so it has
-                    // just moved that file's tag to a path with nothing at it,
-                    // and taken it off the file the user chose to keep.
-                    foreach (var (source, target) in skipped)
-                        _tags?.Retarget(target, source);
-                }
-
                 // Copies are not undoable: undoing one means deleting files,
                 // and an undo that deletes is not a safe default.
                 if (move && landings.Count > 0)
-                    _undo.Push(new UndoMove(landings, _tags));
+                    _undo.Push(new UndoMove(landings));
 
                 handle.Complete();
             }
@@ -667,8 +634,8 @@ public sealed class WindowsFileOperations : IFileOperations
     /// <summary>
     /// <paramref name="IsRoot"/> marks one of the paths the user actually
     /// selected, as opposed to something found underneath one. Only those are
-    /// worth recording as landing sites: the undo and the tag index both work
-    /// per selection, not per file.
+    /// worth recording as landing sites: the undo works per selection, not per
+    /// file.
     /// </summary>
     private readonly record struct PlannedItem(
         string Source, string Target, long Length, ItemKind Kind, bool IsRoot);
@@ -678,8 +645,7 @@ public sealed class WindowsFileOperations : IFileOperations
         ValueTask UndoAsync(CancellationToken ct);
     }
 
-    private sealed class UndoRename(
-        string current, string original, WindowsTagStore? tags) : IUndoable
+    private sealed class UndoRename(string current, string original) : IUndoable
     {
         public ValueTask UndoAsync(CancellationToken ct)
         {
@@ -687,7 +653,6 @@ public sealed class WindowsFileOperations : IFileOperations
             else if (File.Exists(current)) File.Move(current, original, overwrite: false);
             else return ValueTask.CompletedTask;
 
-            tags?.Retarget(current, original);
             return ValueTask.CompletedTask;
         }
     }
@@ -702,13 +667,12 @@ public sealed class WindowsFileOperations : IFileOperations
     /// left the user's own file sitting under `readme - Copy.txt`.
     /// </summary>
     private sealed class UndoMove(
-        IReadOnlyList<(string Source, string Target)> moved, WindowsTagStore? tags) : IUndoable
+        IReadOnlyList<(string Source, string Target)> moved) : IUndoable
     {
         public ValueTask UndoAsync(CancellationToken ct)
         {
             foreach (var (source, landed) in moved)
             {
-                tags?.Retarget(landed, source);
 
                 if (File.Exists(landed))
                 {

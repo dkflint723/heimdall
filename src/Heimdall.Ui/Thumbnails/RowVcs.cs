@@ -10,7 +10,7 @@ namespace Heimdall.Ui.Thumbnails;
 /// Draws a one-character version-control marker on a row.
 ///
 /// Same viewport-driven attached-property shape as thumbnails, metadata and
-/// tags: the list virtualizes, so attaching to the realized control keeps the
+/// thumbnails: the list virtualizes, so attaching to the realized control keeps the
 /// work proportional to what is on screen and the collection holds nothing
 /// extra. **`FileEntry` is never widened for this.**
 ///
@@ -88,7 +88,7 @@ public static class RowVcs
     /// **The letter carries the meaning; the colour is decoration.** That is the
     /// standing rule here — hue never carries meaning alone, because a
     /// colourblind reader would lose it entirely, and these are the same
-    /// Okabe-Ito colours the tag chips use.
+    /// Okabe-Ito palette, chosen to stay distinguishable to colour-blind readers.
     ///
     /// `Unmodified` draws NOTHING. Marking every clean file in a repository
     /// would be noise in exactly the folders where the feature matters most.

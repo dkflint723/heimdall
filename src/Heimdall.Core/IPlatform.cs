@@ -32,8 +32,6 @@ public interface IPlatform
 
     IScriptRunner Scripts { get; }
 
-    ITagStore Tags { get; }
-
     ITemplateProvider Templates { get; }
 
     /// <summary>Null where no sharing backend is known for this platform.</summary>

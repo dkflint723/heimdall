@@ -31,23 +31,6 @@ public sealed record PathSegment(string Name, string FullPath, ICommand Open, bo
     public bool ShowSeparator => !IsLast && !PathRules.IsRoot(FullPath);
 }
 
-/// <summary>A tag in the context menu, carrying the command that applies it.</summary>
-public sealed record TagOption(string Name, ICommand Command);
-
-/// <summary>
-/// A frequently-visited folder, for the sidebar. Carries the full path as well
-/// as the label so the tooltip can disambiguate the four different folders
-/// everyone has called "src".
-/// </summary>
-
-/// <summary>
-/// One pane: a path, its listing, its own navigation history, its own sort.
-///
-/// Everything about this class is self-contained on purpose. A tab is a pane, a
-/// split view is two panes, a detached window is a pane — so tabs and splits
-/// cost almost nothing, and the session model serialises one of these per tab
-/// without reaching into the window.
-/// </summary>
 public sealed partial class PaneViewModel : ObservableObject, IDisposable
 {
     private const int FlushIntervalMs = 100;
@@ -57,7 +40,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     private readonly IApplicationLauncher? _launcher;
     private readonly IClipboardService? _clipboard;
     private readonly IScriptRunner? _scripts;
-    private readonly ITagStore? _tags;
     private readonly ITemplateProvider? _templates;
     private readonly List<FileEntry> _all = new();
     private CancellationTokenSource? _filterDebounce;
@@ -82,12 +64,10 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         IApplicationLauncher? launcher = null,
         IClipboardService? clipboard = null,
         IScriptRunner? scripts = null,
-        ITagStore? tags = null,
         ITemplateProvider? templates = null)
     {
         WatchSelections();
 
-        _tags = tags;
         _templates = templates;
         _fs = fs;
         _ops = ops;
@@ -96,140 +76,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _scripts = scripts;
 
         RefreshScripts();
-        RefreshTags();
         RefreshTemplates();
     }
-
-    // ---- tags ----------------------------------------------------------
-
-    /// <summary>
-    /// Tags offered in the menu. Each option carries its own command rather
-    /// than relying on a Style setter that walks up to the window: bindings
-    /// inside a ContextMenu are not compile-checked, so the less they depend
-    /// on, the fewer ways they fail silently.
-    /// </summary>
-    public ObservableCollection<TagOption> KnownTags { get; } = new();
-
-    public bool HasTagStore => _tags is not null;
-
-    /// <summary>Asks the view to prompt for a new tag name.</summary>
-    public event EventHandler? NewTagRequested;
-
-        public void RefreshTags()
-    {
-        KnownTags.Clear();
-        if (_tags is null) return;
-
-        RemovableTags.Clear();
-
-        foreach (var tag in _tags.KnownTags)
-        {
-            KnownTags.Add(new TagOption(tag, new RelayCommand(() => _ = AddTagAsync(tag))));
-            RemovableTags.Add(new TagOption(tag, new RelayCommand(() => _ = RemoveTagAsync(tag))));
-        }
-    }
-
-    [RelayCommand]
-    public void BeginNewTag()
-    {
-        // Checked here so the reason is stated up front, rather than the prompt
-        // opening, being filled in, and quietly doing nothing.
-        if (SelectionPaths().Count == 0)
-        {
-            Status = "select something to tag first";
-            return;
-        }
-
-        NewTagRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>
-    /// Adds the tag when any selected file lacks it, removes it when they all
-    /// have it — so one menu entry both tags and untags, and a mixed selection
-    /// resolves toward tagging rather than silently clearing.
-    /// </summary>
-    /// <summary>Tags offered for removal. Same names as <see cref="KnownTags"/>
-    /// but bound to the removing command — a menu that says Remove must remove,
-    /// not toggle.</summary>
-    public ObservableCollection<TagOption> RemovableTags { get; } = new();
-
-    public Task AddTagAsync(string tag) => ApplyTagAsync(tag, add: true);
-
-    public Task RemoveTagAsync(string tag) => ApplyTagAsync(tag, add: false);
-
-    /// <summary>
-    /// Explicit add or remove.
-    ///
-    /// Replaces relying on <see cref="ToggleTagAsync"/> from the menu. Toggling
-    /// worked — clicking a tag every selected file already had removed it — but
-    /// the menu said "Apply existing", so the only way to discover removal was
-    /// to try it and be surprised. Worse on a mixed selection, where toggle adds
-    /// to all rather than removing from the ones that have it.
-    /// </summary>
-    private async Task ApplyTagAsync(string tag, bool add)
-    {
-        if (_tags is null || string.IsNullOrWhiteSpace(tag)) return;
-
-        var paths = SelectionPaths();
-        if (paths.Count == 0) { Status = "nothing selected"; return; }
-
-        try
-        {
-            await _tags.ToggleAsync(paths, tag, add, CancellationToken.None).ConfigureAwait(false);
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                Status = add
-                    ? $"tagged {paths.Count:N0} item(s) \u201c{tag}\u201d"
-                    : $"removed \u201c{tag}\u201d from {paths.Count:N0} item(s)";
-            });
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = $"tagging failed: {ex.Message}");
-        }
-    }
-
-    public async Task ToggleTagAsync(string tag)
-    {
-        if (_tags is null || string.IsNullOrWhiteSpace(tag)) return;
-
-        var paths = SelectionPaths();
-        if (paths.Count == 0) { Status = "nothing selected"; return; }
-
-        try
-        {
-            var store = _tags;
-
-            var add = await Task.Run(() =>
-            {
-                foreach (var path in paths)
-                {
-                    var existing = store.GetAsync(path, CancellationToken.None)
-                                        .AsTask().GetAwaiter().GetResult();
-
-                    if (!existing.Contains(tag, StringComparer.OrdinalIgnoreCase)) return true;
-                }
-
-                return false;
-            }).ConfigureAwait(false);
-
-            await _tags.ToggleAsync(paths, tag, add, CancellationToken.None).ConfigureAwait(false);
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                RefreshTags();
-                Status = $"{(add ? "tagged" : "untagged")} {paths.Count} item(s): {tag}";
-                _ = RefreshAsync();
-            });
-        }
-        catch (Exception ex)
-        {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = $"tag failed: {ex.Message}");
-        }
-    }
-
-
 
     // ---- user scripts --------------------------------------------------
 
@@ -1171,7 +1019,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Drops the selected entries from the recency store — Dolphin's "Forget",
-    /// and the counterpart to `ITagStore.ForgetKnown`.
     ///
     /// **It removes the RECORD, never the file.** That distinction is the whole
     /// point of the action: a recent list you cannot prune is a log rather than
@@ -2022,61 +1869,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         PathText = CurrentPath;
         IsPathEditing = false;
-    }
-
-    /// <summary>
-    /// Narrows the current listing to entries carrying a tag. Scoped to the
-    /// folder on screen rather than the whole home directory: tags live in
-    /// extended attributes with no index behind them, so anything wider would
-    /// mean walking the filesystem and reading an xattr per file.
-    /// </summary>
-    public async Task FilterByTagAsync(string tag)
-    {
-        if (_tags is null) return;
-
-        Status = $"finding \u201c{tag}\u201d here…";
-
-        // The whole scan in one hop rather than an await per file: this reads an
-        // extended attribute for every entry in the folder, and doing that from
-        // the UI thread froze the window on a large directory.
-        //
-        // Which also means it can take a while, and the folder can change under
-        // it — so the same generation guard the listing uses applies here.
-        var generation = _generation;
-        var snapshot = _all.ToList();
-        var store = _tags;
-
-        var matches = await Task.Run(() =>
-        {
-            var found = new List<string>();
-
-            foreach (var entry in snapshot)
-            {
-                if (store.GetAsync(entry.FullPath, CancellationToken.None)
-                         .AsTask().GetAwaiter().GetResult()
-                         .Contains(tag, StringComparer.OrdinalIgnoreCase))
-                    found.Add(entry.FullPath);
-            }
-
-            return found;
-        }).ConfigureAwait(false);
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            // Navigating away mid-scan is the failure case, and it is not
-            // harmless: `set` holds paths from the folder that was being
-            // scanned, while `_all` is now the new folder's entries, so the
-            // Where below matches nothing and REPLACES THE NEW LISTING WITH AN
-            // EMPTY ONE. The folder would simply appear empty.
-            if (generation != _generation) return;
-
-            var set = matches.ToHashSet(StringComparer.Ordinal);
-
-            Entries.ReplaceAll(_all.Where(e => set.Contains(e.FullPath)).ToList());
-            Status = $"{matches.Count} tagged \u201c{tag}\u201d · esc to clear";
-            IsFilterVisible = true;
-            FilterText = "";
-        });
     }
 
     /// <summary>

@@ -17,9 +17,9 @@ namespace Heimdall.Windows;
 /// throwing stub anywhere here means no window at all. That is why step 3 built
 /// more than the two providers WINDOWS.md §7 names.
 ///
-/// **Real does not mean complete.** Trash fails rather than deleting, tags store
-/// nothing pending a design decision, and the open-with list is empty — each
-/// documented on the class that does it.
+/// **Real does not mean complete.** The open-with list is empty, pending the
+/// shell's handler enumeration — documented on the class that does it. Trash
+/// and the Recycle Bin view both work now, and tags are gone.
 ///
 /// Four of the seven nullable members still return null, which is the interface
 /// working as designed rather than a gap being papered over. The other three —
@@ -50,13 +50,7 @@ public sealed class WindowsPlatform : IPlatform
         Places = new WindowsPlacesProvider(stateDirectory);
         Scripts = new WindowsScriptRunner(stateDirectory);
 
-        // The tag index is keyed by path, so the operations that change a path
-        // have to be able to tell it. That coupling is the price of a sidecar,
-        // and it is stated here rather than hidden — see WindowsTagStore.
-        var tags = new WindowsTagStore(stateDirectory);
-
-        Tags = tags;
-        Operations = new WindowsFileOperations(tags);
+        Operations = new WindowsFileOperations();
     }
 
     /// <summary>Where this application's own per-user state lives.</summary>
@@ -77,8 +71,6 @@ public sealed class WindowsPlatform : IPlatform
     public IPropertiesProvider Properties => _properties;
 
     public IScriptRunner Scripts { get; }
-
-    public ITagStore Tags { get; }
 
     public ITemplateProvider Templates { get; } = new WindowsTemplates();
 

@@ -36,37 +36,8 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public ObservableCollection<PlaceGroupViewModel> Groups { get; } = new();
 
-    private ITagStore? _tags;
-    private Action<string>? _onTagChosen;
-
-    /// <summary>Wired by the shell, which owns what a tag click actually does.</summary>
-    public void AttachTags(ITagStore? tags, Action<string> onChosen)
-    {
-        _tags = tags;
-        _onTagChosen = onChosen;
-
-        // The store raises this and NOTHING was listening, so a tag created
-        // after startup did not appear in the sidebar until the next launch.
-        // The pane's own tag menu refreshed itself; this list did not.
-        if (tags is not null)
-            tags.TagsChanged += (_, _) => Dispatcher.UIThread.Post(RefreshTags);
-        RefreshTags();
-    }
-
-    public void RefreshTags()
-    {
-        Tags.Clear();
-        if (_tags is null) return;
-
-        foreach (var tag in _tags.KnownTags)
-        {
-            var name = tag;
-            Tags.Add(new TagOption(name, new RelayCommand(() => _onTagChosen?.Invoke(name))));
-        }
-
-        OnPropertyChanged(nameof(HasTags));
-    }
     public SearchViewModel Search { get; }
+
 
     [ObservableProperty] private RailState _rail = RailState.Full;
     [ObservableProperty] private double _width = 210;
@@ -86,8 +57,6 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     [ObservableProperty] private bool _isSearching;
 
-    public ObservableCollection<TagOption> Tags { get; } = new();
-
     // ---- navigation --------------------------------------------------------
     //
     // The frequently-visited list was REMOVED at the user's request once Recent
@@ -97,12 +66,12 @@ public sealed partial class SidebarViewModel : ObservableObject
     // too, having had no other reader.
     //
     // What survives is the callback: the shell owns what a click does, and both
-    // the recent entries and tags reach it this way.
+    // the recent entries reach it this way.
 
     private Action<string>? _onFolderChosen;
 
     /// <summary>Wired by the shell, which is the only place that knows which
-    /// pane is active — the same arrangement as tags.</summary>
+    /// pane is active.</summary>
     public void AttachNavigation(Action<string> onChosen) => _onFolderChosen = onChosen;
 
     // ---- recent ------------------------------------------------------------
@@ -113,7 +82,7 @@ public sealed partial class SidebarViewModel : ObservableObject
     // Dolphin does the same, and an entry that appears out of nowhere once you
     // have opened enough files is harder to find than one that was always there.
     //
-    // Reuses _onFolderChosen, which is how tags and frequent already reach the
+    // Reuses _onFolderChosen, which is how frequent already reaches the
     // shell: the store holds the data, the shell decides what a click does.
 
     /// <summary>
@@ -188,7 +157,6 @@ public sealed partial class SidebarViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRemotes));
     }
 
-    public bool HasTags => Tags.Count > 0;
 
     /// <summary>
     /// Ctrl+F puts the caret in the toolbar's search box.

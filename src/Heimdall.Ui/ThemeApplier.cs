@@ -12,7 +12,7 @@ namespace Heimdall.Ui;
 /// adopting the system scheme is a lookup-table swap rather than a sweep
 /// through the XAML — and the accessibility rules survive it, because none of
 /// them ever depended on a particular hue. Selection is still marked by an edge
-/// bar, tags still carry their names, and file age is still a lightness ramp.
+/// bar, and file age is still a lightness ramp.
 /// </summary>
 public static class ThemeApplier
 {
@@ -172,9 +172,10 @@ public static class ThemeApplier
             target["ChromeBrush"] = new SolidColorBrush(back.Color);
         }
 
-        // A tag chip background that works on both light and dark: a wash of
-        // the view text colour rather than a fixed translucent white, which is
-        // invisible on a pale scheme.
+        // A chip background that works on both light and dark: a wash of the
+        // view text colour rather than a fixed translucent white, which is
+        // invisible on a pale scheme. Named for the tag chips it was written
+        // for; those are gone, and the toolbar still uses it.
         if (target["ViewText"] is ISolidColorBrush chipText)
         {
             target["ChipBackground"] = new SolidColorBrush(

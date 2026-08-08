@@ -25,7 +25,6 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IApplicationLauncher? _launcher;
     private readonly IClipboardService? _clipboard;
     private readonly IScriptRunner? _scripts;
-    private readonly ITagStore? _tags;
     private readonly ITemplateProvider? _templates;
     private readonly IFileSharing? _sharing;
     private readonly ISessionStore? _store;
@@ -47,7 +46,6 @@ public sealed partial class ShellViewModel : ObservableObject
         IClipboardService? clipboard = null,
         ISearchProvider? search = null,
         IScriptRunner? scripts = null,
-        ITagStore? tags = null,
         ITemplateProvider? templates = null,
         IFileSharing? sharing = null)
     {
@@ -67,7 +65,6 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         _scripts = scripts;
-        _tags = tags;
         _templates = templates;
         _fs = fs;
         _ops = ops;
@@ -79,16 +76,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
         // A chosen result navigates the active tab to its folder and selects it,
         // rather than opening the file — search is for finding, not launching.
-        // A tag click narrows whichever pane has focus.
-        // Same arrangement as tags: the store holds the data, the shell decides
-        // what a click does. Attached here rather than in MainWindow because
-        // this is the only place that knows which pane is active.
+        // Attached here rather than in MainWindow, because this is the only
+        // place that knows which pane is active.
         Sidebar.AttachNavigation(path => _ = ActiveTab?.NavigateAsync(path));
-
-        Sidebar.AttachTags(tags, tag =>
-        {
-            if (ActiveTab is { } pane) _ = pane.FilterByTagAsync(tag);
-        });
 
         Sidebar.Search.ResultChosen += (_, entry) =>
         {
@@ -693,32 +683,6 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool ShowFreeSpace => Settings.AppSettings.Current.General.ShowFreeSpace;
 
-    // ---- tag maintenance ---------------------------------------------------
-
-    /// <summary>
-    /// Removes a tag from whatever is selected in the active pane. Reachable by
-    /// right-clicking the tag in the sidebar, so the tag itself is the handle.
-    /// </summary>
-    [RelayCommand]
-    private void RemoveTagFromSelection(string? tag)
-    {
-        if (string.IsNullOrWhiteSpace(tag) || ActiveTab is not { } pane) return;
-
-        _ = pane.RemoveTagAsync(tag);
-    }
-
-    /// <summary>
-    /// Stops offering a tag. Files keep it — see ITagStore.ForgetKnown for why
-    /// this is not "delete everywhere".
-    /// </summary>
-    [RelayCommand]
-    private void ForgetTag(string? tag)
-    {
-        if (string.IsNullOrWhiteSpace(tag)) return;
-
-        _tags?.ForgetKnown(tag);
-    }
-
     // ---- context menu visibility ------------------------------------------
     //
     // Straight off the preferences, like the status bar above. Bound with
@@ -881,7 +845,7 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         // A new tab inherits the sizes of the one it was opened from, rather
         // than snapping back to default mid-session.
-        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts, _tags, _templates)
+        var pane = new PaneViewModel(_fs, _ops, _launcher, _clipboard, _scripts, _templates)
         {
             FontScale = ActiveTab?.FontScale ?? FontScale,
             IconScale = ActiveTab?.IconScale ?? IconScale,
