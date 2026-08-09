@@ -29,6 +29,20 @@ public sealed record PathSegment(string Name, string FullPath, ICommand Open, bo
     /// only became obvious on Windows, where the two glyphs differ.
     /// </summary>
     public bool ShowSeparator => !IsLast && !PathRules.IsRoot(FullPath);
+
+    /// <summary>
+    /// The stand-in for the ancestors there is no room to show.
+    ///
+    /// **A real crumb rather than something the panel draws**, because
+    /// Avalonia seals Panel.Render — a panel paints its Background and nothing
+    /// else. It is created for every path deep enough to need one and parked
+    /// off-screen by <see cref="BreadcrumbPanel"/> whenever the whole path
+    /// fits, so its presence costs nothing when it is not wanted.
+    /// </summary>
+    public bool IsEllipsis { get; init; }
+
+    public static PathSegment Ellipsis(ICommand open) =>
+        new("…", "", open, IsLast: false) { IsEllipsis = true };
 }
 
 public sealed partial class PaneViewModel : ObservableObject, IDisposable

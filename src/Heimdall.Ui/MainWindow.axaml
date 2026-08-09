@@ -723,10 +723,18 @@
                       ToolTip.Tip="double-click to edit the path  (ctrl+l)"/>
 
               <DockPanel IsVisible="{Binding !ActiveTab.IsPathEditing}">
-                <ItemsControl DockPanel.Dock="Left" ItemsSource="{Binding ActiveTab.Breadcrumbs}">
+                <!-- The tooltip carries the path in full, because the bar
+                     shows folder NAMES and elides the middle when it must —
+                     neither of which can be copied or read as a whole. A slow
+                     reveal on purpose: the pointer crosses this strip on the
+                     way to the back button and the search box, and a tooltip
+                     that fires in transit is noise rather than help. -->
+                <ItemsControl DockPanel.Dock="Left" ItemsSource="{Binding ActiveTab.Breadcrumbs}"
+                              ToolTip.Tip="{Binding ActiveTab.CurrentPath}"
+                              ToolTip.ShowDelay="1200">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                      <StackPanel Orientation="Horizontal"/>
+                      <local:BreadcrumbPanel/>
                     </ItemsPanelTemplate>
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>

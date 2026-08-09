@@ -94,6 +94,20 @@ public sealed partial class PaneViewModel
                 new RelayCommand(() => Detached(NavigateAsync(target), "navigate")),
                 i == levels.Count - 1));
         }
+
+        // Second, so it sits between the root and whatever survives. Added for
+        // any path with something between its root and its leaf, whether or not
+        // the bar is currently too narrow — the panel decides that, because only
+        // the panel knows how wide the toolbar is, and it changes as the window
+        // and the split are dragged.
+        //
+        // Its command opens the path editor: a person who cannot see the middle
+        // of the path is the most likely person to want to read or edit it.
+        if (levels.Count > 2)
+        {
+            Breadcrumbs.Insert(1, PathSegment.Ellipsis(
+                new RelayCommand(BeginEditPath)));
+        }
     }
 
     /// <summary>
