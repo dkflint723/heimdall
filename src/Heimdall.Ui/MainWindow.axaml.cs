@@ -1489,6 +1489,27 @@ public partial class MainWindow : Window
     private enum PromptMode { None, Rename, ConfirmDelete, ConfirmTrash, ConfirmEmptyTrash, Connect }
 
     private PromptMode _prompt = PromptMode.None;
+
+    /// <summary>
+    /// Whether a yes/no prompt is open and should own the keyboard.
+    ///
+    /// **One predicate, because the list was written out by hand and lost a
+    /// member.** The keyboard check named ConfirmDelete and ConfirmEmptyTrash
+    /// and not ConfirmTrash, so with "confirm move to trash" turned on, Enter at
+    /// the trash prompt fell straight through to the ordinary key handling
+    /// below — where Enter means OPEN. Answering "yes, bin these" launched them
+    /// instead, and Escape cleared the filter rather than cancelling.
+    ///
+    /// It went unseen because the setting is off by default, so the prompt it
+    /// breaks is one most people never see. The three text-entry modes are
+    /// deliberately excluded: those are guarded by the focused-TextBox rule
+    /// further down, which is a different question — whether something is being
+    /// typed into, not whether a decision is pending.
+    /// </summary>
+    private bool IsConfirming => _prompt
+        is PromptMode.ConfirmDelete
+        or PromptMode.ConfirmTrash
+        or PromptMode.ConfirmEmptyTrash;
     private FileEntry _renameTarget;
 
     private void OnRenameRequested(object? sender, FileEntry entry)
@@ -1996,7 +2017,7 @@ public partial class MainWindow : Window
         if (_shell is null) return;
 
         // The prompt owns the keyboard while it is open.
-        if (_prompt is PromptMode.ConfirmDelete or PromptMode.ConfirmEmptyTrash)
+        if (IsConfirming)
         {
             if (e.Key == Key.Enter)
             {
