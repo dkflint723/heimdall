@@ -44,8 +44,62 @@ public sealed class DefaultFileManagerTests : IDisposable
     public void Dispose()
     {
         Registry.CurrentUser.DeleteSubKeyTree(@"Software\Heimdall.Tests", throwOnMissingSubKey: false);
-        Registry.CurrentUser.DeleteSubKeyTree(@"Software\Heimdall\DefaultFileManager",
+
+        // ONLY the scoped record. This used to delete the production key, and
+        // on the machine the feature was in use on that quietly destroyed the
+        // note saying which handler to give the role back to.
+        Registry.CurrentUser.DeleteSubKeyTree(
+            $@"Software\Heimdall\DefaultFileManager\scoped_{Scratch.Replace('\\', '_')}",
             throwOnMissingSubKey: false);
+    }
+
+    /// <summary>
+    /// **A scoped instance must not touch the production backup record.**
+    ///
+    /// This is the regression, and it was live rather than theoretical: the
+    /// classes path was injectable and the backup path was a constant, so the
+    /// suite's own cleanup deleted the real record on the machine the feature
+    /// was in use on. Nothing failed and nothing was logged — the damage only
+    /// appears when someone presses "stop being the default" and gets an
+    /// unclaimed class instead of the handler they used to have.
+    ///
+    /// The production value is written here, the whole scoped lifecycle is run
+    /// against it, and it is asserted intact afterwards.
+    /// </summary>
+    [Fact]
+    public void A_scoped_instance_never_touches_the_real_backup()
+    {
+        const string Production = @"Software\Heimdall\DefaultFileManager";
+        const string Sentinel = "OpenInSomethingRealAndPrecious";
+
+        // Whatever is really there is put back afterwards. A blind delete in
+        // the cleanup is the same class of mistake this test exists to catch —
+        // and it made exactly that mistake first time, wiping the live record
+        // it had just proved the subject would not touch.
+        string? existing;
+        using (var real = Registry.CurrentUser.CreateSubKey(Production))
+        {
+            existing = real!.GetValue("Directory") as string;
+            real.SetValue("Directory", Sentinel);
+        }
+
+        try
+        {
+            Preset("Directory", "whatever");
+            Subject().MakeDefault();
+            Subject().Restore();
+
+            using var after = Registry.CurrentUser.OpenSubKey(Production);
+
+            Assert.Equal(Sentinel, after?.GetValue("Directory"));
+        }
+        finally
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(Production, writable: true);
+
+            if (existing is null) key?.DeleteValue("Directory", throwOnMissingValue: false);
+            else key?.SetValue("Directory", existing);
+        }
     }
 
     [Fact]

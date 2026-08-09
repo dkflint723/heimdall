@@ -49,7 +49,24 @@ internal sealed class WindowsDefaultFileManager : IDefaultFileManager
     /// that overwrote that without being able to give it back would be taking
     /// something it cannot return.
     /// </summary>
-    private const string BackupKey = @"Software\Heimdall\DefaultFileManager";
+    private const string BackupRoot = @"Software\Heimdall\DefaultFileManager";
+
+    /// <summary>
+    /// Scoped by the same root the classes are, so a test pointed at a scratch
+    /// subtree cannot reach the real record.
+    ///
+    /// **It was a constant, and that was a live defect.** The classes path was
+    /// injectable and this was not, so the suite's cleanup deleted the
+    /// production backup on any machine where it ran — including the one where
+    /// the feature was actually in use. The failure is silent and only shows up
+    /// when someone presses "stop being the default" and gets an unclaimed
+    /// class instead of the handler they had before.
+    /// </summary>
+    private string BackupKey => _root == DefaultRoot
+        ? BackupRoot
+        : $@"{BackupRoot}\scoped_{_root.Replace('\\', '_')}";
+
+    internal const string DefaultRoot = @"Software\Classes";
 
     private readonly string _root;
     private readonly string _exe;
@@ -60,7 +77,7 @@ internal sealed class WindowsDefaultFileManager : IDefaultFileManager
     /// Directory\shell would change the machine's actual behaviour as a side
     /// effect of running the suite.
     /// </summary>
-    internal WindowsDefaultFileManager(string? exePath = null, string root = @"Software\Classes")
+    internal WindowsDefaultFileManager(string? exePath = null, string root = DefaultRoot)
     {
         _root = root;
         _exe = exePath ?? Environment.ProcessPath ?? "";
@@ -168,6 +185,6 @@ internal sealed class WindowsDefaultFileManager : IDefaultFileManager
         return key?.GetValue(cls) as string;
     }
 
-    private static void Forget() =>
+    private void Forget() =>
         Registry.CurrentUser.DeleteSubKeyTree(BackupKey, throwOnMissingSubKey: false);
 }
