@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+
+    <!-- Directory.Build.props turns on the trim, AOT and single-file analysers
+         for every project, because the application ships as a NativeAOT binary.
+         A test project does not: xunit and the test host use reflection by
+         design, and with TreatWarningsAsErrors inherited those analysers would
+         fail the build on warnings about code that is never published.
+         Switched off HERE rather than loosened there — the application's
+         guarantees must not weaken to accommodate its tests. -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Vaktari.Core/Vaktari.Core.csproj" />
+  </ItemGroup>
+
+</Project>

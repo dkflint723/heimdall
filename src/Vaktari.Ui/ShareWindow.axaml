@@ -1,0 +1,84 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Vaktari.Ui.ViewModels"
+        xmlns:sys="using:System"
+        x:Class="Vaktari.Ui.ShareWindow"
+        x:DataType="vm:ShareRequestViewModel"
+        Title="Share a folder"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+
+  <StackPanel Margin="16" Spacing="12">
+
+    <TextBlock Text="Folder to share"
+               FontSize="{DynamicResource FontSizeSmall}"
+               Foreground="{DynamicResource ViewDimText}"/>
+
+    <DockPanel>
+      <Button DockPanel.Dock="Right" Content="up" Padding="12,4" Margin="8,0,0,0"
+              IsEnabled="{Binding CanGoUp}" Command="{Binding GoUpCommand}"/>
+      <TextBox Text="{Binding Path}" FontFamily="monospace"
+               FontSize="{DynamicResource FontSizeSmall}"/>
+    </DockPanel>
+
+    <!-- Browsing done with Vaktari's own listing rather than the platform picker,
+         which deadlocks when opened from a modal window on Linux. Type a path
+         or walk to it; both end up in the same box. -->
+    <Border Height="190" BorderThickness="1"
+            BorderBrush="{DynamicResource SeparatorColour}"
+            Background="{DynamicResource ViewBackground}">
+      <ListBox x:Name="FolderList" ItemsSource="{Binding Folders}" Background="Transparent">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="sys:String">
+            <TextBlock Text="{Binding}" FontSize="{DynamicResource FontSizeSmall}"/>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem" x:DataType="sys:String">
+            <Setter Property="Padding" Value="8,3"/>
+          </Style>
+        </ListBox.Styles>
+        <ListBox.KeyBindings>
+          <KeyBinding Gesture="Enter"
+                      Command="{Binding EnterCommand}"
+                      CommandParameter="{Binding $parent[ListBox].SelectedItem}"/>
+        </ListBox.KeyBindings>
+      </ListBox>
+    </Border>
+
+    <TextBlock Text="double-click a folder to go into it · the box above is what gets shared"
+               FontSize="{DynamicResource FontSizeTiny}"
+               Foreground="{DynamicResource ViewDimText}"/>
+
+    <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+    <!-- Two commands elsewhere in the app, but one dialog: here the choice has
+         to be made before anything starts, so it is a control rather than two
+         buttons that would both need explaining. -->
+    <StackPanel Spacing="6">
+      <RadioButton GroupName="access" Content="Read-only — people can browse and download"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   IsChecked="{Binding !Writable}"/>
+      <RadioButton GroupName="access" Content="Allow uploads — people can also add and overwrite files"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   IsChecked="{Binding Writable}"/>
+    </StackPanel>
+
+    <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+        <Button Content="Cancel" Padding="14,4" Command="{Binding CancelCommand}"/>
+        <Button Content="Share" Padding="14,4"
+                IsEnabled="{Binding CanShare}" Command="{Binding ShareCommand}"/>
+      </StackPanel>
+      <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap"
+                 FontSize="{DynamicResource FontSizeSmall}"
+                 Foreground="{DynamicResource ViewDimText}"/>
+    </DockPanel>
+
+  </StackPanel>
+</Window>

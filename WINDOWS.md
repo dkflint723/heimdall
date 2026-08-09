@@ -24,7 +24,7 @@ else
 
 Adding Windows means adding an `else if (OperatingSystem.IsWindows())` branch
 and one project. **The UI names no other platform type** — verified by grepping
-`Heimdall.Ui` for every `Xdg*`, `Linux*`, `Avahi*`, `Copyparty*` identifier; the
+`Vaktari.Ui` for every `Xdg*`, `Linux*`, `Avahi*`, `Copyparty*` identifier; the
 only hits are that one line, a comment, and a local helper misleadingly named
 `XdgDeduplicate` (it implements the *freedesktop* "file (1)" rename convention,
 which is not Windows' "file - Copy", so it needs a platform hook or a rename).
@@ -42,13 +42,13 @@ the application still runs.
 Both cleared 3 August 2026. **The property-function `Condition` syntax works** —
 that was the open question, and it is now answered on a real Windows machine.
 
-The reference is not conditioned on the OS directly, but on a `HeimdallPlatform`
+The reference is not conditioned on the OS directly, but on a `VaktariPlatform`
 property that *defaults* from the OS:
 
 ```xml
 <PropertyGroup>
-  <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsLinux())' == 'true'">Linux</HeimdallPlatform>
-  <HeimdallPlatform Condition="'$(HeimdallPlatform)' == '' AND '$([System.OperatingSystem]::IsWindows())' == 'true'">Windows</HeimdallPlatform>
+  <VaktariPlatform Condition="'$(VaktariPlatform)' == '' AND '$([System.OperatingSystem]::IsLinux())' == 'true'">Linux</VaktariPlatform>
+  <VaktariPlatform Condition="'$(VaktariPlatform)' == '' AND '$([System.OperatingSystem]::IsWindows())' == 'true'">Windows</VaktariPlatform>
 </PropertyGroup>
 ```
 
@@ -58,12 +58,12 @@ CI is a slow way to be told. With the override, either configuration compiles
 from either machine:
 
 ```bash
-dotnet build src/Heimdall.Ui -p:HeimdallPlatform=Linux
+dotnet build src/Vaktari.Ui -p:VaktariPlatform=Linux
 ```
 
 **Verified on both, symmetrically** (3 August 2026 — Windows 11, and Fedora 44
 under WSL): each machine builds its own configuration, the other machine's
-configuration, and fails on `HeimdallPlatform=None` with one clear error. On
+configuration, and fails on `VaktariPlatform=None` with one clear error. On
 each, only the selected platform assembly lands beside the app — no leakage
 either way.
 
@@ -77,18 +77,18 @@ either way.
 > wrong with the platform, the binary was just compiled for the other one.
 > A bare `dotnet build` puts the right one back.
 
-`MainWindow.axaml.cs` is fenced with `HEIMDALL_LINUX` / `HEIMDALL_WINDOWS`,
+`MainWindow.axaml.cs` is fenced with `VAKTARI_LINUX` / `VAKTARI_WINDOWS`,
 defined beside the reference they belong to, and a `#else` arm carries an
 `#error` naming the fix. **Give each arm its own `else`** — sharing one after the
 `#endif` compiles, but leaves the `#error` arm ending in a dangling `else`, and
 the five cascading syntax errors bury the message that explains the problem.
 
 `[assembly: SupportedOSPlatform("windows")]` mirrors the Linux one.
-**`Heimdall.Windows` stays on plain `net10.0`**, so it still compiles on the
+**`Vaktari.Windows` stays on plain `net10.0`**, so it still compiles on the
 Linux CI runner and is checked on every push — see §9.
 
-**`Heimdall.Linux/AssemblyInfo.cs` carries `[assembly: SupportedOSPlatform("linux")]`.**
-`Heimdall.Windows` needs the mirror image, and it can additionally use the real
+**`Vaktari.Linux/AssemblyInfo.cs` carries `[assembly: SupportedOSPlatform("linux")]`.**
+`Vaktari.Windows` needs the mirror image, and it can additionally use the real
 `net10.0-windows` TFM, which Linux cannot (no `net10.0-linux` exists). That TFM
 unlocks the Windows Forms/WPF interop surface if it is ever wanted — probably it
 is not, but it also silences the platform analyser properly.
@@ -97,7 +97,7 @@ is not, but it also silences the platform analyser properly.
 
 ## 3. What is already portable, and must not be re-implemented
 
-`Heimdall.Core` holds real logic, not just contracts. **None of this needs
+`Vaktari.Core` holds real logic, not just contracts. **None of this needs
 touching:**
 
 | | |
@@ -111,7 +111,7 @@ touching:**
 | `BatchRename` | pure |
 | `PreviousName` | pure |
 
-The whole `Heimdall.Ui` layer is Avalonia and portable in principle. Its problems
+The whole `Vaktari.Ui` layer is Avalonia and portable in principle. Its problems
 are path assumptions, not APIs — see §5.
 
 ---
@@ -212,7 +212,7 @@ are path assumptions, not APIs — see §5.
 - ~~**`IRemoteMounts`** — `gio` has no counterpart; Windows mapped drives appear
   as ordinary drive letters through `IPlacesProvider` anyway.~~ Also true, and
   also not the point — it left no way to *connect* to a share from inside
-  Heimdall, and nothing at all for a UNC path nobody had mapped.
+  Vaktari, and nothing at all for a UNC path nobody had mapped.
 - **`IFileSharing`** — copyparty runs on Windows if Python is installed; the
   existing `CopypartyShare` logic is mostly path handling and could move to
   Core. This one was right, and is what happened.
@@ -228,8 +228,8 @@ is missing.
 
 ## 5. The path assumptions — DONE
 
-**All fifteen POSIX assumptions in `Heimdall.Ui` now route through
-`Heimdall.Core.FileSystem.PathRules`** (31 July 2026): `IsRoot`, `Normalise`,
+**All fifteen POSIX assumptions in `Vaktari.Ui` now route through
+`Vaktari.Core.FileSystem.PathRules`** (31 July 2026): `IsRoot`, `Normalise`,
 `Parent`, `LeafName`, `Same`, `Ancestors`. Pure string shape — it never touches
 the filesystem, so anything needing the disk stays on `IFileSystemProvider`.
 
@@ -260,8 +260,8 @@ Two things deliberately left alone:
   path — RFC 8089 uses `/` on every platform — and Windows exchanges files as
   **`CF_HDROP`**, so this needs a different mechanism rather than a separator fix.
   Annotated in place so a sweep does not "correct" it.
-- **`VirtualPaths` keeps its `heimdall:` prefixes.** The old rationale (real paths
-  start with `/`) stops being true on Windows, but `heimdall:` still cannot
+- **`VirtualPaths` keeps its `vaktari:` prefixes.** The old rationale (real paths
+  start with `/`) stops being true on Windows, but `vaktari:` still cannot
   collide with `C:\`.
 
 ### 5a. One thing §5 got wrong: `PathRules` was separator-sensitive — FIXED
@@ -344,7 +344,7 @@ running one expands per `InlineData` row.
 
 ### 5c. §5 missed two sites, and running it is what found them
 
-"All fifteen POSIX assumptions in `Heimdall.Ui` now route through `PathRules`"
+"All fifteen POSIX assumptions in `Vaktari.Ui` now route through `PathRules`"
 was not true. Two more surfaced on 3 August 2026 during step 3 — **neither by
 reading the code again, and neither would have been**: the first was visible in
 the window within seconds, and the second is in a converter with no test.
@@ -392,7 +392,7 @@ Verified 4 August 2026, after the interop landed, because that is the change
 this section was warning about:
 
 ```bash
-dotnet publish src/Heimdall.Ui -c Release -r win-x64 -p:PublishAot=true
+dotnet publish src/Vaktari.Ui -c Release -r win-x64 -p:PublishAot=true
 ```
 
 **Zero analyser warnings**, so the `LibraryImport` choice held up: the trim, AOT
@@ -415,7 +415,7 @@ Either publish from a Developer Command Prompt, or:
 $env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
 ```
 
-**The publish directory is the deliverable, exactly as on Linux.** `Heimdall.Ui.exe`
+**The publish directory is the deliverable, exactly as on Linux.** `Vaktari.Ui.exe`
 is 26.7 MB and needs `libSkiaSharp.dll`, `libHarfBuzzSharp.dll` and
 `av_libglesv2.dll` beside it. Self-contained means no .NET runtime to install;
 it does not mean one file.
@@ -424,7 +424,7 @@ it does not mean one file.
 
 ## 7. Suggested order
 
-1. ~~**Prove the scaffolding.**~~ **DONE, 3 August 2026.** `Heimdall.Windows`
+1. ~~**Prove the scaffolding.**~~ **DONE, 3 August 2026.** `Vaktari.Windows`
    exists, both configurations and the neither-selected case were built on
    Windows, and the property-function `Condition` syntax §9 doubted is proven —
    see §2. `WindowsPlatform` returns `null` for all seven nullable members and
@@ -437,7 +437,7 @@ it does not mean one file.
    Windows, and the `PathRules` tests were POSIX-only while claiming otherwise.
    Green on both: 67/13/0 on Windows, 59/13/0 on Fedora 44.
 2. ~~**`PathRules` in Core**, and route the 15 sites through it.~~ **DONE,
-   31 July 2026.** `Heimdall.Core/FileSystem/PathRules.cs` answers the four
+   31 July 2026.** `Vaktari.Core/FileSystem/PathRules.cs` answers the four
    questions this application asks about a path's shape — `IsRoot`, `Normalise`,
    `Parent`, `LeafName`, plus `Same` and `Ancestors` — without assuming the
    separator. All fifteen sites route through it; Linux behaviour is unchanged,
@@ -512,7 +512,7 @@ it does not mean one file.
      no drive letter, because `WindowsPlacesProvider` already lists
      `DriveType.Network` drives under Network and a lettered connection would
      put the same share on screen twice. Credentials go to Windows'
-     own dialog via `CONNECT_INTERACTIVE | CONNECT_PROMPT`, so Heimdall never
+     own dialog via `CONNECT_INTERACTIVE | CONNECT_PROMPT`, so Vaktari never
      handles a password and Credential Manager comes free.
    - **`INetworkDiscovery` → `DnsServiceBrowse`.** Windows has run an mDNS
      responder since 10 version 1703, so `INetworkDiscovery`'s rule — do not
@@ -520,9 +520,9 @@ it does not mean one file.
      holds here exactly as it does for avahi. **Not** the SMB network
      neighbourhood: `WNetOpenEnum` over `RESOURCE_GLOBALNET` needs the Computer
      Browser service and SMB1, both off by default, and would never find a
-     Heimdall share anyway.
+     Vaktari share anyway.
    - **`IFileSharing` → Core.** `CopypartyShare` moved to
-     `Heimdall.Core/Sharing` as predicted, behind a `CopypartyBackend` that
+     `Vaktari.Core/Sharing` as predicted, behind a `CopypartyBackend` that
      carries the two things that genuinely differ: where copyparty is, and how
      to install it. About sixty lines a platform against four hundred shared.
 
@@ -606,14 +606,14 @@ it does not mean one file.
   without noticing. CI covers this — `.github/workflows/build.yml` runs on every
   push — but see §8a for the faster loop.
 - **Run the published binary on Windows**, not `dotnet run`.
-- **`HEIMDALL_TILE_DEBUG=1`** still works and is still the ground truth for
+- **`VAKTARI_TILE_DEBUG=1`** still works and is still the ground truth for
   whether a listing is virtualizing.
-- The `[heimdall]` diagnostic lines all go to **stderr** — on Windows, run from a
+- The `[vaktari]` diagnostic lines all go to **stderr** — on Windows, run from a
   terminal or they vanish.
 
 ### 8a. Checking the other platform without waiting for CI
 
-`-p:HeimdallPlatform=` proves the *other* configuration compiles, but not that it
+`-p:VaktariPlatform=` proves the *other* configuration compiles, but not that it
 behaves. **WSL closes that gap on the Windows machine** and turns a push-and-wait
 into about ten seconds:
 
@@ -638,8 +638,8 @@ ownership" until the mount is declared safe — note it wants the `.git` path, n
 just the work tree:
 
 ```bash
-git config --global --add safe.directory /mnt/d/git_projects/heimdall/.git
-git clone /mnt/d/git_projects/heimdall ~/heimdall
+git config --global --add safe.directory /mnt/d/git_projects/vaktari/.git
+git clone /mnt/d/git_projects/vaktari ~/vaktari
 ```
 
 **What this does and does not prove.** It runs the POSIX test suite and both

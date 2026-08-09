@@ -8,7 +8,7 @@ name: build
 # a tarball plus install.sh; the Windows job produces an Inno Setup installer,
 # because a bare zip on Windows leaves the user to invent their own Start menu
 # entry and uninstall. The Windows job is also the only place
-# Heimdall.Windows.Tests actually runs.
+# Vaktari.Windows.Tests actually runs.
 on:
   push:
     branches: [main]
@@ -65,7 +65,7 @@ jobs:
       # publish, so a broken assumption fails in seconds rather than after a
       # 55-second AOT link.
       - name: Test
-        run: dotnet test tests/Heimdall.Core.Tests --configuration Debug
+        run: dotnet test tests/Vaktari.Core.Tests --configuration Debug
 
       - name: Publish
         run: |
@@ -89,7 +89,7 @@ jobs:
 
           echo "stamping version $VERSION_NUMBER"
 
-          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true \
+          dotnet publish src/Vaktari.Ui -c Release -r linux-x64 -p:PublishAot=true \
             -p:Version="$VERSION_NUMBER"
 
       # The publish DIRECTORY is the deliverable, not the executable.
@@ -98,29 +98,29 @@ jobs:
       # something that aborts before it draws anything.
       - name: Package
         run: |
-          P=src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish
+          P=src/Vaktari.Ui/bin/Release/net10.0/linux-x64/publish
           test -f "$P/libSkiaSharp.so" || { echo "libSkiaSharp.so missing"; exit 1; }
 
-          mkdir -p dist/heimdall
-          cp -a "$P"/. dist/heimdall/
-          cp packaging/install.sh dist/heimdall/
+          mkdir -p dist/vaktari
+          cp -a "$P"/. dist/vaktari/
+          cp packaging/install.sh dist/vaktari/
 
           # MIT requires the notice to travel with "all copies or substantial
           # portions", so a binary tarball without it does not satisfy the
           # licence the project ships under. The distro tarballs already carried
           # these; this one did not.
-          cp LICENSE README.md dist/heimdall/
-          chmod +x dist/heimdall/install.sh dist/heimdall/Heimdall.Ui
+          cp LICENSE README.md dist/vaktari/
+          chmod +x dist/vaktari/install.sh dist/vaktari/Vaktari.Ui
 
-          tar -czf heimdall-linux-x64.tar.gz -C dist heimdall
-          sha256sum heimdall-linux-x64.tar.gz | tee heimdall-linux-x64.tar.gz.sha256
+          tar -czf vaktari-linux-x64.tar.gz -C dist vaktari
+          sha256sum vaktari-linux-x64.tar.gz | tee vaktari-linux-x64.tar.gz.sha256
 
       - uses: actions/upload-artifact@v7
         with:
-          name: heimdall-linux-x64
+          name: vaktari-linux-x64
           path: |
-            heimdall-linux-x64.tar.gz
-            heimdall-linux-x64.tar.gz.sha256
+            vaktari-linux-x64.tar.gz
+            vaktari-linux-x64.tar.gz.sha256
 
   windows-x64:
     runs-on: windows-latest
@@ -142,11 +142,11 @@ jobs:
       - name: Build
         run: dotnet build -c Debug
 
-      # Both projects, unlike the Linux job: Heimdall.Windows.Tests is where the
+      # Both projects, unlike the Linux job: Vaktari.Windows.Tests is where the
       # file operations are actually exercised, and it is the reason to run this
       # job on a Windows machine rather than cross-compiling.
       - name: Test
-        run: dotnet test heimdall.slnx -c Debug
+        run: dotnet test vaktari.slnx -c Debug
 
       - name: Publish
         shell: bash
@@ -165,7 +165,7 @@ jobs:
           echo "stamping version $VERSION_NUMBER"
           echo "VERSION_NUMBER=$VERSION_NUMBER" >> "$GITHUB_ENV"
 
-          dotnet publish src/Heimdall.Ui -c Release -r win-x64 -p:PublishAot=true \
+          dotnet publish src/Vaktari.Ui -c Release -r win-x64 -p:PublishAot=true \
             -p:Version="$VERSION_NUMBER"
 
       # Same check the Linux job makes for libSkiaSharp.so, and for the same
@@ -175,9 +175,9 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          P=src/Heimdall.Ui/bin/Release/net10.0/win-x64/publish
+          P=src/Vaktari.Ui/bin/Release/net10.0/win-x64/publish
 
-          for required in Heimdall.Ui.exe libSkiaSharp.dll libHarfBuzzSharp.dll av_libglesv2.dll; do
+          for required in Vaktari.Ui.exe libSkiaSharp.dll libHarfBuzzSharp.dll av_libglesv2.dll; do
             test -f "$P/$required" || { echo "$required missing from the publish"; exit 1; }
           done
 
@@ -192,20 +192,20 @@ jobs:
           "$ISCC" | head -2 || true
 
           "$ISCC" //DAppVersion="$VERSION_NUMBER" //DPayload="$(cygpath -w "$PWD/$P")" \
-            packaging/heimdall.iss
+            packaging/vaktari.iss
 
-          SETUP="heimdall-$VERSION_NUMBER-win-x64-setup.exe"
+          SETUP="vaktari-$VERSION_NUMBER-win-x64-setup.exe"
           test -f "dist/$SETUP" || { echo "dist/$SETUP was not produced"; exit 1; }
 
           # Hashed from inside dist/, so the file records a bare filename. Doing
-          # it from here would write "dist/heimdall-...exe", and the artifact and
+          # it from here would write "dist/vaktari-...exe", and the artifact and
           # the release asset both flatten that away -- leaving a checksum file
           # that cannot be checked anywhere it is actually downloaded to.
           ( cd dist && sha256sum "$SETUP" | tee "$SETUP.sha256" )
 
       - uses: actions/upload-artifact@v7
         with:
-          name: heimdall-win-x64
+          name: vaktari-win-x64
           path: |
             dist/*.exe
             dist/*.sha256
@@ -260,5 +260,5 @@ jobs:
             || gh release view "$GITHUB_REF_NAME" >/dev/null
 
           gh release upload "$GITHUB_REF_NAME" \
-            assets/heimdall-linux-x64/* assets/heimdall-win-x64/* \
+            assets/vaktari-linux-x64/* assets/vaktari-win-x64/* \
             --clobber

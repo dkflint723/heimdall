@@ -1,19 +1,19 @@
 # Maintainer: Flint <noreply@users.noreply.github.com>
 #
-# NOTE ON THE NAME: `heimdall` is already taken in Arch's repositories by the
+# NOTE ON THE NAME: `vaktari` is already taken in Arch's repositories by the
 # Samsung firmware flashing tool, so this package cannot use it. Check before
-# publishing:  pacman -Ss '^heimdall$'
+# publishing:  pacman -Ss '^vaktari$'
 #
 # Unlike the RPM, this builds FROM SOURCE — that is the Arch convention, and the
 # AUR expects a PKGBUILD that a user's own machine can compile.
 
-pkgname=heimdall-fm
-_projname=heimdall
+pkgname=vaktari-fm
+_projname=vaktari
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="A file manager for KDE that consumes the desktop instead of reimplementing it"
 arch=('x86_64')
-url="https://github.com/dkflint723/heimdall"
+url="https://github.com/dkflint723/vaktari"
 license=('MIT')
 
 # Loaded at runtime by the bundled SkiaSharp, and by the desktop integration.
@@ -35,7 +35,7 @@ build() {
 
     # InvariantGlobalization is already set in Directory.Build.props, so the
     # result needs no ICU at runtime.
-    dotnet publish src/Heimdall.Ui \
+    dotnet publish src/Vaktari.Ui \
         -c Release \
         -r linux-x64 \
         -p:PublishAot=true
@@ -43,25 +43,25 @@ build() {
 
 package() {
     cd "$srcdir/$_projname-$pkgver"
-    local publish="src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish"
+    local publish="src/Vaktari.Ui/bin/Release/net10.0/linux-x64/publish"
 
     # The whole directory travels together: libSkiaSharp.so and
     # libHarfBuzzSharp.so are loaded from the binary's own directory, so
     # installing the executable alone gives a program that aborts at startup.
     install -d "$pkgdir/usr/lib/$_projname"
-    cp -a "$publish"/Heimdall.Ui "$publish"/*.so "$pkgdir/usr/lib/$_projname/"
+    cp -a "$publish"/Vaktari.Ui "$publish"/*.so "$pkgdir/usr/lib/$_projname/"
 
     install -d "$pkgdir/usr/bin"
-    ln -s "/usr/lib/$_projname/Heimdall.Ui" "$pkgdir/usr/bin/$_projname"
+    ln -s "/usr/lib/$_projname/Vaktari.Ui" "$pkgdir/usr/bin/$_projname"
 
-    install -Dm644 brand/heimdall.desktop \
+    install -Dm644 brand/vaktari.desktop \
         "$pkgdir/usr/share/applications/$_projname.desktop"
 
     for size in 16 24 48; do
-        install -Dm644 "brand/icons/hicolor/${size}x${size}/apps/heimdall.svg" \
+        install -Dm644 "brand/icons/hicolor/${size}x${size}/apps/vaktari.svg" \
             "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/$_projname.svg"
     done
-    install -Dm644 brand/icons/hicolor/scalable/apps/heimdall.svg \
+    install -Dm644 brand/icons/hicolor/scalable/apps/vaktari.svg \
         "$pkgdir/usr/share/icons/hicolor/scalable/apps/$_projname.svg"
 
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

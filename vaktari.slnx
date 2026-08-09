@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Vaktari.Core/Vaktari.Core.csproj" />
+    <Project Path="src/Vaktari.Linux/Vaktari.Linux.csproj" />
+    <Project Path="src/Vaktari.Windows/Vaktari.Windows.csproj" />
+    <Project Path="src/Vaktari.Ui/Vaktari.Ui.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Vaktari.Core.Tests/Vaktari.Core.Tests.csproj" />
+    <Project Path="tests/Vaktari.Ui.Tests/Vaktari.Ui.Tests.csproj" />
+    <Project Path="tests/Vaktari.Windows.Tests/Vaktari.Windows.Tests.csproj" />
+  </Folder>
+</Solution>

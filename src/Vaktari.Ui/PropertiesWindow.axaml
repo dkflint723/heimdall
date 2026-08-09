@@ -1,0 +1,166 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fs="clr-namespace:Vaktari.Core.FileSystem;assembly=Vaktari.Core"
+        xmlns:vm="clr-namespace:Vaktari.Ui.ViewModels"
+        x:Class="Vaktari.Ui.PropertiesWindow"
+        x:DataType="vm:PropertiesViewModel"
+        Title="properties"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        Width="460" Height="520"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="16">
+
+    <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,14">
+      <TextBlock Text="{Binding Title}" FontSize="{DynamicResource FontSizeLarge}"
+                 TextTrimming="CharacterEllipsis"/>
+      <TextBlock Text="{Binding Location}" FontSize="{DynamicResource FontSizeSmall}"
+                 FontFamily="monospace" Opacity="0.45"
+                 TextTrimming="CharacterEllipsis"/>
+      <TextBlock Text="{Binding Kind}" FontSize="{DynamicResource FontSizeSmall}"
+                 Opacity="0.55"/>
+    </StackPanel>
+
+    <Border DockPanel.Dock="Top" Background="{DynamicResource AppBackground}" Padding="12,10"
+            CornerRadius="4" Margin="0,0,0,14">
+      <DockPanel>
+        <!-- Measuring is a button rather than automatic: walking a home
+             directory on open would hang the window for minutes. -->
+        <Button DockPanel.Dock="Right" Padding="10,3"
+                Content="{Binding IsMeasuring, Converter={x:Static vm:PropertiesConverters.MeasureLabel}}"
+                IsVisible="{Binding CanMeasure}"
+                Command="{Binding MeasureCommand}"/>
+        <StackPanel Spacing="2">
+          <TextBlock Text="size" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+          <TextBlock Text="{Binding SizeText}" FontFamily="monospace"
+                     FontSize="{DynamicResource FontSizeSmall}" TextWrapping="Wrap"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" Background="{DynamicResource AppBackground}" Padding="12,10"
+            CornerRadius="4" Margin="0,0,0,14"
+            IsVisible="{Binding CanEditAccess}">
+      <StackPanel Spacing="8">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Text="{Binding AccessSummary}"
+                     FontFamily="monospace" Opacity="0.5"
+                     FontSize="{DynamicResource FontSizeSmall}"/>
+          <TextBlock Text="permissions" FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+        </DockPanel>
+
+        <ItemsControl ItemsSource="{Binding Access}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Columns="3"/>
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:AccessToggleViewModel">
+              <CheckBox IsChecked="{Binding Value}"
+                        FontSize="{DynamicResource FontSizeSmall}">
+                <TextBlock>
+                  <!-- FontSizeTiny, not a literal: this is the owner/group/other
+                       qualifier saying which row you are toggling, and it sat at
+                       a fixed 10 while the label beside it scaled. -->
+                  <Run Text="{Binding Group}" FontSize="{DynamicResource FontSizeTiny}" />
+                  <Run Text="{Binding Label}"/>
+                </TextBlock>
+              </CheckBox>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="apply" Padding="12,3"
+                  Command="{Binding ApplyAccessCommand}"/>
+          <CheckBox Content="apply to contents" IsChecked="{Binding ApplyRecursively}"
+                    IsVisible="{Binding CanRecurse}"
+                    FontSize="{DynamicResource FontSizeSmall}"
+                    VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <TextBlock Text="{Binding AccessStatus}" FontFamily="monospace"
+                   FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"/>
+      </StackPanel>
+    </Border>
+
+    <!-- Checksums. Only for a single file, and only on request: hashing a
+         multi-gigabyte file is real work and doing it automatically would make
+         this window slow for the common case to serve the rare one. -->
+    <Border DockPanel.Dock="Top" Background="{DynamicResource AppBackground}" Padding="12,10"
+            CornerRadius="6" Margin="0,0,0,14"
+            IsVisible="{Binding CanChecksum}">
+      <StackPanel Spacing="8">
+
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Padding="12,3"
+                  Content="{Binding ChecksumButtonText}"
+                  Command="{Binding ComputeChecksumsCommand}"/>
+          <TextBlock Text="Checksums" VerticalAlignment="Center"
+                     FontSize="{DynamicResource FontSizeSmall}" Opacity="0.55"/>
+        </DockPanel>
+
+        <TextBlock Text="{Binding HashStatus}" FontFamily="monospace"
+                   FontSize="{DynamicResource FontSizeSmall}" Opacity="0.45"
+                   IsVisible="{Binding HasHashStatus}"/>
+
+        <!-- Selectable, because a checksum you cannot copy is half a feature —
+             the whole point is comparing it against a published one. -->
+        <StackPanel Spacing="4" IsVisible="{Binding HasChecksums}">
+          <Grid ColumnDefinitions="80,*">
+            <TextBlock Grid.Column="0" Text="MD5"
+                       FontSize="{DynamicResource FontSizeSmall}" Opacity="0.55"/>
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Md5}"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 FontFamily="monospace" TextWrapping="Wrap"/>
+          </Grid>
+          <Grid ColumnDefinitions="80,*">
+            <TextBlock Grid.Column="0" Text="SHA-1"
+                       FontSize="{DynamicResource FontSizeSmall}" Opacity="0.55"/>
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Sha1}"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 FontFamily="monospace" TextWrapping="Wrap"/>
+          </Grid>
+          <Grid ColumnDefinitions="80,*">
+            <TextBlock Grid.Column="0" Text="SHA-256"
+                       FontSize="{DynamicResource FontSizeSmall}" Opacity="0.55"/>
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Sha256}"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 FontFamily="monospace" TextWrapping="Wrap"/>
+          </Grid>
+        </StackPanel>
+
+      </StackPanel>
+    </Border>
+
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Groups}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="fs:PropertyGroup">
+            <StackPanel Margin="0,0,0,14">
+              <TextBlock Text="{Binding Label}" FontSize="{DynamicResource FontSizeSmall}"
+                         Opacity="0.4" Margin="0,0,0,4"/>
+              <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="fs:PropertyRow">
+                    <Grid ColumnDefinitions="130,*" Margin="0,2">
+                      <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                 FontSize="{DynamicResource FontSizeSmall}" Opacity="0.55"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 FontFamily="monospace" TextWrapping="Wrap"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+</Window>

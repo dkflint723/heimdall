@@ -1,0 +1,99 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3">
+      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <!-- Embedded so the icon travels inside the single AOT binary rather than
+       sitting beside it as a file that can go missing. -->
+  <ItemGroup>
+    <AvaloniaResource Include="vaktari.png" />
+  </ItemGroup>
+
+  <!-- Exactly one platform assembly is referenced. Referencing both would drag
+       Linux code onto a Windows build and vice versa; referencing neither is
+       caught by the #error in MainWindow.
+
+       Defaulted from the build machine's OS but settable, so either
+       configuration can be built from either machine:
+
+         dotnet build src/Vaktari.Ui -p:VaktariPlatform=Linux
+
+       That override is the whole point. WINDOWS.md §8 warns that conditional
+       references make it possible to break the Linux build from a Windows
+       machine without noticing, and waiting for CI to say so is a slow way to
+       find out. The compile is real; only the runtime behaviour still needs the
+       other OS.
+
+       The RuntimeIdentifier is consulted BEFORE the host OS, because what is
+       being built is a property of the target, not of the machine doing the
+       building. `dotnet publish -r win-x64` from a Linux box has to be a
+       Windows build; defaulting it from the host produced a win-x64 binary
+       carrying Linux platform code and the default .NET icon, with nothing in
+       the publish failing to say so. An explicit -p:VaktariPlatform still
+       wins over both. -->
+  <PropertyGroup>
+    <VaktariPlatform Condition="'$(VaktariPlatform)' == '' AND '$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('win'))">Windows</VaktariPlatform>
+    <VaktariPlatform Condition="'$(VaktariPlatform)' == '' AND '$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('linux'))">Linux</VaktariPlatform>
+    <VaktariPlatform Condition="'$(VaktariPlatform)' == '' AND '$([System.OperatingSystem]::IsLinux())' == 'true'">Linux</VaktariPlatform>
+    <VaktariPlatform Condition="'$(VaktariPlatform)' == '' AND '$([System.OperatingSystem]::IsWindows())' == 'true'">Windows</VaktariPlatform>
+  </PropertyGroup>
+
+  <!-- The VAKTARI_* symbol fences the single line in MainWindow.axaml.cs that
+       names a platform type, so it is set here beside the reference it belongs
+       to. The two must agree: a reference without its symbol compiles to an
+       unreachable platform, and a symbol without its reference does not compile
+       at all. -->
+  <ItemGroup Condition="'$(VaktariPlatform)' == 'Linux'">
+    <ProjectReference Include="..\Vaktari.Linux\Vaktari.Linux.csproj" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(VaktariPlatform)' == 'Linux'">
+    <DefineConstants>$(DefineConstants);VAKTARI_LINUX</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(VaktariPlatform)' == 'Windows'">
+    <ProjectReference Include="..\Vaktari.Windows\Vaktari.Windows.csproj" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(VaktariPlatform)' == 'Windows'">
+    <DefineConstants>$(DefineConstants);VAKTARI_WINDOWS</DefineConstants>
+
+    <!-- The Win32 icon resource, which is a different thing from the Avalonia
+         one above: this is what Explorer, the taskbar, the Start menu and the
+         installer read off the executable itself, before any of our code runs.
+         Without it the binary carries the default .NET icon.
+
+         Windows only, because it is a PE resource and means nothing to an ELF
+         binary. It sits here rather than beside the AvaloniaResource near the
+         top of the file because VaktariPlatform is not resolved until the
+         PropertyGroup above, and MSBuild evaluates a condition against
+         whatever the property held at the moment it was read.
+
+         Avalonia would otherwise ALSO pull this .ico in as a resource
+         (AvaloniaIncludeApplicationIconAsWindowIcon defaults to true), which
+         embedded all 27 KB of it a second time: a 55 KB delta between the
+         Windows and Linux builds. AppIcon.cs already sets every
+         window's icon from the avares vaktari.png, so that copy was never
+         read. Turning it off also means a missing .ico fails as a plain csc
+         icon error rather than an unhandled GenerateAvaloniaResourcesTask
+         crash with ten lines of Avalonia stack trace.
+
+         Built from the hicolor SVGs by brand/make-ico.py; see that script for
+         why each size is rendered from its own drawing rather than scaled. -->
+    <ApplicationIcon>..\..\brand\icons\vaktari.ico</ApplicationIcon>
+    <AvaloniaIncludeApplicationIconAsWindowIcon>false</AvaloniaIncludeApplicationIconAsWindowIcon>
+  </PropertyGroup>
+</Project>

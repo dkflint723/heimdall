@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="brand/icons/hicolor/scalable/apps/heimdall.svg" width="112" alt="Heimdall">
+<img src="brand/icons/hicolor/scalable/apps/vaktari.svg" width="112" alt="Vaktari">
 
-# Heimdall
+# Vaktari
 
 **A fast, keyboard-friendly file manager for Linux and Windows desktops.**
 
@@ -15,7 +15,7 @@ Windows is newer than Linux and still has gaps — see [Status](#status).
 
 </div>
 
-![Heimdall](docs/screenshot-grid.png)
+![Vaktari](docs/screenshot-grid.png)
 
 <sub>Grid view at the filesystem root.</sub>
 
@@ -61,7 +61,7 @@ blown up into a blur.
 **Details panel** (`F11`) — preview, full path, size, type, dates and permissions
 for whatever is selected. In split view each side gets its own, so the panel
 always describes the side you are looking at. If the window is too narrow to show
-it usefully, Heimdall can widen the window to make room and shrink it back when
+it usefully, Vaktari can widen the window to make room and shrink it back when
 you close it.
 
 **Quick preview** (`Space`) — a larger look at the selected file without opening
@@ -98,9 +98,9 @@ expect. Beyond that:
 **Undo** (`Ctrl+Z`) for file operations.
 
 **Trash that can actually restore.** Deleted files go to your desktop's trash and
-appear in Heimdall's Trash view, each showing where it came from — so *Restore*
+appear in Vaktari's Trash view, each showing where it came from — so *Restore*
 puts it back where it belongs rather than guessing. Emptying always asks first.
-Heimdall can also sweep the trash after a number of days, or when it grows past a
+Vaktari can also sweep the trash after a number of days, or when it grows past a
 share of the disk.
 
 **Rename in bulk** (`Shift+F2`), with a live preview of every result before
@@ -116,7 +116,7 @@ so you can name them without a second click. Templates come from your
 when you ask, since hashing a large file is not free — and the result is
 selectable so you can copy it.
 
-**Scripts.** Drop a script in Heimdall's scripts folder and it appears in the
+**Scripts.** Drop a script in Vaktari's scripts folder and it appears in the
 right-click menu, receiving the current folder and selection.
 
 ## Version control
@@ -139,7 +139,7 @@ Windows it is SMB and, with the WebClient service, WebDAV — and if a share wan
 a password, Windows asks for it in its own dialog and remembers it.
 
 **Discover shares** on your network without typing addresses. Whatever is
-announcing itself — a NAS, another desktop, a Heimdall share on another
+announcing itself — a NAS, another desktop, a Vaktari share on another
 machine — shows up ready to connect.
 
 **Share a folder over HTTP** for another machine to fetch, with optional upload.
@@ -148,7 +148,7 @@ installed.
 
 ## Fitting your desktop
 
-Heimdall reads your desktop's configuration rather than keeping its own copy:
+Vaktari reads your desktop's configuration rather than keeping its own copy:
 
 | | |
 |---|---|
@@ -161,7 +161,7 @@ Heimdall reads your desktop's configuration rather than keeping its own copy:
 | **Bookmarks** | the same places list your other file manager uses |
 | **File types** | your system's own file-type database |
 
-Change your icon theme and Heimdall changes with it. Nothing needs restarting.
+Change your icon theme and Vaktari changes with it. Nothing needs restarting.
 
 Colour and typeface are the exception, and a deliberate one: the bundled scheme
 is the default, because a file manager that repaints itself to match your desktop
@@ -173,7 +173,7 @@ line up down a column.
 
 **Light and dark are a separate choice**, in the same place — *Follow the
 desktop*, *Light* or *Dark*. Following the desktop is the default and the only
-one that keeps up when you change your desktop with Heimdall already open; the
+one that keeps up when you change your desktop with Vaktari already open; the
 other two hold whatever you pick, whether or not that matches the rest of your
 machine. The bundled scheme is drawn for both, so neither is an inversion of the
 other.
@@ -206,19 +206,19 @@ size limits, confirmations, the status bar, which entries appear in the
 right-click menu, per-layout spacing, date style, the font, light or dark,
 version-control marks, the details panel's behaviour, and how the trash is swept.
 
-Heimdall can also remember the view, sort order and zoom for each folder
+Vaktari can also remember the view, sort order and zoom for each folder
 individually, if you would rather not set them again every time.
 
 ## Installing
 
 Both builds are on the
-[releases page](https://github.com/dkflint723/heimdall/releases).
+[releases page](https://github.com/dkflint723/vaktari/releases).
 
 ### Linux
 
 ```bash
-tar -xzf heimdall-linux-x64.tar.gz
-cd heimdall && ./install.sh
+tar -xzf vaktari-linux-x64.tar.gz
+cd vaktari && ./install.sh
 ```
 
 It installs under `~/.local`, needs no root, and adds a menu entry. There is an
@@ -226,12 +226,12 @@ RPM for Fedora on the same page.
 
 **Pick one or the other.** `~/.local/bin` comes before `/usr/bin` on most
 systems, so a copy installed this way keeps running even after you upgrade the
-package — `heimdall --version` prints the version and the file it came from, which
+package — `vaktari --version` prints the version and the file it came from, which
 is the quickest way to tell which one you have.
 
 ### Windows
 
-Run `heimdall-<version>-win-x64-setup.exe`.
+Run `vaktari-<version>-win-x64-setup.exe`.
 
 It installs for your account only, so it needs no administrator and raises no
 UAC prompt, and it removes from *Installed apps* like anything else. The first
@@ -239,7 +239,7 @@ page offers *Install for all users* if you would rather have it on the machine
 than the account.
 
 Uninstalling leaves your tabs, pinned places and folder views where they
-are, under `%LOCALAPPDATA%\heimdall` — so reinstalling or upgrading picks up
+are, under `%LOCALAPPDATA%\vaktari` — so reinstalling or upgrading picks up
 where you left off. Delete that folder by hand if you want them gone, but note
 that it also holds your settings, your recent folders and the `scripts\` folder
 with any scripts you wrote yourself — check that first if you would rather keep
@@ -248,16 +248,16 @@ them.
 **To build it yourself** you need the .NET 10 SDK:
 
 ```bash
-git clone https://github.com/dkflint723/heimdall.git
-cd heimdall
-dotnet run --project src/Heimdall.Ui
+git clone https://github.com/dkflint723/vaktari.git
+cd vaktari
+dotnet run --project src/Vaktari.Ui
 ```
 
 Prerequisites, other distributions and packaging are in [BUILDING.md](BUILDING.md).
 
 ## Status
 
-Heimdall is used daily by its author, but there has been no stable release and
+Vaktari is used daily by its author, but there has been no stable release and
 version numbers should not be trusted yet. Known gaps:
 
 - **In a git submodule the marks wait for a refresh** after a commit rather than
@@ -269,13 +269,13 @@ version numbers should not be trusted yet. Known gaps:
   accent. The Recycle Bin is browsable, and *Restore* puts a file back where it
   came from — beside whatever has since taken the name, rather than over it.
   Missing: the shell's per-file icons. Search matches file *names* only: on
-  Linux, Heimdall can hand the query to Baloo and search inside files where KDE
+  Linux, Vaktari can hand the query to Baloo and search inside files where KDE
   indexes them. Pins in Explorer's Quick Access are not imported, though the
   older Links and Network Shortcuts folders are. SFTP and FTP are Linux-only,
   because Windows has no redirector for them. See [WINDOWS.md](WINDOWS.md).
 
 Bugs and ideas are welcome on the
-[issue tracker](https://github.com/dkflint723/heimdall/issues).
+[issue tracker](https://github.com/dkflint723/vaktari/issues).
 
 ## Licence
 

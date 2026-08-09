@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="Vaktari.Ui"/>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- PerMonitorV2 rather than system DPI: the accessibility requirement is
+           that text stays readable, and a file manager gets dragged between a
+           laptop panel and an external monitor constantly. System DPI would
+           bitmap-scale the whole window on that move. -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+
+      <!-- Non-negotiable for this application specifically. Without it every
+           Win32 path API stops at MAX_PATH (260 chars) and deep trees — which
+           are exactly what the tool exists to survive — fail to enumerate.
+           Still requires the LongPathsEnabled machine policy to be on; the
+           manifest is the half we control. -->
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+
+      <!-- UTF-8 as the process code page, so ANSI-flavoured Win32 calls and
+           any child process we start agree with the rest of the codebase. -->
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 / 11. Declaring only this is deliberate: the older GUIDs
+           in the stock template claim support back to Vista, which is a claim
+           this project has no intention of honouring. -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+</assembly>

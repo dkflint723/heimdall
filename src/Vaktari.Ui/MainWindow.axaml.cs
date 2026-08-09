@@ -1,0 +1,2168 @@
+using System.ComponentModel;
+using System.IO;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Vaktari.Core.FileSystem;
+using Vaktari.Core;
+using Vaktari.Core.Places;
+using Vaktari.Core.Search;
+using Vaktari.Core.Session;
+using Vaktari.Core.Settings;
+#if VAKTARI_LINUX
+using Vaktari.Linux;
+#elif VAKTARI_WINDOWS
+using Vaktari.Windows;
+#endif
+using Vaktari.Ui.Session;
+using Vaktari.Ui.Settings;
+using Vaktari.Ui.ViewModels;
+
+namespace Vaktari.Ui;
+
+public partial class MainWindow : Window
+{
+    private readonly ShellViewModel _shell;
+    private readonly JsonSessionStore _store;
+
+    // Preferences, as distinct from the session. Read before it, because the
+    // startup setting decides whether the session is consulted at all.
+    private readonly JsonSettingsStore _settingsStore;
+    private readonly SettingsState _settings;
+
+    private JsonFolderViewStore? _folderViews;
+    private JsonRecentStore? _recents;
+    private ITrashMaintenance? _trashMaintenance;
+    private DispatcherTimer? _trashTimer;
+    private readonly IDefaultFileManager? _defaultFileManager;
+    private readonly IPropertiesProvider _properties;
+    private readonly IThemeProvider? _theme;
+    private readonly IAccessEditor? _accessEditor;
+    private bool _closeApproved;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        AppIcon.Apply(this);
+
+        // The one and only place a platform type is named, and the one guard
+        // the analyser needs — each platform assembly is annotated for a single
+        // OS, so everything inside them is free of per-call checks.
+        //
+        // The #if is not belt-and-braces around the runtime check. Only one
+        // platform assembly is referenced per build (see Vaktari.Ui.csproj), so
+        // the branch for the other OS would not compile at all. The runtime
+        // check still earns its place: it is what the analyser reads to allow
+        // the constructor call.
+        const string Unsupported =
+            "No platform implementation for this operating system yet.";
+
+        IPlatform platform;
+
+        // Each branch carries its own else rather than sharing one after the
+        // #endif. Sharing it compiled, but left the #else arm as a dangling
+        // `else` — so a build with neither symbol reported five cascading syntax
+        // errors and buried the #error that explains what actually went wrong.
+#if VAKTARI_LINUX
+        if (OperatingSystem.IsLinux())
+            platform = new LinuxPlatform(JsonSessionStore.DefaultDirectory());
+        else
+            throw new PlatformNotSupportedException(Unsupported);
+#elif VAKTARI_WINDOWS
+        if (OperatingSystem.IsWindows())
+            platform = new WindowsPlatform(JsonSessionStore.DefaultDirectory());
+        else
+            throw new PlatformNotSupportedException(Unsupported);
+#else
+#error Vaktari.Ui references no platform assembly. One is selected from the build machine's OS, or by -p:VaktariPlatform=Linux|Windows; see Vaktari.Ui.csproj and WINDOWS.md §2.
+        platform = null!;
+#endif
+
+        // Before anything builds a label. The view models below read these, and
+        // so does every prompt sentence — adopting it here, beside the one place
+        // a platform is chosen, is what keeps the window from naming the bin
+        // two different ways.
+        Naming.Adopt(platform);
+        _defaultFileManager = platform.DefaultFileManager;
+
+        _properties = platform.Properties;
+        _accessEditor = platform.AccessEditor;
+
+        Thumbnails.ThumbnailLoader.Provider = platform.Thumbnails;
+        Thumbnails.RowMetadata.Provider = platform.Metadata;
+        Thumbnails.IconLoader.Provider = platform.Icons;
+
+        if (platform.Icons is { } icons)
+        {
+            var probe = icons.Resolve(["inode-directory", "folder"], 32);
+            Console.Error.WriteLine($"[vaktari] folder icon resolved to: {probe ?? "NOTHING"}");
+        }
+
+        // Settings BEFORE the theme, and this ordering is load-bearing rather
+        // than tidy. ThemeApplier reads AppSettings.Current to decide whether a
+        // configured font beats Plasma's — so loading settings afterwards meant
+        // it read empty defaults and the font setting did nothing at all, even
+        // across a restart. Settings are the first thing this constructor does
+        // for the same reason they precede the session load below.
+        _settingsStore = new JsonSettingsStore(JsonSessionStore.DefaultDirectory());
+        _settings = _settingsStore.Load();
+        _settingsStore.EnsureFileExists(_settings);
+
+        AppSettings.Apply(_settings);
+
+        // Per-folder view overrides. A static for the same reason AppSettings is
+        // one: panes are created by the shell, not injected here.
+        _folderViews = new JsonFolderViewStore(JsonSessionStore.DefaultDirectory());
+        ViewModels.PaneViewModel.FolderViews = _folderViews;
+
+        _recents = new JsonRecentStore(JsonSessionStore.DefaultDirectory());
+        ViewModels.PaneViewModel.Recents = _recents;
+
+        // Platform-neutral: it drives the `git` binary, which behaves the same
+        // on both targets, so it is constructed here rather than coming from
+        // IPlatform like the trash and the icon theme do.
+        ViewModels.PaneViewModel.Vcs = new Vaktari.Core.Vcs.GitVersionControl();
+
+        // Logged at startup, not when the settings dialog opens. The count only
+        // appeared on opening the dialog, which made "no line printed" mean two
+        // different things and cost a diagnostic round trip. Compare with:
+        //   fc-list : family | tr ',' '\n' | sort -u | wc -l
+        Console.Error.WriteLine(
+            $"[vaktari] fontlist: {Avalonia.Media.FontManager.Current.SystemFonts.Count} "
+            + "families visible to Avalonia");
+
+        // Applied before anything else paints, and re-applied whenever Plasma's
+        // scheme changes, so the window follows the desktop live.
+        _theme = platform.Theme;
+        var platformIcons = platform.Icons;
+        ThemeApplier.Apply(this, _theme?.Read());
+
+        if (_theme is not null)
+        {
+            _theme.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                // Plasma rewrites kdeglobals in pieces; a short settle avoids
+                // reading it mid-write and picking up half a scheme.
+                Task.Delay(150).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+                {
+                    var palette = _theme.Read();
+
+                    ThemeApplier.Apply(this, palette);
+
+                    // Icons follow the desktop too: the resolved paths belong to
+                    // the old icon theme and every cached drawable has the old
+                    // text colour baked into its currentColor.
+                    platformIcons?.Reload(palette?.IconTheme);
+                    Thumbnails.IconLoader.Invalidate();
+                }));
+            });
+        }
+
+        // Not platform-specific: the clipboard comes from the toolkit.
+        IClipboardService clipboard = ClipboardService.ForWindow(this);
+
+        _store = new JsonSessionStore(JsonSessionStore.DefaultDirectory());
+
+        // Loaded synchronously so geometry is applied before first paint. An
+        // async load would restore size and position after the window is
+        // already on screen — a visible jump on every launch.
+        var state = _store.Load();
+        ApplyGeometry(state);
+
+        _shell = new ShellViewModel(
+            platform.FileSystem, platform.Operations, _store,
+            platform.Places, platform.Launcher, clipboard, platform.Search,
+            platform.Scripts, platform.Templates, platform.Sharing)
+        {
+            GeometryProvider = CaptureGeometry,
+        };
+        _shell.PaneCreated += (_, pane) => WirePane(pane);
+        _shell.PropertiesRequested += (_, _) => ShowProperties();
+        _shell.SettingsRequested += (_, _) => ShowSettings();
+        _shell.EmptyTrashRequested += (_, _) => AskConfirmEmptyTrash();
+        _shell.GrowRequested += (_, by) => GrowToFit(by);
+        _shell.ReleaseRequested += (_, _) => ReleaseGrownWidth();
+        _shell.BatchRenameRequested += (_, _) => ShowBatchRename();
+        _shell.UseRemotes(platform.Remotes);
+        _shell.UseDiscovery(platform.Discovery);
+        _shell.UseProperties(platform.Properties);
+
+        _shell.ConnectionInfoRequested += (_, info) =>
+            new ConnectionWindow(info).ShowDialog(this);
+
+        _shell.ShareDialogRequested += (_, request) =>
+            new ShareWindow(request).ShowDialog(this);
+
+        _shell.ConnectRequested += OnConnectRequested;
+
+        // The clipboard belongs to the view, so the shell asks rather than reaches.
+        _shell.CopyTextRequested += async (_, url) =>
+        {
+            try
+            {
+                if (Clipboard is { } clipboard) await clipboard.SetTextAsync(url);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[vaktari] clipboard: {ex.Message}");
+            }
+        };
+
+        _shell.ScaleApplier = ApplyScales;
+        DataContext = _shell;
+
+        PromptInput.KeyDown += OnPromptKeyDown;
+        PromptConfirm.Click += (_, _) => ConfirmPrompt();
+        PromptCancel.Click += (_, _) => ClosePrompt();
+
+        // Handled at the window because the list lives inside a DataTemplate,
+        // so there is no named control to attach to.
+        AddHandler(DoubleTappedEvent, OnDoubleTapped, RoutingStrategies.Bubble);
+
+        // Its single-click twin. Both are always registered and the preference
+        // is read at gesture time, because the rows live inside a DataTemplate
+        // and there is no list of realized controls to re-attach when the
+        // setting changes.
+        AddHandler(TappedEvent, OnTapped, RoutingStrategies.Bubble);
+        AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Bubble);
+
+        // Type-ahead. TextInput rather than KeyDown, because it is the event
+        // that already accounts for keyboard layout, shift and dead keys — a
+        // Key enum says "D", TextInput says "d" or "D" or "é" as typed.
+        AddHandler(TextInputEvent, OnWindowTextInput, RoutingStrategies.Bubble);
+
+        // Tab has to be caught on the way DOWN. Keyboard navigation claims it
+        // before any bubble handler runs, so by the time the window sees it
+        // focus has already left the box. Tunnel reaches the window first.
+        AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
+
+        // Clicking anywhere in a side makes it the active one. Tunnelling so it
+        // runs before the ListBox handles the press for selection — otherwise
+        // the first click on an inactive side only moves focus.
+        AddHandler(PointerPressedEvent, OnPointerPressedAnywhere, RoutingStrategies.Tunnel);
+        AddHandler(PointerMovedEvent, OnPointerMovedAnywhere, RoutingStrategies.Tunnel);
+        AddHandler(PointerReleasedEvent, (_, _) => EndBand(), RoutingStrategies.Tunnel);
+
+        // Tunnel, so the gesture is claimed before the listing's ScrollViewer
+        // sees it — otherwise the view zooms and scrolls at the same time.
+        AddHandler(PointerWheelChangedEvent, OnWheelAnywhere, RoutingStrategies.Tunnel);
+
+        AddHandler(DragDrop.DragEnterEvent, OnDragOver);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
+        AddHandler(DragDrop.DropEvent, OnDrop);
+
+        // Dragging the splitter writes straight to the ColumnDefinitions, so
+        // the ratio is read back out afterwards — otherwise the persisted
+        // SplitRatio would never reflect where the divider actually sits.
+        SplitHandle.DragCompleted += (_, _) => CaptureSplitRatio();
+
+        // The sidebar's handle has to move the width itself, unlike the one
+        // above: a Thumb reports how far it was dragged and changes nothing,
+        // where a GridSplitter edits the definitions it sits between. The
+        // sidebar is in a DockPanel and has none, which is why it is a Thumb.
+        //
+        // Clamped rather than free. Below about 150 the group headings and the
+        // drive sizes collide; above 520 it is taking room from the listing,
+        // which is what the window is for. The value is an [ObservableProperty]
+        // that the session already saves and restores, so a width set here
+        // survives a restart with no further work.
+        SidebarHandle.DragDelta += (_, e) =>
+            _shell.Sidebar.Width = Math.Clamp(_shell.Sidebar.Width + e.Vector.X, 150, 520);
+
+        // A folder named on the command line, and any handed over by a later
+        // launch. Without this the window ignored the path it was asked for,
+        // which as a default file manager is the whole job.
+        if (Program.Instance is { } instance)
+            instance.PathsReceived += (_, paths) => OpenPaths(paths, activate: true);
+
+        if (Program.StartupPaths.Length > 0)
+            Dispatcher.UIThread.Post(() => OpenPaths(Program.StartupPaths, activate: false));
+
+        Closing += OnClosing;
+        Resized += (_, _) => _shell.NotifyWindowChanged();
+        PositionChanged += (_, _) => _shell.NotifyWindowChanged();
+
+        // Applied before Start so the first paint is already at the right size.
+        var geometry = state?.Windows.FirstOrDefault();
+        ApplyScales(
+            geometry?.FontScale is > 0 and var f ? f : 1.0,
+            geometry?.IconScale is > 0 and var i ? i : 1.0);
+
+        // The startup setting decides whether the session is consulted at all,
+        // which is the whole reason settings are loaded before it. Restoring
+        // stays the default: forgetting open folders is the complaint this
+        // project exists to answer.
+        var startup = _settings.Startup;
+
+        var restore = startup.ShowOnStartup == StartupLocation.RestoreSession;
+
+        var openFolder = startup.ShowOnStartup switch
+        {
+            StartupLocation.SpecificFolder when
+                !string.IsNullOrWhiteSpace(startup.StartupFolder)
+                && Directory.Exists(startup.StartupFolder) => startup.StartupFolder,
+
+            // A configured folder that no longer exists falls back to home
+            // rather than opening nothing — an unremovable empty window would
+            // be a worse failure than quietly ignoring a stale path.
+            _ => null,
+        };
+
+        _shell.Start(restore ? state : null, openFolder);
+
+        ApplyStartupPreferences(startup);
+
+        StartTrashMaintenance(platform.TrashMaintenance);
+
+        // Build stamp AND the binary it came from. When a symptom and the code
+        // disagree, these two lines say whether the running program contains the
+        // fix — and, just as often, whether it is the program you think it is.
+        //
+        // **The path earns its place.** A `~/.local` install from `install.sh`
+        // and an RPM coexist happily: nothing is shared, and `~/.local/bin`
+        // precedes `/usr/bin`, so a stale user install silently wins over every
+        // package upgrade. That cost a round of "the new feature is missing from
+        // the RPM" when the RPM was never the thing running.
+        Console.Error.WriteLine(
+            $"[vaktari] build {BuildStamp()}  clipboard=yes  split={_shell.IsSplit}");
+
+        Console.Error.WriteLine($"[vaktari] running {Environment.ProcessPath ?? "(unknown)"}");
+    }
+
+    private static string BuildStamp()
+    {
+        try
+        {
+            // Two candidates, in order, because the managed assembly does not
+            // exist as a file in a NativeAOT publish — it is compiled into the
+            // executable. Stamping only the dll meant this read "unknown" in
+            // precisely the build where there is no other way to tell which
+            // binary is running.
+            string?[] candidates =
+            [
+                Path.Combine(AppContext.BaseDirectory, "Vaktari.Ui.dll"),
+                Environment.ProcessPath,
+            ];
+
+            foreach (var candidate in candidates)
+                if (candidate is { Length: > 0 } && File.Exists(candidate))
+                    return File.GetLastWriteTime(candidate).ToString("HH:mm:ss");
+
+            return "unknown";
+        }
+        catch
+        {
+            return "unknown";
+        }
+    }
+
+    /// <summary>
+    /// Focuses the enclosing ListBox when a press lands inside it but not on an
+    /// item, so the keyboard has somewhere to start.
+    ///
+    /// This was a NO-OP for as long as it existed, because a ListBox is not
+    /// focusable by default and `Focus()` simply returned false — a silent
+    /// refusal that made the fix look shipped when it had never run. Focus
+    /// stayed wherever it was, typically a toolbar button, and Home and End
+    /// never reached the panel at all. The three listing ListBoxes now carry
+    /// `Focusable="True"` explicitly, which is what makes this work.
+    /// </summary>
+    /// <summary>
+    /// The list a press landed in, but ONLY if it landed on empty space rather
+    /// than on a row. Null for a press on a row, or outside any list.
+    ///
+    /// The upward walk is the same one `FocusListIfEmptySpace` needed, and for
+    /// the same reason: a press on templated content has no logical path back to
+    /// the list, so the visual tree is the only route.
+    /// </summary>
+    private static ListBox? ListForEmptySpace(object? source)
+    {
+        ListBoxItem? row = null;
+
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            // Content, not background: the name and the icon.
+            // Grabbing one of these means "take this file", so a band must not
+            // start here or dragging a file out would become impossible.
+            if (row is null && visual is TextBlock or Image or Avalonia.Controls.Shapes.Path)
+                return null;
+
+            if (visual is ListBoxItem hit) { row = hit; continue; }
+
+            if (visual is not ListBox found) continue;
+
+            // Not every list can hold a multiple selection — the column strip is
+            // SelectionMode="None", and a band there would draw a rectangle that
+            // selects nothing.
+            if (!found.SelectionMode.HasFlag(SelectionMode.Multiple)) return null;
+
+            // Nothing under the pointer but the list itself: always a band.
+            if (row is null) return found;
+
+            // The press landed on a row's BACKGROUND. Allow a band only where the
+            // row spans the list, because then there is no empty space beside it
+            // and the background is the only place left to start one. A tile
+            // leaves gaps of its own, and stealing its background would make
+            // dragging a file out of the grid needlessly fiddly.
+            return row.Bounds.Width >= found.Bounds.Width * 0.9 ? found : null;
+        }
+
+        return null;
+    }
+
+    private static void FocusListIfEmptySpace(object? source)
+    {
+        // Without this, pressing Home or End after clicking below the tiles did
+        // nothing: keyboard navigation begins at the focused element.
+        if (ListForEmptySpace(source) is { IsFocused: false } list) list.Focus();
+    }
+
+    private void OnPointerPressedAnywhere(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        // Ctrl + wheel click resets the pane under the pointer, completing the
+        // gesture: wheel to scale, click to undo. Claimed before anything else
+        // sees the press, or the listing treats it as a selection.
+        //
+        // PointerUpdateKind, not IsMiddleButtonPressed: the latter reports the
+        // *current state* of that button, which is not the same question as
+        // "which button raised this press".
+        var properties = e.GetCurrentPoint(this).Properties;
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            && properties.PointerUpdateKind
+               is Avalonia.Input.PointerUpdateKind.MiddleButtonPressed)
+        {
+            _shell.ResetPaneScale(PaneAt(e.Source) ?? _shell.ActiveTab);
+
+            // The accumulator would otherwise carry leftover travel from before
+            // the reset into the next scroll.
+            _zoomTravel = 0;
+
+            e.Handled = true;
+            return;
+        }
+
+        // A click on empty listing space gives the LIST keyboard focus.
+        //
+        // Without this, pressing Home or End after clicking below the tiles did
+        // nothing: keyboard navigation begins at the focused element, and the
+        // press had focused the scroll area rather than the list, so the key
+        // never reached the panel at all. Confirmed with a diagnostic — the
+        // panel's navigation was called only when a ListBoxItem already had
+        // focus, and worked correctly every time it was.
+        //
+        // Only when the press did NOT land on an item: an item click focuses
+        // itself, and stealing that would break selection.
+        FocusListIfEmptySpace(e.Source);
+
+        // Recorded here so a drag can start on the first move past the
+        // threshold rather than on the press itself.
+        _dragOrigin = e.GetPosition(this);
+
+        // **A drag from empty space is a SELECTION, not a file drag.** Both
+        // begin with a left press inside a pane, so the only thing separating
+        // them is what sat under the pointer — and arming both would race.
+        _bandList = properties.IsLeftButtonPressed ? ListForEmptySpace(e.Source) : null;
+        _bandOrigin = e.GetPosition(BandLayer);
+        _bandAdditive = e.KeyModifiers.HasFlag(KeyModifiers.Control)
+                        || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        _bandKept = null;
+
+        _dragSource = properties.IsLeftButtonPressed && _bandList is null
+            ? PaneAt(e.Source)
+            : null;
+        _dragTrigger = _dragSource is null ? null : e;
+
+        // Visual tree — same reason as EntryAt. A press that lands on
+        // templated content has no logical path back to the group, so clicking
+        // a filename would not activate its side.
+        for (var visual = e.Source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            if (visual is Control { DataContext: PaneGroupViewModel group })
+            {
+                _shell.ActivateGroup(group);
+                break;
+            }
+        }
+    }
+
+    private void CaptureSplitRatio()
+    {
+        if (!_shell.IsSplit) return;
+
+        var left = SplitGrid.ColumnDefinitions[0].ActualWidth;
+        var right = SplitGrid.ColumnDefinitions[2].ActualWidth;
+        var total = left + right;
+
+        if (total > 1) _shell.SplitRatio = Math.Clamp(left / total, 0.1, 0.9);
+    }
+
+    // ---- ui scale ------------------------------------------------------
+
+    /// <summary>
+    /// Base metrics at scale 1.0. Everything in the markup is a DynamicResource
+    /// pointing at these, so re-writing them here restyles the whole window
+    /// without touching a single control.
+    /// </summary>
+
+
+    /// <summary>
+    /// Text and icons scale on separate axes; everything structural is derived
+    /// from whichever of the two drives it. A row has to fit the taller of its
+    /// label and its thumbnail, so its height cannot be a third free setting —
+    /// it would only ever be set wrong.
+    /// </summary>
+    /// <summary>
+    /// Application-level defaults, used by everything outside a pane — the
+    /// sidebar, the status bar, the properties window. Each pane overrides
+    /// these with its own dictionary via PaneScale.
+    /// </summary>
+    private void ApplyScales(double fontScale, double iconScale)
+    {
+        var target = Application.Current?.Resources ?? Resources;
+
+        foreach (var (key, value) in PaneScale.Compute(fontScale, iconScale))
+            target[key] = value;
+    }
+
+    /// <summary>
+    /// Modal, unlike properties: a rename changes the very listing behind it,
+    /// so letting the window sit open over a view that is mutating underneath
+    /// would show a plan built from names that no longer exist.
+    /// </summary>
+    private void ShowBatchRename()
+    {
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var entries = pane.Selection.Count > 0
+            ? pane.Selection.ToList()
+            : pane.SelectedEntry is { } one ? [one]
+            : new List<FileEntry>();
+
+        if (entries.Count == 0)
+        {
+            pane.Status = "select something to rename first";
+            return;
+        }
+
+        var model = new BatchRenameViewModel(entries,
+            (entry, name) => pane.RenameAsync(entry, name));
+
+        new BatchRenameWindow(model).ShowDialog(this);
+    }
+
+    /// <summary>
+    /// Non-modal on purpose: you frequently want to compare two files, and a
+    /// modal dialog makes that impossible without closing it first.
+    /// </summary>
+    /// <summary>
+    /// Saving swaps AppSettings.Current and writes the file. Most of what the
+    /// Startup page controls only means anything at launch, so it is applied
+    /// then rather than re-run here — except the title bar, which is visible
+    /// right now and would otherwise look broken until a restart.
+    /// </summary>
+    private void ShowSettings()
+    {
+        var model = new SettingsViewModel(AppSettings.Current, _defaultFileManager);
+        var window = new SettingsWindow(model);
+
+        window.Closed += (_, _) =>
+        {
+            if (!model.Saved) return;
+
+            AppSettings.Apply(model.Result);
+            _settingsStore.Save(model.Result);
+
+            // The font lives in the theme resources, and ThemeApplier is the
+            // only thing that writes them — so a saved font does nothing until
+            // this runs. It was called at startup and on a Plasma scheme change
+            // and nowhere else, which is why changing the font appeared to do
+            // nothing at all.
+            ThemeApplier.Apply(this, _theme?.Read());
+
+            // Icon spacing lands in the SAME kind of place — a resource that
+            // only the markup reads — so it needs the same treatment. Without
+            // this the setting saves, the file records it, and absolutely
+            // nothing moves until the next restart, which is precisely how the
+            // font setting managed to look broken for weeks.
+            ApplyScales(_shell.FontScale, _shell.IconScale);
+
+            // Most settings are read at the moment they matter. Sorting and the
+            // status bar are not — a listing already on screen was ordered under
+            // the old rule, and a visibility binding needs telling.
+            _shell.OnSettingsChanged();
+
+            Title = model.Result.Startup.ShowFullPathInTitleBar
+                    && _shell.ActiveTab is { } pane
+                ? $"{pane.CurrentPath} — Vaktari"
+                : "Vaktari";
+        };
+
+        window.ShowDialog(this);
+    }
+
+    private void ShowProperties()
+    {
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var paths = pane.Selection.Count > 0
+            ? pane.Selection.Select(x => x.FullPath).ToList()
+            : pane.SelectedEntry is { } one ? [one.FullPath]
+            : new List<string> { pane.CurrentPath };
+
+        if (paths.Count == 0) return;
+
+        // **The desktop's own dialog wins where it has one.** On Windows that
+        // sheet carries Security, Details and the Unblock checkbox, and hosts
+        // the pages other applications add to the shell — none of which this
+        // application can reproduce, and all of which are why somebody opens
+        // properties there.
+        //
+        // One path only. The shell has SHMultiFileProperties for a selection,
+        // but it wants an ITEMIDLIST array rather than paths and shows a
+        // reduced sheet; a multi-select falls through to Vaktari's window,
+        // which handles several items properly already.
+        if (paths.Count == 1 && _properties.ShowSystemDialog(paths[0])) return;
+
+        // Theme and metrics are application-scoped, so this inherits them.
+        new PropertiesWindow(new PropertiesViewModel(_properties, paths, _accessEditor)).Show(this);
+    }
+
+    /// <summary>
+    /// Feeds the group its own width, which is what decides whether the details
+    /// panel fits.
+    ///
+    /// Measured rather than derived from the listing: the listing's width already
+    /// excludes the panel when the panel is shown, so testing it would have been
+    /// circular — and adding the panel's width back depended on knowing whether
+    /// it was shown, which is the question.
+    /// </summary>
+    private void OnGroupSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is Control { DataContext: PaneGroupViewModel group })
+            group.GroupWidth = e.NewSize.Width;
+    }
+
+    /// <summary>Feeds the pane its own width so columns can drop out in
+    /// priority order rather than being squeezed.</summary>
+    private void OnListSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is Control { DataContext: PaneViewModel pane })
+            pane.ViewportWidth = e.NewSize.Width;
+    }
+
+    // ---- drag and drop -------------------------------------------------
+
+    // ---- rubber-band selection --------------------------------------------
+
+    /// <summary>The list a band is being drawn in, or null when none is.</summary>
+    private ListBox? _bandList;
+
+    /// <summary>Where the drag began, in the overlay's coordinates.</summary>
+    private Point _bandOrigin;
+
+    /// <summary>The band as last drawn, so the scroll timer can re-test against
+    /// it without a pointer event.</summary>
+    private Rect _bandRect;
+
+    /// <summary>Ctrl or Shift was held, so the band ADDS to the selection.</summary>
+    private bool _bandAdditive;
+
+    /// <summary>
+    /// The selection as it stood when an additive band began.
+    ///
+    /// Snapshotted rather than read live, because the band rewrites the
+    /// selection on every move — without a fixed baseline, shrinking the
+    /// rectangle could not give back what it had already taken.
+    /// Null until the band actually starts, so a click that never moves leaves
+    /// the selection alone.
+    /// </summary>
+    private List<object>? _bandKept;
+
+    private Point _dragOrigin;
+    private PaneViewModel? _dragSource;
+    private bool _dragging;
+
+    // The press that began the gesture, held until the move threshold is
+    // crossed.
+    //
+    // This looks like retaining event args past their handler, and it is — but
+    // DragDrop.DoDragDropAsync takes PointerPressedEventArgs specifically, not
+    // the PointerEventArgs the move handler receives, so a drag cannot be
+    // started from the move without it. Starting from the press instead would
+    // mean no movement threshold, and every click on a row would begin a drag.
+    // The alternative is worse than the constraint.
+    private PointerPressedEventArgs? _dragTrigger;
+
+    /// <summary>
+    /// True while a drag that started inside Vaktari is in flight. Dragging within
+    /// a file manager conventionally means move; dragging in from another
+    /// application means copy. Ctrl and Shift override either way.
+    /// </summary>
+    private bool _internalDrag;
+
+    /// <summary>Walks up from whatever was hit to the pane that owns it.</summary>
+    private static PaneViewModel? PaneAt(object? source)
+    {
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            if (visual is Control { DataContext: PaneViewModel pane }) return pane;
+        }
+
+        return null;
+    }
+
+    /// <summary>The folder row under the pointer, if the drop should go into it
+    /// rather than into the directory being listed.</summary>
+    private static string? FolderRowAt(object? source)
+    {
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            if (visual is Control { DataContext: FileEntry { IsDirectory: true } entry })
+                return entry.FullPath;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Accumulated wheel travel. A mouse notch is a whole 1.0, but a trackpad
+    /// sends a stream of fractions — stepping on each one would race from
+    /// smallest to largest in a single swipe.
+    /// </summary>
+    private double _zoomTravel;
+
+    private void OnWheelAnywhere(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.Delta.Y == 0) return;
+
+        // Claimed even when the accumulator has not tripped yet: releasing it
+        // would scroll the list mid-zoom.
+        e.Handled = true;
+
+        // Direction reversal starts over, so a small overshoot does not need to
+        // be unwound before the other direction responds.
+        if (Math.Sign(e.Delta.Y) != Math.Sign(_zoomTravel)) _zoomTravel = 0;
+
+        _zoomTravel += e.Delta.Y;
+
+        while (Math.Abs(_zoomTravel) >= 1.0)
+        {
+            var up = _zoomTravel > 0;
+            _zoomTravel -= up ? 1.0 : -1.0;
+
+            // The pane under the pointer, not the active one: reaching over to
+            // scale the other side without clicking into it first is the whole
+            // reason the wheel gesture is nicer than the buttons.
+            var pane = PaneAt(e.Source) ?? _shell.ActiveTab;
+
+            // Shift narrows it to the icons, which is the axis people mean when
+            // they say "zoom" — the labels usually want to stay put.
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                _shell.ScalePane(pane, 0, up ? 0.15 : -0.15);
+            else
+                _shell.ScalePane(pane, up ? 0.1 : -0.1, up ? 0.15 : -0.15);
+        }
+    }
+
+    private void OnPointerMovedAnywhere(object? sender, PointerEventArgs e)
+    {
+        if (_bandList is not null)
+        {
+            UpdateBand(e);
+            return;
+        }
+
+        if (_dragging || _dragSource is null) return;
+
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            _dragSource = null;
+            _dragTrigger = null;
+            return;
+        }
+
+        // A threshold, or every click on a row would begin a drag and the list
+        // would become impossible to select in.
+        var position = e.GetPosition(this);
+        if (Math.Abs(position.X - _dragOrigin.X) < 6 &&
+            Math.Abs(position.Y - _dragOrigin.Y) < 6) return;
+
+        if (_dragTrigger is not null) _ = BeginDragAsync(_dragSource, _dragTrigger);
+    }
+
+    private void UpdateBand(PointerEventArgs e)
+    {
+        if (_bandList is not ListBox list) return;
+
+        // The button can be released outside the window, where no release event
+        // arrives — so the live button state is what ends the band, not just the
+        // event that ought to have come.
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            EndBand();
+            return;
+        }
+
+        var here = e.GetPosition(BandLayer);
+
+        var rect = new Rect(
+            Math.Min(_bandOrigin.X, here.X), Math.Min(_bandOrigin.Y, here.Y),
+            Math.Abs(here.X - _bandOrigin.X), Math.Abs(here.Y - _bandOrigin.Y));
+
+        // The same six-pixel threshold the file drag uses. Below it this is a
+        // click that happened to wobble, and rewriting the selection would make
+        // clicking empty space feel unreliable.
+        if (rect.Width < 6 && rect.Height < 6) return;
+
+        _bandKept ??= _bandAdditive
+            ? list.SelectedItems?.Cast<object>().ToList() ?? []
+            : [];
+
+        AutoScroll(list, here);
+
+        Canvas.SetLeft(SelectionBand, rect.X);
+        Canvas.SetTop(SelectionBand, rect.Y);
+        SelectionBand.Width = rect.Width;
+        SelectionBand.Height = rect.Height;
+        SelectionBand.IsVisible = true;
+
+        _bandRect = rect;
+
+        ApplyBand(list, rect);
+    }
+
+    /// <summary>
+    /// Selects every realized row the rectangle touches.
+    ///
+    /// **Realized rows only, and that is not a limitation to apologise for:** the
+    /// listings virtualize, so a row outside the viewport has no container and no
+    /// bounds. A band can only be drawn across what is on screen anyway.
+    /// </summary>
+    private void ApplyBand(ListBox list, Rect rect)
+    {
+        if (list.SelectedItems is not { } selected) return;
+
+        var wanted = new List<object>(_bandKept ?? []);
+
+        foreach (var container in Rows(list))
+        {
+            if (container.DataContext is not { } item) continue;
+
+            // TranslatePoint rather than a stored offset: rows move as the list
+            // scrolls, and a cached position would select the wrong ones the
+            // moment it did.
+            if (container.TranslatePoint(default, BandLayer) is not { } origin) continue;
+
+            var bounds = new Rect(origin, container.Bounds.Size);
+
+            if (bounds.Intersects(rect) && !wanted.Contains(item)) wanted.Add(item);
+        }
+
+        // Diffed rather than cleared and refilled. Every change to this
+        // collection refreshes the details panel and the status line, and a
+        // clear-then-add would do that twice per pointer move.
+        for (var i = selected.Count - 1; i >= 0; i--)
+            if (selected[i] is { } existing && !wanted.Contains(existing))
+                selected.RemoveAt(i);
+
+        foreach (var item in wanted)
+            if (!selected.Contains(item))
+                selected.Add(item);
+    }
+
+    /// <summary>
+    /// Every ListBoxItem beneath a control.
+    ///
+    /// Written with `GetVisualChildren` — the sibling of the `GetVisualParent`
+    /// this file already relies on — rather than an items-control API whose shape
+    /// varies between Avalonia versions.
+    /// </summary>
+    /// <summary>
+    /// The listing the user is actually looking at: visible, showing the active
+    /// tab, and able to hold more than one selection.
+    ///
+    /// Three layout lists exist per pane and all stay alive when hidden, so
+    /// identity alone is not enough — `IsVisible` is what distinguishes them,
+    /// and it is bound to the view mode.
+    /// </summary>
+    /// <summary>
+    /// Pages the compact listing sideways.
+    ///
+    /// **On the TUNNEL phase, because something else was claiming these keys and
+    /// doing nothing with them.** Compact disables vertical scrolling, so the
+    /// ScrollViewer cannot act on PageUp/PageDown — yet mapping them inside the
+    /// panel changed nothing, so the key was never reaching it. Tunnelling
+    /// settles it without needing to know who was eating them: nothing
+    /// downstream gets the chance.
+    ///
+    /// **Moves the VIEW, not the selection**, which is what Page already does in
+    /// the grid — there the ScrollViewer pages the viewport and leaves the cursor
+    /// where it was, and the user has said that feels right. Compact behaving
+    /// differently would be the odd one out.
+    /// </summary>
+    private bool PageCompactListing(KeyEventArgs e)
+    {
+        if (e.Key is not (Key.PageUp or Key.PageDown)) return false;
+        if (e.KeyModifiers != KeyModifiers.None) return false;
+
+        // Never while typing — a path box or the rename prompt owns its own keys.
+        if (FocusManager?.GetFocusedElement() is TextBox) return false;
+
+        if (_shell.ActiveTab is not { View: ViewMode.Compact }) return false;
+        if (ActiveListing() is not { } list || Scroller(list) is not { } scroller)
+            return false;
+
+        // A viewport less a sliver, so the column you were reading stays on
+        // screen as an anchor rather than vanishing off the edge.
+        var page = Math.Max(1, scroller.Viewport.Width - 48);
+        var step = e.Key == Key.PageDown ? page : -page;
+
+        var limit = Math.Max(0, scroller.Extent.Width - scroller.Viewport.Width);
+
+        scroller.Offset = scroller.Offset.WithX(
+            Math.Clamp(scroller.Offset.X + step, 0, limit));
+
+        // Claimed either way. At the end of the extent the key has still been
+        // dealt with, and letting it fall through hands it back to whatever was
+        // silently swallowing it before.
+        e.Handled = true;
+        return true;
+    }
+
+    private ListBox? ActiveListing()
+    {
+        foreach (var list in Lists(this))
+            if (list.IsVisible
+                && ReferenceEquals(list.DataContext, _shell.ActiveTab)
+                && list.SelectionMode.HasFlag(SelectionMode.Multiple))
+                return list;
+
+        return null;
+    }
+
+    private static IEnumerable<ListBox> Lists(Visual root)
+    {
+        foreach (var child in root.GetVisualChildren())
+        {
+            if (child is ListBox list) yield return list;
+
+            foreach (var nested in Lists(child)) yield return nested;
+        }
+    }
+
+    private static IEnumerable<ListBoxItem> Rows(Visual root)
+    {
+        foreach (var child in root.GetVisualChildren())
+        {
+            if (child is ListBoxItem row) yield return row;
+
+            foreach (var nested in Rows(child)) yield return nested;
+        }
+    }
+
+    /// <summary>How close to an edge starts scrolling, and how fast.</summary>
+    private const double EdgeZone = 28;
+
+    private DispatcherTimer? _bandScroll;
+    private double _bandScrollBy;
+
+    /// <summary>
+    /// Scrolls the listing while the pointer sits near its top or bottom edge.
+    ///
+    /// **A timer, not a nudge per pointer-move.** Move events only arrive while
+    /// the pointer is moving, so scrolling on them alone means the band stops the
+    /// instant you hold still at the edge — which is exactly when you want it to
+    /// keep going.
+    /// </summary>
+    private void AutoScroll(ListBox list, Point pointer)
+    {
+        if (Scroller(list) is not { } scroller)
+        {
+            StopBandScroll();
+            return;
+        }
+
+        // The list's own box, in the overlay's coordinates — the band and the
+        // pointer are already measured there.
+        if (list.TranslatePoint(default, BandLayer) is not { } origin)
+        {
+            StopBandScroll();
+            return;
+        }
+
+        var top = origin.Y;
+        var bottom = origin.Y + list.Bounds.Height;
+
+        // Proportional to how far into the zone the pointer is, so easing toward
+        // the edge eases the speed rather than switching it on.
+        _bandScrollBy =
+            pointer.Y < top + EdgeZone ? -(EdgeZone - (pointer.Y - top)) / EdgeZone * 24
+            : pointer.Y > bottom - EdgeZone ? (EdgeZone - (bottom - pointer.Y)) / EdgeZone * 24
+            : 0;
+
+        if (Math.Abs(_bandScrollBy) < 0.5) { StopBandScroll(); return; }
+
+        if (_bandScroll is not null) return;
+
+        _bandScroll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _bandScroll.Tick += (_, _) =>
+        {
+            if (_bandList is not { } live || Scroller(live) is not { } view)
+            {
+                StopBandScroll();
+                return;
+            }
+
+            var next = Math.Clamp(view.Offset.Y + _bandScrollBy, 0,
+                                  Math.Max(0, view.Extent.Height - view.Viewport.Height));
+
+            if (Math.Abs(next - view.Offset.Y) < 0.01) return;
+
+            view.Offset = view.Offset.WithY(next);
+
+            // The rows under the band have moved, so the selection has to be
+            // recomputed against the rectangle as it now stands.
+            ApplyBand(live, _bandRect);
+        };
+
+        _bandScroll.Start();
+    }
+
+    private void StopBandScroll()
+    {
+        _bandScroll?.Stop();
+        _bandScroll = null;
+    }
+
+    private static ScrollViewer? Scroller(Visual root)
+    {
+        foreach (var child in root.GetVisualChildren())
+        {
+            if (child is ScrollViewer found) return found;
+
+            if (Scroller(child) is { } nested) return nested;
+        }
+
+        return null;
+    }
+
+    private void EndBand()
+    {
+        StopBandScroll();
+
+        _bandList = null;
+        _bandKept = null;
+        SelectionBand.IsVisible = false;
+    }
+
+    private async Task BeginDragAsync(PaneViewModel pane, PointerPressedEventArgs trigger)
+    {
+        var paths = pane.Selection.Count > 0
+            ? pane.Selection.Select(x => x.FullPath).ToList()
+            : pane.SelectedEntry is { } one ? [one.FullPath] : [];
+
+        if (paths.Count == 0) return;
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+
+        _dragging = true;
+        _internalDrag = true;
+
+        try
+        {
+            // DataFormat.File is what other applications actually read; Avalonia
+            // serialises it to text/uri-list on X11, the same route the
+            // clipboard takes.
+            var data = new DataTransfer();
+
+            foreach (var path in paths)
+            {
+                IStorageItem? item = Directory.Exists(path)
+                    ? await storage.TryGetFolderFromPathAsync(path)
+                    : await storage.TryGetFileFromPathAsync(path);
+
+                if (item is not null) data.Add(DataTransferItem.CreateFile(item));
+            }
+
+            if (data.Items.Count == 0) return;
+
+            // Not disposed — the drag system takes ownership.
+            await DragDrop.DoDragDropAsync(
+                trigger, data, DragDropEffects.Copy | DragDropEffects.Move);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[vaktari] drag failed: {ex.Message}");
+        }
+        finally
+        {
+            _dragging = false;
+            _internalDrag = false;
+            _dragSource = null;
+            _dragTrigger = null;
+        }
+    }
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        e.Handled = true;
+
+        if (!e.DataTransfer.Formats.Contains(DataFormat.File) || PaneAt(e.Source) is not { } pane)
+        {
+            e.DragEffects = DragDropEffects.None;
+            HighlightDropTarget(null);
+            return;
+        }
+
+        var destination = FolderRowAt(e.Source) ?? pane.CurrentPath;
+
+        // Refuse a drop that would achieve nothing, so the cursor says so
+        // before the click rather than a duplicate appearing after it.
+        if (Meaningful(e.DataTransfer, destination).Count == 0)
+        {
+            e.DragEffects = DragDropEffects.None;
+            HighlightDropTarget(null);
+            return;
+        }
+
+        e.DragEffects = EffectFor(e.KeyModifiers);
+        HighlightDropTarget(pane);
+    }
+
+    /// <summary>
+    /// The dragged paths that would actually go somewhere. A file dropped into
+    /// the folder it already lives in is a no-op, whether copying or moving —
+    /// the previous guard only applied to copies, so a move produced "name (1)".
+    /// </summary>
+    private static List<string> Meaningful(IDataTransfer data, string destination)
+    {
+        var paths = (data.TryGetFiles() ?? [])
+            .Select(f => f.TryGetLocalPath())
+            .OfType<string>()
+            .ToList();
+
+        paths.RemoveAll(p =>
+            p == destination ||
+            string.Equals(Path.GetDirectoryName(p), destination, StringComparison.Ordinal));
+
+        return paths;
+    }
+
+    private DragDropEffects EffectFor(KeyModifiers modifiers)
+    {
+        // Explicit modifiers win; otherwise moving within the app and copying
+        // from outside it is what every desktop file manager does.
+        if (modifiers.HasFlag(KeyModifiers.Control)) return DragDropEffects.Copy;
+        if (modifiers.HasFlag(KeyModifiers.Shift)) return DragDropEffects.Move;
+
+        return _internalDrag ? DragDropEffects.Move : DragDropEffects.Copy;
+    }
+
+    private void OnDragLeave(object? sender, DragEventArgs e) => HighlightDropTarget(null);
+
+    private void HighlightDropTarget(PaneViewModel? pane)
+    {
+        foreach (var group in new[] { _shell.Left, _shell.Right })
+        {
+            if (group is null) continue;
+            foreach (var tab in group.Tabs) tab.IsDropTarget = ReferenceEquals(tab, pane);
+        }
+    }
+
+    private void OnDrop(object? sender, DragEventArgs e)
+    {
+        HighlightDropTarget(null);
+
+        if (PaneAt(e.Source) is not { } pane) return;
+        if (!e.DataTransfer.Formats.Contains(DataFormat.File)) return;
+
+        // Dropping onto a folder row means into that folder, not into the
+        // directory being listed — that is what the pointer was over.
+        var target = FolderRowAt(e.Source);
+        var destination = target ?? pane.CurrentPath;
+
+        var paths = Meaningful(e.DataTransfer, destination);
+        if (paths.Count == 0) return;
+
+        var move = EffectFor(e.KeyModifiers) == DragDropEffects.Move;
+
+        if (target is not null)
+            pane.PasteIntoFolder(target, paths, move);
+        else
+            pane.PasteInto(paths, move);
+
+        e.Handled = true;
+    }
+
+    // ---- geometry ------------------------------------------------------
+
+    private void ApplyGeometry(SessionState? state)
+    {
+        if (state?.Windows.FirstOrDefault() is not { } w) return;
+
+        if (w.Width > 200) Width = w.Width;
+        if (w.Height > 200) Height = w.Height;
+
+        if (w.X != 0 || w.Y != 0)
+            Position = new PixelPoint((int)w.X, (int)w.Y);
+
+        if (w.IsMaximized)
+            WindowState = Avalonia.Controls.WindowState.Maximized;
+    }
+
+    private WindowSession CaptureGeometry()
+    {
+        var maximized = WindowState == Avalonia.Controls.WindowState.Maximized;
+
+        return new WindowSession
+        {
+            // While maximized the live bounds are the screen, not the size to
+            // return to, so the stored values are left alone.
+            X = maximized ? 0 : Position.X,
+            Y = maximized ? 0 : Position.Y,
+            Width = maximized ? 1000 : Width,
+            Height = maximized ? 680 : Height,
+            IsMaximized = maximized,
+        };
+    }
+
+    /// <summary>
+    /// Opens folders in tabs. Files resolve to the folder holding them, because
+    /// "open containing folder" is the request the desktop actually sends.
+    /// </summary>
+    private void OpenPaths(IReadOnlyList<string> paths, bool activate)
+    {
+        foreach (var raw in paths)
+        {
+            var path = raw;
+
+            if (File.Exists(path) && Path.GetDirectoryName(path) is { Length: > 0 } parent)
+                path = parent;
+
+            if (!Directory.Exists(path)) continue;
+
+            _shell.OpenInNewTab(path);
+        }
+
+        if (!activate) return;
+
+        // Raise the existing window: the user asked to see a folder, and
+        // silently loading it behind whatever they were doing is not that.
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+
+        Activate();
+    }
+
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_closeApproved) return;
+
+        // Asked before anything is torn down, and only when there is something
+        // to lose. Off by default: the session is restored on next launch, so
+        // closing a window full of tabs is not actually destructive here — which
+        // is exactly why this is a preference rather than the behaviour.
+        if (AppSettings.Current.General.ConfirmClosingMultipleTabs && CountOpenTabs() > 1)
+        {
+            e.Cancel = true;
+
+            var confirmed = await ConfirmCloseAsync();
+            if (!confirmed) return;
+        }
+
+        // Cancel, flush, then close for real. Awaiting inside an async void
+        // handler does not hold the window open — the process can otherwise
+        // exit with the write still in flight.
+        e.Cancel = true;
+
+        // Two independent concerns, so two try blocks. They were one, sequenced
+        // shares-first: a throw from StopAllSharesAsync then skipped the flush
+        // AND the dispose, and the single catch still printed "session flush
+        // failed" for a flush that had never been attempted.
+        //
+        // Session goes first now. It is the one whose loss the user would
+        // actually notice, and it cannot fail because of a subprocess.
+        try
+        {
+            _folderViews?.Flush();
+            _recents?.Flush();
+            await _store.FlushAsync(CancellationToken.None);
+            await _store.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[vaktari] session flush failed: {ex.Message}");
+        }
+
+        try
+        {
+            // Servers we started are ours to stop; a share outliving the window
+            // would keep a folder on the network with nothing showing it.
+            await _shell.StopAllSharesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[vaktari] stopping shares failed: {ex.Message}");
+        }
+
+        _closeApproved = true;
+        Close();
+    }
+
+    /// <summary>
+    /// Startup preferences that act on the window once it exists. Separate from
+    /// the restore decision above because these apply whether or not a session
+    /// was restored.
+    /// </summary>
+    private void ApplyStartupPreferences(StartupSettings startup)
+    {
+        Title = startup.ShowFullPathInTitleBar && _shell.ActiveTab is { } titled
+            ? $"{titled.CurrentPath} — Vaktari"
+            : "Vaktari";
+
+        if (startup.BeginInSplitView && !_shell.IsSplit)
+            _shell.ToggleSplitCommand.Execute(null);
+
+        if (_shell.ActiveTab is not { } pane) return;
+
+        if (startup.ShowFilterBar) pane.IsFilterVisible = true;
+
+        // Last, because BeginEditPath takes focus and anything set afterwards
+        // would be fighting it for the caret.
+        if (startup.LocationBarEditable) pane.BeginEditPath();
+    }
+
+    private int CountOpenTabs()
+    {
+        var total = _shell.Left.Tabs.Count;
+        if (_shell.Right is { } right) total += right.Tabs.Count;
+
+        return total;
+    }
+
+    /// <summary>
+    /// A real dialog rather than the prompt bar: the prompt bar lives inside
+    /// the window being closed, and driving a close decision from a control
+    /// that is about to be destroyed is the shape of bug this project has
+    /// already paid for once with Shift+Delete.
+    /// </summary>
+    private async Task<bool> ConfirmCloseAsync()
+    {
+        var dialog = new Window
+        {
+            Title = "Close Vaktari",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+        };
+
+        AppIcon.Apply(dialog);
+
+        var result = false;
+
+        var close = new Button { Content = "close anyway", Padding = new Thickness(14, 4) };
+        var cancel = new Button { Content = "cancel", Padding = new Thickness(14, 4) };
+
+        close.Click += (_, _) => { result = true; dialog.Close(); };
+        cancel.Click += (_, _) => dialog.Close();
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(18),
+            Spacing = 14,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"{CountOpenTabs()} tabs are open. Close anyway?",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { cancel, close },
+                },
+            },
+        };
+
+        // Focused so Enter and Space reach a real button rather than a
+        // hand-rolled key path.
+        cancel.Focus();
+
+        await dialog.ShowDialog(this);
+
+        // Deliberately does NOT close. Calling Close() here would re-enter
+        // OnClosing with _closeApproved still false and confirm forever; the
+        // caller falls through to the existing flush-then-close path instead.
+        return result;
+    }
+
+    /// <summary>
+    /// Trash expiry, at startup and then hourly.
+    ///
+    /// Hourly rather than on a shorter tick because nothing here is urgent —
+    /// a trash that is one hour over its age limit is not a problem — and
+    /// because each sweep walks the trash to size it, which is real work to be
+    /// doing behind someone's back.
+    /// </summary>
+    private void StartTrashMaintenance(ITrashMaintenance? maintenance)
+    {
+        if (maintenance is null) return;
+
+        _trashMaintenance = maintenance;
+
+        // Assigned HERE, not beside the other providers in the constructor:
+        // this field is null until this method runs, so the earlier assignment
+        // handed the pane a null and the Trash listing would have been silently
+        // empty forever. Same shape as the font setting, which read its value
+        // before the settings load and so never applied one.
+        ViewModels.PaneViewModel.Trash = maintenance;
+
+        _ = SweepTrashAsync();
+
+        _trashTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(1) };
+        _trashTimer.Tick += (_, _) => _ = SweepTrashAsync();
+        _trashTimer.Start();
+    }
+
+    private async Task SweepTrashAsync()
+    {
+        if (_trashMaintenance is not { } maintenance) return;
+
+        try
+        {
+            var policy = AppSettings.Current.Trash;
+
+            var result = await maintenance.SweepAsync(policy, CancellationToken.None);
+
+            // ALWAYS logged, including when it did nothing.
+            //
+            // It used to speak only when it removed something, so silence meant
+            // three different things — the feature is off, it ran and matched
+            // nothing, or it never ran at all. For the one feature that deletes
+            // files unattended, "I ran and did nothing" is exactly as important
+            // as "I removed four", and being unable to tell them apart cost a
+            // test round trip.
+            var state = !policy.DeleteOldFiles && !policy.LimitSize
+                ? "disabled"
+                : $"age={(policy.DeleteOldFiles ? $"{policy.DeleteAfterDays}d" : "off")} "
+                  + $"size={(policy.LimitSize ? $"{policy.MaximumPercentOfDisk}%" : "off")} "
+                  // The field that decides whether it DELETES. Leaving it out
+                  // made "removed 0 · OVER LIMIT" ambiguous between "set to warn"
+                  // and "set to delete and failing to", which is the whole
+                  // question this line exists to answer.
+                  + $"when={policy.WhenLimitReached}";
+
+            var freed = ByteSize.Format(result.BytesFreed);
+
+            Console.Error.WriteLine(
+                $"[vaktari] trash: {state} · removed {result.Removed} · "
+                + $"freed {freed} · skipped {result.Skipped} undated"
+                + (result.OverLimit ? " · OVER LIMIT" : ""));
+
+            if (result.Removed > 0)
+                _shell.OperationStatus = $"{Naming.BinName}: removed {result.Removed} item(s), freed {freed}";
+            else if (result.OverLimit)
+                _shell.OperationStatus = $"{Naming.BinTitle} is over its size limit";
+        }
+        catch (Exception ex)
+        {
+            // A failed sweep must never take the window with it.
+            Console.Error.WriteLine($"[vaktari] trash sweep failed: {ex.Message}");
+        }
+    }
+
+    // ---- per-pane wiring -----------------------------------------------
+
+    private void WirePane(PaneViewModel pane)
+    {
+        pane.RenameRequested -= OnRenameRequested;
+        pane.RenameRequested += OnRenameRequested;
+
+        pane.PropertyChanged -= OnPaneFilterToggled;
+        pane.PropertyChanged += OnPaneFilterToggled;
+    }
+
+    /// <summary>Focus now happens through FocusBehavior.FocusOnVisible in the
+    /// markup, since there is no field to focus from here.</summary>
+    private void OnPaneFilterToggled(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(PaneViewModel.IsFilterVisible)) return;
+        if (sender is not PaneViewModel pane || !pane.IsFilterVisible) return;
+
+
+    }
+
+    // ---- inline prompt -------------------------------------------------
+
+    private enum PromptMode { None, Rename, ConfirmDelete, ConfirmTrash, ConfirmEmptyTrash, Connect }
+
+    private PromptMode _prompt = PromptMode.None;
+
+    /// <summary>
+    /// Whether a yes/no prompt is open and should own the keyboard.
+    ///
+    /// **One predicate, because the list was written out by hand and lost a
+    /// member.** The keyboard check named ConfirmDelete and ConfirmEmptyTrash
+    /// and not ConfirmTrash, so with "confirm move to trash" turned on, Enter at
+    /// the trash prompt fell straight through to the ordinary key handling
+    /// below — where Enter means OPEN. Answering "yes, bin these" launched them
+    /// instead, and Escape cleared the filter rather than cancelling.
+    ///
+    /// It went unseen because the setting is off by default, so the prompt it
+    /// breaks is one most people never see. The three text-entry modes are
+    /// deliberately excluded: those are guarded by the focused-TextBox rule
+    /// further down, which is a different question — whether something is being
+    /// typed into, not whether a decision is pending.
+    /// </summary>
+    private bool IsConfirming => _prompt
+        is PromptMode.ConfirmDelete
+        or PromptMode.ConfirmTrash
+        or PromptMode.ConfirmEmptyTrash;
+    private FileEntry _renameTarget;
+
+    private void OnRenameRequested(object? sender, FileEntry entry)
+    {
+        if (PromptBar is null || PromptInput is null) return;
+
+        _prompt = PromptMode.Rename;
+        _renameTarget = entry;
+
+        PromptLabel.Text = "rename to";
+        PromptInput.Text = entry.Name;
+        PromptInput.IsVisible = true;
+        PromptConfirm.Content = "rename";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "enter to confirm · esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptInput.Focus();
+        PromptInput.SelectAll();
+    }
+
+    /// <summary>
+    /// The single place a confirmed prompt is acted on, so the button and the
+    /// keyboard cannot drift apart.
+    /// </summary>
+    private void ConfirmPrompt()
+    {
+        var mode = _prompt;
+        var target = _shell.ActiveTab;
+
+        // Read before closing: the action must not depend on UI state that the
+        // closing itself tears down.
+        var name = PromptInput?.Text ?? "";
+        var entry = _renameTarget;
+
+        ClosePrompt();
+
+        switch (mode)
+        {
+            case PromptMode.ConfirmDelete:
+                target?.DeleteSelectedCommand.Execute(null);
+                break;
+
+            case PromptMode.ConfirmTrash:
+                target?.TrashSelectedCommand.Execute(null);
+                break;
+
+            case PromptMode.ConfirmEmptyTrash:
+                _ = target?.EmptyTrashAsync();
+                break;
+
+            case PromptMode.Rename when !string.IsNullOrWhiteSpace(name) && name != entry.Name:
+                _ = target?.RenameAsync(entry, name);
+                break;
+
+            case PromptMode.Connect when !string.IsNullOrWhiteSpace(name):
+                _ = _shell.ConnectToAsync(name.Trim());
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Reuses the prompt bar rather than adding a dialog: it already handles
+    /// focus, Enter and Escape, and a server address is just another line of
+    /// text to type.
+    /// </summary>
+    private void OnConnectRequested(object? sender, EventArgs e)
+    {
+        if (PromptBar is null || PromptInput is null) return;
+
+        _prompt = PromptMode.Connect;
+
+        PromptLabel.Text = "connect to";
+
+        // From the mounter, not from here: gio takes smb:// and the Windows
+        // redirector takes \\server\share, and offering the wrong one is worse
+        // than offering nothing.
+        PromptInput.Text = _shell.ConnectPrefill;
+        PromptInput.IsVisible = true;
+        PromptConfirm.Content = "connect";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = $"{_shell.ConnectHint} — esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptInput.Focus();
+
+        // Caret at the end, not a selection: the scheme is a starting point to
+        // type after, not something to overwrite.
+        PromptInput.CaretIndex = PromptInput.Text.Length;
+    }
+
+
+    /// <summary>
+    /// Emptying the trash is the only action here with no undo AND no per-item
+    /// review, so unlike trashing it is never unprompted — that is not a
+    /// preference.
+    /// </summary>
+    /// <summary>
+    /// Widens the window so a details panel has room.
+    ///
+    /// **The window manager has the final say and that is deliberate.** Asking
+    /// Avalonia which screen this is on and clamping to its working area would
+    /// mean an API this project has not verified, and getting it wrong is worse
+    /// than letting the WM do what it already does correctly. If the screen
+    /// cannot accommodate the request the window simply stops growing, and the
+    /// panel stays hidden — `IsInfoVisible` is still set, so it appears the
+    /// moment there is room.
+    /// </summary>
+    private void GrowToFit(double by)
+    {
+        if (by <= 0) return;
+
+        // Maximised or full-screen windows cannot usefully be widened, and
+        // trying would either do nothing or un-maximise them, which is a
+        // surprising thing for a panel toggle to do.
+        if (WindowState != WindowState.Normal) return;
+
+        // Only the FIRST grow records the original. A second panel opening in a
+        // split must not overwrite it, or closing both would restore to the
+        // already-grown width instead of the one the user chose.
+        _widthBeforeGrow ??= Width;
+
+        // **The POSITION has to be remembered as well as the width.** Growing
+        // pushes the right edge outward; when that runs past the screen the window
+        // manager shoves the whole window LEFT to keep it visible. Shrinking the
+        // width afterwards pulls the right edge back in but leaves the window
+        // where the WM put it — so it lands well left of where it started, which
+        // is exactly what "shooting to the left" was.
+        _positionBeforeGrow ??= Position;
+
+        Width += Math.Ceiling(by);
+
+        // What we left it at, so a later release can tell whether the user has
+        // resized in the meantime.
+        _grownTo = Width;
+
+        ViewModels.PaneGroupViewModel.PanelDebug($"[vaktari] panel: grew by {Math.Ceiling(by)} to {Width:F0} "
+            + $"(original {_widthBeforeGrow:F0} at {_positionBeforeGrow?.X},"
+            + $"{_positionBeforeGrow?.Y}; now at {Position.X},{Position.Y})");
+    }
+
+    /// <summary>The window's width before any panel grew it, if one did.</summary>
+    private double? _widthBeforeGrow;
+
+    /// <summary>The width this class last set, to detect a manual resize since.</summary>
+    private double _grownTo;
+
+    /// <summary>Where the window sat before any panel grew it.</summary>
+    private PixelPoint? _positionBeforeGrow;
+
+    /// <summary>
+    /// Hands back the width taken for a details panel.
+    ///
+    /// **Refuses if the window is no longer the size we made it.** Someone who
+    /// has dragged the edge since has expressed a preference, and snapping back to
+    /// a width they last saw several actions ago would feel like the application
+    /// fighting them. The recorded width is dropped in that case rather than kept,
+    /// because it no longer describes anything the user would recognise.
+    /// </summary>
+    private void ReleaseGrownWidth()
+    {
+        // Every branch says WHY, because this feature has now taken three rounds
+        // and "nothing happened" has four different causes that look identical.
+        if (_widthBeforeGrow is not { } original)
+        {
+            ViewModels.PaneGroupViewModel.PanelDebug("[vaktari] panel: nothing to give back — the window was never grown");
+            return;
+        }
+
+        var origin = _positionBeforeGrow;
+
+        _widthBeforeGrow = null;
+        _positionBeforeGrow = null;
+
+        if (WindowState != WindowState.Normal)
+        {
+            ViewModels.PaneGroupViewModel.PanelDebug($"[vaktari] panel: not restoring — window is {WindowState}");
+            return;
+        }
+
+        // A pixel of tolerance: the grow rounded up, and layout can settle a
+        // fraction either way.
+        if (Math.Abs(Width - _grownTo) > 1)
+        {
+            ViewModels.PaneGroupViewModel.PanelDebug($"[vaktari] panel: not restoring — width is {Width:F0} but we left "
+                + $"it at {_grownTo:F0}, so it was resized by hand");
+            return;
+        }
+
+        ViewModels.PaneGroupViewModel.PanelDebug($"[vaktari] panel: restoring {Width:F0} -> {original:F0}"
+            + (origin is { } p && p != Position ? $", moving back to {p.X},{p.Y}" : ""));
+
+        // WIDTH FIRST, then position. Narrowing makes the window fit again, so the
+        // move that follows cannot trip the same off-screen correction that caused
+        // the problem — doing it the other way round can bounce it straight back.
+        Width = original;
+
+        if (origin is { } home && home != Position) Position = home;
+    }
+
+    private void AskConfirmEmptyTrash()
+    {
+        if (PromptBar is null) return;
+        if (_shell.ActiveTab is null) return;
+
+        var count = ViewModels.PaneViewModel.Trash?.List().Count ?? 0;
+        if (count == 0) { _shell.ActiveTab.Status = $"{Naming.TheBin} is already empty"; return; }
+
+        _prompt = PromptMode.ConfirmEmptyTrash;
+
+        PromptLabel.Text = $"permanently delete {count:N0} item(s) from {Naming.TheBin}? this cannot be undone";
+        PromptInput.IsVisible = false;
+        PromptConfirm.Content = $"empty {Naming.BinName}";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "esc to cancel";
+        PromptBar.IsVisible = true;
+
+        PromptConfirm.Focus();
+    }
+
+    private void AskConfirmDelete()
+    {
+        if (PromptBar is null) return;
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var count = pane.Selection.Count > 0
+            ? pane.Selection.Count
+            : pane.SelectedEntry is null ? 0 : 1;
+
+        if (count == 0) return;
+
+        _prompt = PromptMode.ConfirmDelete;
+
+        PromptLabel.Text = $"permanently delete {count} item(s)? this cannot be undone";
+        PromptInput.IsVisible = false;
+        PromptConfirm.Content = "delete permanently";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "esc to cancel";
+        PromptBar.IsVisible = true;
+
+        // Focus the button, not the bar: a focused Button takes Enter and Space
+        // itself, which is a route nothing else can swallow.
+        PromptConfirm.Focus();
+    }
+
+    /// <summary>
+    /// Off by default, because trash is reversible and a prompt on a reversible
+    /// action trains people to dismiss prompts. Dolphin offers it, so it is
+    /// here for anyone who wants it.
+    /// </summary>
+    private void AskConfirmTrash()
+    {
+        if (PromptBar is null) return;
+        if (_shell.ActiveTab is not { } pane) return;
+
+        var count = pane.Selection.Count > 0
+            ? pane.Selection.Count
+            : pane.SelectedEntry is null ? 0 : 1;
+
+        if (count == 0) return;
+
+        _prompt = PromptMode.ConfirmTrash;
+
+        PromptLabel.Text = $"move {count} item(s) to {Naming.TheBin}?";
+        PromptInput.IsVisible = false;
+        PromptConfirm.Content = $"move to {Naming.TheBin}";
+        PromptConfirm.IsVisible = true;
+        PromptCancel.IsVisible = true;
+        PromptHint.Text = "esc to cancel";
+        PromptBar.IsVisible = true;
+
+        // Focus the button, for the same reason the delete prompt does: a
+        // focused Button takes Enter and Space itself.
+        PromptConfirm.Focus();
+    }
+
+    private void ClosePrompt()
+    {
+        _prompt = PromptMode.None;
+
+        if (PromptBar is not null) PromptBar.IsVisible = false;
+        if (PromptInput is not null) PromptInput.IsVisible = false;
+        if (PromptConfirm is not null) PromptConfirm.IsVisible = false;
+        if (PromptCancel is not null) PromptCancel.IsVisible = false;
+    }
+
+    private void OnPromptKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_prompt != PromptMode.Rename) return;
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                e.Handled = true;
+                ConfirmPrompt();
+                break;
+
+            case Key.Escape:
+                e.Handled = true;
+                ClosePrompt();
+                break;
+        }
+    }
+
+    // ---- input ---------------------------------------------------------
+
+    /// <summary>
+    /// What the desktop is set to, when it says so. Null means it did not, and
+    /// this application's own default (double) applies. Set from the theme
+    /// palette, which is re-read on startup, on a Plasma change, and on save.
+    /// </summary>
+    public static bool? SystemSingleClick { get; set; }
+
+    /// <summary>
+    /// Single click when the preference says so, or when it defers to a desktop
+    /// that says so.
+    /// </summary>
+    private static bool OpensOnSingleClick
+        => AppSettings.Current.Navigation.OpenItemsWith switch
+        {
+            ActivationClick.Single => true,
+            ActivationClick.Double => false,
+            _ => SystemSingleClick ?? false,
+        };
+
+    private string? _lastTapPath;
+
+    private string? _lastOpenPath;
+    private DateTime _lastOpenAt;
+
+    /// <summary>
+    /// The single place that opens, and it de-duplicates.
+    ///
+    /// TWO routes can each legitimately decide a row was double-clicked, and
+    /// which one fires depends on whether Avalonia's gesture formed — so rather
+    /// than bet on one, both call this and a repeat within the interval is
+    /// dropped. Opening a folder twice is invisible; launching an application
+    /// twice is not.
+    /// </summary>
+    private void TryOpen(FileEntry entry)
+    {
+        var now = DateTime.UtcNow;
+
+        if (_lastOpenPath == entry.FullPath
+            && now - _lastOpenAt < TimeSpan.FromMilliseconds(600))
+            return;
+
+        _lastOpenPath = entry.FullPath;
+        _lastOpenAt = now;
+
+        _ = _shell.ActiveTab?.OpenAsync(entry);
+    }
+
+    /// <summary>
+    /// **Avalonia raises Tapped for the FIRST click and DoubleTapped for the
+    /// second — it does not raise Tapped twice.** A previous attempt here
+    /// counted two taps and therefore never fired when the gesture worked
+    /// properly.
+    ///
+    /// So this is only the FALLBACK: it catches the case where the gesture does
+    /// not form because the row's visual changed between clicks (selection
+    /// swaps a ContentPresenter for a Border, which is why clicking the empty
+    /// part of a line used to take four clicks while the icon and filename
+    /// worked). DoubleTapped remains the normal path.
+    /// </summary>
+    private void OnTapped(object? sender, TappedEventArgs e)
+    {
+        if (EntryAt(e.Source) is not { } entry) return;
+
+        if (OpensOnSingleClick)
+        {
+            TryOpen(entry);
+            return;
+        }
+
+        // [stated] the rule the user wants: clicking the same row twice opens
+        // it, full stop. NO time limit — a 500 ms window meant a first click was
+        // spent on selection and only a fast second one counted, so opening
+        // something felt like select-then-double-click.
+        //
+        // Clicking a DIFFERENT row resets, which is what keeps this from firing
+        // on anything you did not click twice in a row.
+        if (_lastTapPath == entry.FullPath)
+        {
+            _lastTapPath = null;
+            TryOpen(entry);
+            return;
+        }
+
+        _lastTapPath = entry.FullPath;
+    }
+
+
+    /// <summary>
+    /// The row's entry, found by walking UP from whatever was physically under
+    /// the pointer.
+    ///
+    /// `e.Source` is the innermost visual, and the row template is several
+    /// controls deep — a click on the filename lands on an `AccessText` whose
+    /// DataContext is a `string`, not the `FileEntry`. Testing the source
+    /// directly therefore only worked when the pointer happened to hit a
+    /// control that carried the entry, which is why opening a folder could take
+    /// four clicks: you were hunting for the right pixel. Double-click made it
+    /// worse because it needs two qualifying hits in a row, not one.
+    ///
+    /// The same upward walk already exists in OnPointerPressedAnywhere for
+    /// PaneGroupViewModel; this is that pattern, not a new idea.
+    /// </summary>
+    private static FileEntry? EntryAt(object? source)
+    {
+        // VISUAL tree, not Control.Parent.
+        //
+        // Parent is the LOGICAL parent, and a control generated inside a
+        // template has no logical path back to the row that owns it — the
+        // diagnostic showed `source=AccessText entry=NONE` even after the walk
+        // was added, because AccessText lives inside the template and its
+        // logical chain simply ends. The visual tree always connects, which is
+        // why hit-testing questions belong there.
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            if (visual is Control { DataContext: FileEntry entry }) return entry;
+        }
+
+        return null;
+    }
+
+    private void OnDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        // The normal path, restored. TryOpen drops a duplicate if the fallback
+        // in OnTapped has already acted on this same row.
+        if (OpensOnSingleClick) return;
+
+        if (EntryAt(e.Source) is { } entry) TryOpen(entry);
+    }
+
+    /// <summary>
+    /// The narrow set of keys that must be claimed before anything else sees
+    /// them. Deliberately tiny: a tunnel handler runs ahead of every control in
+    /// the window, so anything added here is taken away from all of them.
+    /// </summary>
+    private void OnTunnelKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (PageCompactListing(e)) return;
+
+        if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.None) return;
+
+        // Only while the path box is open and focused. Tab keeps its ordinary
+        // meaning everywhere else, including the other text boxes.
+        if (_shell.ActiveTab is not { IsPathEditing: true } pane) return;
+        if (FocusManager?.GetFocusedElement() is not TextBox box) return;
+
+        pane.CompletePathCommand.Execute(null);
+
+        // Caret to the end, and the selection collapsed there, so the next
+        // keystroke continues the path instead of landing wherever the caret
+        // happened to sit — or worse, replacing a selection the text
+        // replacement left behind.
+        //
+        // POSTED rather than set inline: the command assigns PathText, and the
+        // binding has to propagate to this TextBox before its Text is the new
+        // value. Setting CaretIndex now would measure against the OLD text and
+        // get clamped to the wrong place.
+        Dispatcher.UIThread.Post(() =>
+        {
+            var end = box.Text?.Length ?? 0;
+
+            box.CaretIndex = end;
+            box.SelectionStart = end;
+            box.SelectionEnd = end;
+        }, DispatcherPriority.Background);
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Jump-to-letter in the listing. Bubble, so any control that wants the
+    /// character has already had it.
+    /// </summary>
+    private void OnWindowTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (e.Handled || string.IsNullOrEmpty(e.Text)) return;
+
+        // Never while typing somewhere real — the filter bar, the path box and
+        // the prompt bar are all TextBoxes, and stealing their characters would
+        // be a far worse bug than not having type-ahead.
+        if (FocusManager?.GetFocusedElement() is TextBox) return;
+
+        // Control characters are not a search: Escape, Backspace and friends
+        // arrive here too and have their own meanings.
+        if (char.IsControl(e.Text[0])) return;
+
+        if (_shell.ActiveTab is not { } pane) return;
+
+        pane.TypeAhead(e.Text);
+        e.Handled = true;
+    }
+
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_shell is null) return;
+
+        // The prompt owns the keyboard while it is open.
+        if (IsConfirming)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                ConfirmPrompt();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                ClosePrompt();
+            }
+            return;
+        }
+
+        if (_prompt is PromptMode.Rename) return;
+
+        // Any focused text box owns the keyboard. Checking the type rather
+        // than named controls, because the path and filter boxes now live
+        // inside a per-pane template and have no generated fields — and it
+        // is the more honest rule anyway. Escape and Enter inside those
+        // boxes are handled by their own KeyBindings in the markup.
+        if (FocusManager?.GetFocusedElement() is TextBox) return;
+
+        // Ctrl+1..9 jumps to a tab, browser-style.
+        if (e.KeyModifiers == KeyModifiers.Control &&
+            e.Key >= Key.D1 && e.Key <= Key.D9)
+        {
+            e.Handled = true;
+            _shell.SelectTabByIndex(e.Key - Key.D1);
+            return;
+        }
+
+        // No Ctrl+arrow zoom. It was tried and removed: this handler is on the
+        // bubble phase, so a focused ListBox — which is the normal state —
+        // takes arrow keys first and moves the selection instead. Winning the
+        // keystroke would mean tunnelling and stealing a key the listing has a
+        // legitimate claim to. Ctrl+wheel and Ctrl +/- cover it.
+
+        // Tab moves between sides rather than traversing focus, matching
+        // Dolphin. Only when split, so it keeps its normal meaning otherwise —
+        // and never while typing, or it would jump panes mid-edit.
+        if (e.Key == Key.Tab && _shell.IsSplit && e.KeyModifiers == KeyModifiers.None
+            && AppSettings.Current.General.TabSwitchesSplitPanes
+            && FocusManager?.GetFocusedElement() is not TextBox)
+        {
+            e.Handled = true;
+            _shell.FocusOtherPaneCommand.Execute(null);
+            return;
+        }
+
+        if (_shell.ActiveTab is not { } pane) return;
+
+        switch (e.Key)
+        {
+            case Key.Enter when e.KeyModifiers.HasFlag(KeyModifiers.Alt):
+                e.Handled = true;
+                ShowProperties();
+                break;
+
+            case Key.Enter:
+                e.Handled = true;
+                _ = pane.OpenSelectedAsync();
+                break;
+
+            case Key.Back:
+                e.Handled = true;
+                _ = pane.GoBackAsync();
+                break;
+
+
+            // Delete trashes, which is recoverable. Shift+Delete is
+            // irreversible. Both prompts are now preferences, but they default
+            // the way they always behaved: trash silently, confirm the
+            // permanent one.
+            // Ctrl+A had no equivalent anywhere in the application — a file
+            // manager with rubber-band selection and no select-all. Routed
+            // through the ListBox rather than the view model so the framework's
+            // bulk path does the work: filling the bound collection item by item
+            // would fire CollectionChanged once per file, and each one refreshes
+            // the details panel and recomputes the summary.
+            case Key.A when e.KeyModifiers.HasFlag(KeyModifiers.Control):
+                if (FocusManager?.GetFocusedElement() is TextBox) break;
+
+                ActiveListing()?.SelectAll();
+                e.Handled = true;
+                break;
+
+            case Key.Delete when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                e.Handled = true;
+
+                if (AppSettings.Current.General.ConfirmPermanentDelete)
+                    AskConfirmDelete();
+                else
+                    pane.DeleteSelectedCommand.Execute(null);
+
+                break;
+
+            case Key.Delete:
+                e.Handled = true;
+
+                if (AppSettings.Current.General.ConfirmMoveToTrash)
+                    AskConfirmTrash();
+                else
+                    pane.TrashSelectedCommand.Execute(null);
+
+                break;
+
+            // Deliberately duplicated from Window.KeyBindings. This handler is
+            // known to run — it is where the crash surfaced — so routing the
+            // clipboard through it too means copy cannot fail silently just
+            // because a KeyBinding didn't resolve.
+            case Key.C when e.KeyModifiers == KeyModifiers.Control:
+                e.Handled = true;
+                pane.CopySelectionToClipboardCommand.Execute(null);
+                break;
+
+            case Key.X when e.KeyModifiers == KeyModifiers.Control:
+                e.Handled = true;
+                pane.CutSelectionToClipboardCommand.Execute(null);
+                break;
+
+            case Key.V when e.KeyModifiers == KeyModifiers.Control:
+                e.Handled = true;
+                pane.PasteCommand.Execute(null);
+                break;
+        }
+    }
+}

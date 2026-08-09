@@ -45,7 +45,7 @@
   <text x="636" y="261" fill="#a8a8b2" font-size="12" text-anchor="middle">the status line</text>
 
   <text x="40" y="330" fill="#8a8a92" font-size="12">
-    A virtual path such as heimdall:recent-files picks the source. Six places had to learn that a
+    A virtual path such as vaktari:recent-files picks the source. Six places had to learn that a
   </text>
   <text x="40" y="350" fill="#8a8a92" font-size="12">
     path may not be on disk — the file watcher, the breadcrumb, the column strip, the tab title,

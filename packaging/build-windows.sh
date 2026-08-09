@@ -11,10 +11,10 @@
 # The version is required and is stamped into the binary, the installer's
 # filename and its Add/Remove Programs entry. There is no default on purpose:
 # every local build that guessed one would claim to be a release that does not
-# exist, and `heimdall --version` is the thing people use to work out which copy
+# exist, and `vaktari --version` is the thing people use to work out which copy
 # they are running.
 #
-# The output is dist/heimdall-<version>-win-x64-setup.exe with a .sha256 beside
+# The output is dist/vaktari-<version>-win-x64-setup.exe with a .sha256 beside
 # it, which is exactly what the release page carries.
 #
 set -euo pipefail
@@ -72,24 +72,24 @@ done
 
 if [[ -z "$ISCC" ]]; then
     echo "Inno Setup not found in any of the usual places." >&2
-    echo "The script needs 6.3 or newer — heimdall.iss uses ArchitecturesAllowed=x64compatible." >&2
+    echo "The script needs 6.3 or newer — vaktari.iss uses ArchitecturesAllowed=x64compatible." >&2
     echo "    winget install JRSoftware.InnoSetup" >&2
     exit 1
 fi
 
 echo "==> publishing $VERSION (NativeAOT, win-x64)"
 
-dotnet publish src/Heimdall.Ui -c Release -r win-x64 \
+dotnet publish src/Vaktari.Ui -c Release -r win-x64 \
     -p:PublishAot=true -p:Version="$VERSION"
 
-PAYLOAD="src/Heimdall.Ui/bin/Release/net10.0/win-x64/publish"
+PAYLOAD="src/Vaktari.Ui/bin/Release/net10.0/win-x64/publish"
 
 # The same check build.yml makes, for the same reason: NativeAOT does not
 # produce a single file. SkiaSharp, HarfBuzz and the ANGLE runtime sit beside
 # the executable and are loaded from its own directory, so an installer packaged
 # without them produces something that aborts before it draws anything — and it
 # aborts at the user's machine, not here.
-for required in Heimdall.Ui.exe libSkiaSharp.dll libHarfBuzzSharp.dll av_libglesv2.dll; do
+for required in Vaktari.Ui.exe libSkiaSharp.dll libHarfBuzzSharp.dll av_libglesv2.dll; do
     [[ -f "$PAYLOAD/$required" ]] || {
         echo "$required missing from the publish" >&2
         exit 1
@@ -106,13 +106,13 @@ echo "==> compiling the installer"
 # compiler ever sees it. cygpath for the payload, because ISCC is a native
 # program and cannot read a /c/... path.
 "$ISCC" //DAppVersion="$VERSION" //DPayload="$(cygpath -w "$ROOT/$PAYLOAD")" \
-    packaging/heimdall.iss
+    packaging/vaktari.iss
 
-SETUP="heimdall-$VERSION-win-x64-setup.exe"
+SETUP="vaktari-$VERSION-win-x64-setup.exe"
 [[ -f "dist/$SETUP" ]] || { echo "dist/$SETUP was not produced" >&2; exit 1; }
 
 # Hashed from inside dist/ so the file records a bare filename. Done from the
-# root it would say "dist/heimdall-...exe", which cannot be checked anywhere the
+# root it would say "dist/vaktari-...exe", which cannot be checked anywhere the
 # installer is actually downloaded to.
 ( cd dist && sha256sum "$SETUP" > "$SETUP.sha256" )
 

@@ -1,0 +1,84 @@
+using Vaktari.Core.Settings;
+
+namespace Vaktari.Core.FileSystem;
+
+/// <summary>What a sweep did. Reported rather than silent, because the whole
+/// feature is the application deleting files with nobody watching.</summary>
+public sealed record TrashSweepResult
+{
+    public int Removed { get; init; }
+
+    public long BytesFreed { get; init; }
+
+    /// <summary>
+    /// Entries left alone because their deletion date could not be read.
+    /// **Unreadable is never treated as old.** A malformed or missing
+    /// <c>.trashinfo</c> means we do not know when something was deleted, and
+    /// "do not know" must not become "delete it".
+    /// </summary>
+    public int Skipped { get; init; }
+
+    /// <summary>
+    /// The size limit is exceeded and the policy said to warn rather than
+    /// delete. The caller surfaces this; nothing was removed for it.
+    /// </summary>
+    public bool OverLimit { get; init; }
+
+    public static readonly TrashSweepResult Nothing = new();
+}
+
+/// <summary>
+/// Expiry and size limits for the trash.
+///
+/// Platform-specific because the trash itself is: freedesktop's spec on Linux,
+/// the recycle bin on Windows. Separate from <see cref="IFileOperations"/>
+/// because moving one file to the trash and unattended bulk deletion are very
+/// different risks, and a caller should have to reach for this one deliberately.
+/// </summary>
+public interface ITrashMaintenance
+{
+    /// <summary>
+    /// Applies the policy. Does nothing at all when neither expiry nor a size
+    /// limit is enabled — the disabled state is not "sweep with defaults".
+    /// </summary>
+    ValueTask<TrashSweepResult> SweepAsync(TrashSettings policy, CancellationToken ct);
+
+    /// <summary>
+    /// What is currently in the trash, newest first.
+    ///
+    /// Needed because the trash CANNOT be browsed as an ordinary folder: the
+    /// payload directory holds deduplicated names with no memory of where
+    /// anything came from, and the original path lives in a sidecar. A listing
+    /// built by enumerating that directory could show you a file but never
+    /// restore it.
+    /// </summary>
+    IReadOnlyList<TrashedItem> List();
+
+    /// <summary>
+    /// Puts one item back where it came from, returning the path it landed at —
+    /// which is NOT always the original: if something has since taken that name
+    /// it restores alongside rather than clobbering.
+    /// </summary>
+    string Restore(string trashName);
+
+    /// <summary>
+    /// Deletes everything, permanently. Deliberately separate from
+    /// <see cref="SweepAsync"/>, which applies a policy and stops at the
+    /// allowance — this one has no policy to obey and no stopping condition,
+    /// which is exactly why it must be its own method rather than a flag.
+    /// </summary>
+    ValueTask<TrashSweepResult> EmptyAsync(CancellationToken ct);
+}
+
+/// <summary>
+/// One trashed item. <paramref name="TrashName"/> is the key inside the trash,
+/// which is what Restore takes; <paramref name="OriginalPath"/> is where it
+/// came from and is what makes the listing meaningful.
+/// </summary>
+public sealed record TrashedItem(
+    string TrashName,
+    string OriginalPath,
+    string Payload,
+    DateTimeOffset Deleted,
+    long Size,
+    bool IsDirectory);

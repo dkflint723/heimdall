@@ -9,9 +9,9 @@
     Arrows point the only way a reference is allowed to go
   </text>
 
-  <!-- Heimdall.Ui -->
+  <!-- Vaktari.Ui -->
   <rect x="60" y="86" width="640" height="86" rx="10" fill="#2a2a33" stroke="#635bff" stroke-width="1.5"/>
-  <text x="80" y="112" fill="#e8e8e8" font-size="15" font-weight="600">Heimdall.Ui</text>
+  <text x="80" y="112" fill="#e8e8e8" font-size="15" font-weight="600">Vaktari.Ui</text>
   <text x="80" y="133" fill="#a8a8b2" font-size="12.5">Avalonia views, view models, the SVG icon renderer,</text>
   <text x="80" y="151" fill="#a8a8b2" font-size="12.5">the custom VirtualizingWrapPanel, thumbnails</text>
   <text x="680" y="112" fill="#635bff" font-size="12" text-anchor="end" font-weight="600">presentation</text>
@@ -20,18 +20,18 @@
   <path d="M200 172 L200 300" stroke="#635bff" stroke-width="1.6" marker-end="url(#a)"
         stroke-dasharray="0"/>
 
-  <!-- Heimdall.Linux -->
+  <!-- Vaktari.Linux -->
   <rect x="240" y="210" width="460" height="80" rx="10" fill="#2a2a33" stroke="#3a3a45" stroke-width="1.5"/>
-  <text x="260" y="236" fill="#e8e8e8" font-size="15" font-weight="600">Heimdall.Linux</text>
+  <text x="260" y="236" fill="#e8e8e8" font-size="15" font-weight="600">Vaktari.Linux</text>
   <text x="260" y="257" fill="#a8a8b2" font-size="12.5">XDG trash, icon theme, places, mounts, kdeglobals,</text>
   <text x="260" y="275" fill="#a8a8b2" font-size="12.5">shared-mime-info, avahi, gio</text>
   <text x="680" y="236" fill="#8a8a92" font-size="12" text-anchor="end" font-weight="600">one platform</text>
 
   <path d="M470 290 L470 326" stroke="#635bff" stroke-width="1.6" marker-end="url(#a)"/>
 
-  <!-- Heimdall.Core -->
+  <!-- Vaktari.Core -->
   <rect x="60" y="328" width="640" height="80" rx="10" fill="#2a2a33" stroke="#3a3a45" stroke-width="1.5"/>
-  <text x="80" y="354" fill="#e8e8e8" font-size="15" font-weight="600">Heimdall.Core</text>
+  <text x="80" y="354" fill="#e8e8e8" font-size="15" font-weight="600">Vaktari.Core</text>
   <text x="80" y="375" fill="#a8a8b2" font-size="12.5">Contracts, plus logic that is genuinely platform-neutral:</text>
   <text x="80" y="393" fill="#a8a8b2" font-size="12.5">git status, checksums, natural sort, byte sizes, image headers</text>
   <text x="680" y="354" fill="#8a8a92" font-size="12" text-anchor="end" font-weight="600">no platform</text>

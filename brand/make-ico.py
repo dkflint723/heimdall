@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build brand/icons/heimdall.ico from the hicolor SVGs.
+"""Build brand/icons/vaktari.ico from the hicolor SVGs.
 
 Windows wants one file holding every size, and this project already draws the
 mark four times rather than scaling one of them: 16 and 24 carry two bands
@@ -30,18 +30,18 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 ICONS = ROOT / "brand" / "icons" / "hicolor"
-OUT = ROOT / "brand" / "icons" / "heimdall.ico"
+OUT = ROOT / "brand" / "icons" / "vaktari.ico"
 
 # Which drawing serves which size. The scalable one says of itself that it is
 # "used from 32px upward"; 16, 24 and 48 have their own.
 SOURCES = {
-    16: ICONS / "16x16" / "apps" / "heimdall.svg",
-    24: ICONS / "24x24" / "apps" / "heimdall.svg",
-    32: ICONS / "scalable" / "apps" / "heimdall.svg",
-    48: ICONS / "48x48" / "apps" / "heimdall.svg",
-    64: ICONS / "scalable" / "apps" / "heimdall.svg",
-    128: ICONS / "scalable" / "apps" / "heimdall.svg",
-    256: ICONS / "scalable" / "apps" / "heimdall.svg",
+    16: ICONS / "16x16" / "apps" / "vaktari.svg",
+    24: ICONS / "24x24" / "apps" / "vaktari.svg",
+    32: ICONS / "scalable" / "apps" / "vaktari.svg",
+    48: ICONS / "48x48" / "apps" / "vaktari.svg",
+    64: ICONS / "scalable" / "apps" / "vaktari.svg",
+    128: ICONS / "scalable" / "apps" / "vaktari.svg",
+    256: ICONS / "scalable" / "apps" / "vaktari.svg",
 }
 
 # Supersample before downscaling. The strokes are diagonal and the corners are

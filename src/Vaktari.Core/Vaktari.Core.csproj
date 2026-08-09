@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Core must never reference System.Runtime.InteropServices, Avalonia, or
+       any platform package. "Does this work on Fedora?" should be answerable
+       by reading this file rather than by grepping the codebase. -->
+
+  <PropertyGroup>
+    <RootNamespace>Vaktari.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>

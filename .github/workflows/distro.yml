@@ -54,28 +54,28 @@ jobs:
 
           echo "stamping version $VERSION_NUMBER"
 
-          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true \
+          dotnet publish src/Vaktari.Ui -c Release -r linux-x64 -p:PublishAot=true \
             -p:Version="$VERSION_NUMBER"
 
       - name: Stage the publish tree
         run: |
-          P=src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish
+          P=src/Vaktari.Ui/bin/Release/net10.0/linux-x64/publish
           test -f "$P/libSkiaSharp.so" || { echo "libSkiaSharp.so missing"; exit 1; }
-          mkdir -p dist/heimdall
-          cp -a "$P"/. dist/heimdall/
-          cp LICENSE README.md dist/heimdall/
+          mkdir -p dist/vaktari
+          cp -a "$P"/. dist/vaktari/
+          cp LICENSE README.md dist/vaktari/
 
           # So install.sh can offer the symbolic icon; the RPM takes its copy
           # straight from brand/ instead.
-          cp brand/icons/hicolor/symbolic/apps/heimdall-symbolic.svg dist/heimdall/ || true
+          cp brand/icons/hicolor/symbolic/apps/vaktari-symbolic.svg dist/vaktari/ || true
 
-          tar -czf heimdall-linux-x64-fedora.tar.gz -C dist heimdall
+          tar -czf vaktari-linux-x64-fedora.tar.gz -C dist vaktari
 
       - name: Build the RPM
         run: |
           # `${VAR:-default}` substitutes only when VAR is EMPTY or UNSET. On a
           # branch run GITHUB_REF_NAME is "main", which is neither — so the old
-          # form produced `heimdall-main-1.fc44.rpm` rather than falling back.
+          # form produced `vaktari-main-1.fc44.rpm` rather than falling back.
           # Match the shape of a tag instead of testing for emptiness.
           case "$GITHUB_REF_NAME" in
             v[0-9]*) VERSION="${GITHUB_REF_NAME#v}" ;;
@@ -85,14 +85,14 @@ jobs:
           echo "building version $VERSION from ref $GITHUB_REF_NAME"
 
           mkdir -p ~/rpmbuild/{SOURCES,SPECS}
-          cp heimdall-linux-x64-fedora.tar.gz ~/rpmbuild/SOURCES/heimdall-linux-x64.tar.gz
-          cp brand/heimdall.desktop ~/rpmbuild/SOURCES/
+          cp vaktari-linux-x64-fedora.tar.gz ~/rpmbuild/SOURCES/vaktari-linux-x64.tar.gz
+          cp brand/vaktari.desktop ~/rpmbuild/SOURCES/
           cp -a brand/icons ~/rpmbuild/SOURCES/
 
-          rpmbuild -bb packaging/heimdall.spec --define "version $VERSION"
+          rpmbuild -bb packaging/vaktari.spec --define "version $VERSION"
 
-          BUILT=$(find ~/rpmbuild/RPMS -name "heimdall-$VERSION-*.rpm" | head -1)
-          test -n "$BUILT" || { echo "rpmbuild produced no heimdall-$VERSION rpm"; exit 1; }
+          BUILT=$(find ~/rpmbuild/RPMS -name "vaktari-$VERSION-*.rpm" | head -1)
+          test -n "$BUILT" || { echo "rpmbuild produced no vaktari-$VERSION rpm"; exit 1; }
 
           cp "$BUILT" .
           echo "RPM=$(basename "$BUILT")" >> "$GITHUB_ENV"
@@ -106,19 +106,19 @@ jobs:
           # to the repository by accident, and dnf refused the pair as a
           # conflict — a confusing way to learn about a stray file.
           dnf -y install "./$RPM"
-          test -x /usr/bin/heimdall
+          test -x /usr/bin/vaktari
           # NOT `|| true` any more. `--version` is answered before any window is
           # created, so it works with no display — and a binary that cannot print
           # its own version is one nobody should be shipping. This is now a real
           # check rather than a comment claiming to be one.
-          heimdall --version
+          vaktari --version
 
       - uses: actions/upload-artifact@v7
         with:
           name: fedora
           path: |
             *.rpm
-            heimdall-linux-x64-fedora.tar.gz
+            vaktari-linux-x64-fedora.tar.gz
 
   # ------------------------------------------------------------------ Arch ---
   arch:
@@ -150,17 +150,17 @@ jobs:
 
           echo "stamping version $VERSION_NUMBER"
 
-          dotnet publish src/Heimdall.Ui -c Release -r linux-x64 -p:PublishAot=true \
+          dotnet publish src/Vaktari.Ui -c Release -r linux-x64 -p:PublishAot=true \
             -p:Version="$VERSION_NUMBER"
 
       - name: Stage the publish tree
         run: |
-          P=src/Heimdall.Ui/bin/Release/net10.0/linux-x64/publish
+          P=src/Vaktari.Ui/bin/Release/net10.0/linux-x64/publish
           test -f "$P/libSkiaSharp.so" || { echo "libSkiaSharp.so missing"; exit 1; }
-          mkdir -p dist/heimdall
-          cp -a "$P"/. dist/heimdall/
-          cp LICENSE README.md dist/heimdall/
-          tar -czf heimdall-linux-x64-arch.tar.gz -C dist heimdall
+          mkdir -p dist/vaktari
+          cp -a "$P"/. dist/vaktari/
+          cp LICENSE README.md dist/vaktari/
+          tar -czf vaktari-linux-x64-arch.tar.gz -C dist vaktari
 
       # Validates the PKGBUILD's syntax and metadata without downloading the
       # tagged tarball, which will not exist until the release is published.
@@ -174,7 +174,7 @@ jobs:
         with:
           name: arch
           path: |
-            heimdall-linux-x64-arch.tar.gz
+            vaktari-linux-x64-arch.tar.gz
             packaging/.SRCINFO
 
   # --------------------------------------------------------------- release ---
@@ -214,5 +214,5 @@ jobs:
           # that happens to sit in the workspace cannot be published by accident.
           gh release upload "$GITHUB_REF_NAME" \
             $(find artifacts/fedora artifacts/arch -type f \
-                \( -name 'heimdall-*.rpm' -o -name 'heimdall-*.tar.gz' \)) \
+                \( -name 'vaktari-*.rpm' -o -name 'vaktari-*.tar.gz' \)) \
             --clobber

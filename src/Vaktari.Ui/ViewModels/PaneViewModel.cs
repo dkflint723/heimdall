@@ -1,0 +1,1727 @@
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using CommunityToolkit.Mvvm.ComponentModel;
+using System.Windows.Input;
+using CommunityToolkit.Mvvm.Input;
+using Avalonia.Threading;
+using Vaktari.Core;
+using Vaktari.Core.FileSystem;
+using Vaktari.Core.Session;
+
+namespace Vaktari.Ui.ViewModels;
+
+/// <summary>One clickable ancestor in the breadcrumb bar.</summary>
+public sealed record PathSegment(string Name, string FullPath, ICommand Open, bool IsLast)
+{
+    /// <summary>
+    /// The platform's own separator, so the bar reads `C:\ Users \ flint`
+    /// rather than mixing one convention with the other. It was a literal "/"
+    /// in the markup, which on Windows drew a POSIX separator between two
+    /// backslash paths.
+    /// </summary>
+    public static string Separator => Path.DirectorySeparatorChar.ToString();
+
+    /// <summary>
+    /// **A root already ends in a separator, so it must not be given another.**
+    /// `LeafName` returns a root as itself — `C:\` or `/` — and the bar then
+    /// appended its own, producing `C:\ \ Users` on Windows and `/ / home` on
+    /// Linux. The doubling was there before the crumbs moved to `Ancestors`; it
+    /// only became obvious on Windows, where the two glyphs differ.
+    /// </summary>
+    public bool ShowSeparator => !IsLast && !PathRules.IsRoot(FullPath);
+
+    /// <summary>
+    /// The stand-in for the ancestors there is no room to show.
+    ///
+    /// **A real crumb rather than something the panel draws**, because
+    /// Avalonia seals Panel.Render — a panel paints its Background and nothing
+    /// else. It is created for every path deep enough to need one and parked
+    /// off-screen by <see cref="BreadcrumbPanel"/> whenever the whole path
+    /// fits, so its presence costs nothing when it is not wanted.
+    /// </summary>
+    public bool IsEllipsis { get; init; }
+
+    public static PathSegment Ellipsis(ICommand open) =>
+        new("…", "", open, IsLast: false) { IsEllipsis = true };
+}
+
+public sealed partial class PaneViewModel : ObservableObject, IDisposable
+{
+    private const int FlushIntervalMs = 100;
+
+    private readonly IFileSystemProvider _fs;
+    private readonly IFileOperations? _ops;
+    private readonly IApplicationLauncher? _launcher;
+    private readonly IClipboardService? _clipboard;
+    private readonly IScriptRunner? _scripts;
+    private readonly ITemplateProvider? _templates;
+    private readonly List<FileEntry> _all = new();
+    private CancellationTokenSource? _filterDebounce;
+    private IDisposable? _watcher;
+
+    /// <summary>
+    /// Incremented on every load. Watcher events capture it before going async
+    /// and re-check it before touching the collections: an event that passes
+    /// the IsLoading check, then gets delayed by an await, would otherwise land
+    /// in the middle of a later listing and insert an entry the enumeration is
+    /// about to add again.
+    /// </summary>
+    private int _generation;
+    private readonly Stack<string> _back = new();
+    private readonly Stack<string> _forward = new();
+    private CancellationTokenSource? _cts;
+    private bool _suppressReload;
+
+    public PaneViewModel(
+        IFileSystemProvider fs,
+        IFileOperations? ops = null,
+        IApplicationLauncher? launcher = null,
+        IClipboardService? clipboard = null,
+        IScriptRunner? scripts = null,
+        ITemplateProvider? templates = null)
+    {
+        WatchSelections();
+
+        _templates = templates;
+        _fs = fs;
+        _ops = ops;
+        _launcher = launcher;
+        _clipboard = clipboard;
+        _scripts = scripts;
+
+        RefreshScripts();
+        RefreshTemplates();
+    }
+
+
+
+
+
+
+    public BulkObservableCollection<FileEntry> Entries { get; } = new();
+
+    /// <summary>
+    /// Each layout sees the entries only while it is the one on screen.
+    ///
+    /// Grid and compact use a WrapPanel, which Avalonia has no virtualizing
+    /// form of, so every item they are given is realized — and all three lists
+    /// stay alive when hidden. Binding all of them to Entries meant opening a
+    /// large folder realized a container per file in TWO invisible layouts,
+    /// which is exactly the cost the streaming enumerator exists to avoid.
+    ///
+    /// The inactive ones get an empty array: no items, no containers, no
+    /// change notifications.
+    /// </summary>
+    private static readonly FileEntry[] NoEntries = [];
+
+    public IEnumerable<FileEntry> DetailsEntries
+        => View == ViewMode.Details ? Entries : NoEntries;
+
+    public IEnumerable<FileEntry> GridEntries
+        => View == ViewMode.Grid ? Entries : NoEntries;
+
+    public IEnumerable<FileEntry> CompactEntries
+        => View == ViewMode.Compact ? Entries : NoEntries;
+
+    /// <summary>
+    /// Above this, the un-virtualized layouts are refused rather than allowed
+    /// to hang the app.
+    ///
+    /// WrapPanel realizes a container per item and Avalonia has no virtualizing
+    /// wrap panel, so switching to grid on a large folder freezes the process
+    /// outright. Refusing is ugly; truncating the listing would be worse — a
+    /// file manager that silently omits files is actively dangerous, and you
+    /// would have no way to know it had.
+    ///
+    /// Details view is virtualized and always available, so nothing becomes
+    /// unreachable.
+    /// </summary>
+    /// <summary>
+    /// Per-folder view overrides. Null until the shell supplies one.
+    /// </summary>
+    public static IFolderViewStore? FolderViews { get; set; }
+
+
+    /// <summary>
+    /// Recently opened files and folders. A separate store from
+    /// Static for the same reason as the other providers: panes are created by
+    /// the shell, not injected here.
+    /// </summary>
+    public static IRecentStore? Recents { get; set; }
+
+    /// <summary>
+    /// The trash, for the `vaktari:trash` listing and its restore/empty
+    /// actions. Same static convention as the others.
+    /// </summary>
+    public static ITrashMaintenance? Trash { get; set; }
+
+    /// <summary>
+    /// Version-control decorations. Static like the other providers; null when
+    /// the feature is off or the tool is missing, and every caller must treat
+    /// that as "draw nothing", never as "everything is clean".
+    /// </summary>
+    public static Vaktari.Core.Vcs.IVersionControl? Vcs { get; set; }
+
+    /// <summary>
+    /// Status per entry of the CURRENT folder, or empty. Rebuilt per load and
+    /// never merged across folders — a stale entry here would decorate the
+    /// wrong file, which is worse than decorating nothing.
+    /// </summary>
+    public IReadOnlyDictionary<string, Vaktari.Core.Vcs.VcsState> VcsStates { get; private set; }
+        = new Dictionary<string, Vaktari.Core.Vcs.VcsState>();
+
+    /// <summary>
+    /// True when this folder is inside a repository, which is what reserves the
+    /// marker column.
+    ///
+    /// Gated rather than always-on for the same reason as the parent-path
+    /// column: most folders are not repositories, and a permanently reserved
+    /// strip of dead space before every filename would be a poor trade for
+    /// avoiding one binding.
+    /// </summary>
+    [ObservableProperty] private bool _isRepository;
+
+    /// <summary>
+    /// Applied on arrival, before the listing is asked for, so the folder is
+    /// enumerated and sorted once under its own rules rather than sorted twice.
+    /// Silent when the preference is off or the folder has no opinion.
+    /// </summary>
+    private void ApplyFolderView(string path)
+    {
+        if (!Settings.AppSettings.Current.General.RememberViewPerFolder) return;
+        if (FolderViews?.Read(path) is not { } view) return;
+
+        View = view.View;
+        Sort = view.Sort;
+        SortDescending = view.SortDescending;
+        GroupBy = view.GroupBy;
+
+        // Zero means the folder expressed no opinion about scale, so the pane
+        // keeps whatever it had — scale is an accessibility setting and a
+        // folder must not be able to shrink someone's text.
+        if (view.FontScale > 0) FontScale = view.FontScale;
+        if (view.IconScale > 0) IconScale = view.IconScale;
+
+        // A folder's opinion is about the pane, not about one layout.
+        if (view.FontScale > 0 || view.IconScale > 0) SeedScales(FontScale, IconScale);
+    }
+
+    /// <summary>
+    /// Records the current view against the current folder. Called when the
+    /// user changes one of these, never on arrival — otherwise merely visiting
+    /// a folder would give it an opinion it never had.
+    /// </summary>
+    public void RememberFolderView()
+    {
+        if (!Settings.AppSettings.Current.General.RememberViewPerFolder) return;
+        if (FolderViews is null || string.IsNullOrEmpty(CurrentPath)) return;
+        if (_restoringView) return;
+
+        FolderViews.Write(CurrentPath, new FolderViewState
+        {
+            View = View,
+            Sort = Sort,
+            SortDescending = SortDescending,
+            GroupBy = GroupBy,
+            FontScale = FontScale,
+            IconScale = IconScale,
+        });
+    }
+
+    private bool _restoringView;
+
+
+
+
+    /// <summary>
+    /// Grid is virtualized now, so it has no limit. Measured 100,000 items in
+    /// 46 ms with 48 containers realized, against 6,841 ms for 20,000 before —
+    /// the cost no longer grows with the folder at all.
+    /// </summary>
+    public bool CanUseGrid => true;
+
+    /// <summary>
+    /// **The limit is gone — compact virtualizes too, 31 July 2026.**
+    /// `VirtualizingWrapPanel` gained an `Orientation`, so the same panel the
+    /// grid uses now fills columns instead of rows: the row arithmetic became
+    /// lane arithmetic, and only the axes differ.
+    ///
+    /// The old comment here said the panel "cannot simply be swapped in", and
+    /// that was true — it needed the orientation first. It has it.
+    /// **This was the last layout that refused a folder for being too large.**
+    /// </summary>
+    public bool CanUseCompact => true;
+
+    /// <summary>True when neither tile layout is refused. Both are unconditional
+    /// now; kept because the drop-back check and the menu still ask.</summary>
+    public bool CanUseTileLayouts => CanUseCompact;
+
+    // `EffectiveTileLimit` and `VAKTARI_TILE_LIMIT` were here. The limit was a
+    // stopgap for un-virtualized tile layouts and both of them virtualize now, so
+    // an override that enforces nothing is worse than no override: it invites
+    // someone to raise a ceiling that is not there. `VAKTARI_TILE_DEBUG=1` is
+    // still the way to watch realization.
+
+    private void NotifyLayoutEntries()
+    {
+        OnPropertyChanged(nameof(DetailsEntries));
+        OnPropertyChanged(nameof(GridEntries));
+        OnPropertyChanged(nameof(CompactEntries));
+    }
+
+    /// <summary>
+    /// One selection collection PER LAYOUT, and the reason is not cosmetic.
+    ///
+    /// Details, grid and compact are three separate ListBoxes that all stay
+    /// alive when hidden. Pointing their SelectedItems at a single shared
+    /// collection made each one write its own idea of the selection into it, so
+    /// clicking one row produced a union of whatever the other two still held —
+    /// three different files selected from one click. Deduplicating does not
+    /// help, because the entries genuinely differ.
+    ///
+    /// Separate collections mean a hidden list can only ever disturb its own.
+    /// </summary>
+    public ObservableCollection<FileEntry> DetailsSelection { get; } = new();
+    public ObservableCollection<FileEntry> GridSelection { get; } = new();
+    public ObservableCollection<FileEntry> CompactSelection { get; } = new();
+
+    /// <summary>
+    /// Subscribes to all three, not just the active one — a hidden list can
+    /// still be told to sync, and the active one changes as the layout does.
+    /// Without this nothing recomputed the selection count, which is why the
+    /// status bar reported only the item total.
+    /// </summary>
+    private void WatchSelections()
+    {
+        DetailsSelection.CollectionChanged += (_, _) => NotifySelectionChanged();
+        GridSelection.CollectionChanged += (_, _) => NotifySelectionChanged();
+        CompactSelection.CollectionChanged += (_, _) => NotifySelectionChanged();
+    }
+
+    private void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(Selection));
+        OnPropertyChanged(nameof(Summary));
+    }
+
+    /// <summary>The collection belonging to the layout currently on screen.</summary>
+    public ObservableCollection<FileEntry> SelectedEntries => View switch
+    {
+        ViewMode.Grid => GridSelection,
+        ViewMode.Compact => CompactSelection,
+        _ => DetailsSelection,
+    };
+
+    /// <summary>What everything else should read. Never the raw collections.</summary>
+    public IReadOnlyList<FileEntry> Selection => SelectedEntries.ToList();
+
+    /// <summary>
+    /// Carries the selection to the layout being switched to, so changing view
+    /// does not silently drop what you had chosen.
+    /// </summary>
+    private void CarrySelection(ViewMode from, ViewMode to)
+    {
+        if (from == to) return;
+
+        var source = from switch
+        {
+            ViewMode.Grid => GridSelection,
+            ViewMode.Compact => CompactSelection,
+            _ => DetailsSelection,
+        };
+
+        var target = to switch
+        {
+            ViewMode.Grid => GridSelection,
+            ViewMode.Compact => CompactSelection,
+            _ => DetailsSelection,
+        };
+
+        var carried = source.ToList();
+
+        target.Clear();
+        foreach (var entry in carried) target.Add(entry);
+
+        OnPropertyChanged(nameof(SelectedEntries));
+        OnPropertyChanged(nameof(Summary));
+    }
+
+    /// <summary>Applications offered by the "open with" submenu.</summary>
+    public ObservableCollection<LaunchOption> OpenWithOptions { get; } = new();
+
+    /// <summary>Raised when an operation starts, so the shell can show progress.</summary>
+    public event EventHandler<IOperationHandle>? OperationStarted;
+
+    /// <summary>Raised when a rename is requested, so the view can prompt.</summary>
+    public event EventHandler<FileEntry>? RenameRequested;
+
+    [ObservableProperty] private string _currentPath = "";
+    [ObservableProperty] private string _pathText = "";
+    [ObservableProperty] private string _title = "…";
+    [ObservableProperty] private string _status = "";
+
+    /// <summary>Free space on the filesystem holding this folder — Dolphin
+    /// keeps it in the status bar and it is genuinely useful there.</summary>
+    [ObservableProperty] private string _freeSpace = "";
+
+    /// <summary>
+    /// Off the UI thread: DriveInfo stats the filesystem, and on an unreachable
+    /// NFS or SMB mount that blocks for the mount timeout — which would freeze
+    /// the window on every navigation into it.
+    /// </summary>
+    private async Task RefreshFreeSpaceAsync(string path)
+    {
+        string text;
+
+        try
+        {
+            text = await Task.Run(() =>
+            {
+                var drive = new DriveInfo(path);
+                return $"{ByteSize.Format(drive.AvailableFreeSpace)} free";
+            }).ConfigureAwait(false);
+        }
+        catch
+        {
+            text = "";
+        }
+
+        // Discard if we have navigated on since.
+        if (CurrentPath != path) return;
+
+        await Dispatcher.UIThread.InvokeAsync(() => FreeSpace = text);
+    }
+
+    [ObservableProperty] private bool _isActive;
+    [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private bool _isLoaded;
+    [ObservableProperty] private bool _showHidden;
+    [ObservableProperty] private FileEntry? _selectedEntry;
+    [ObservableProperty] private string _filterText = "";
+    [ObservableProperty] private bool _isFilterVisible;
+    [ObservableProperty] private SortField _sort = SortField.Name;
+    [ObservableProperty] private bool _sortDescending;
+    [ObservableProperty] private ViewMode _view = ViewMode.Details;
+
+    /// <summary>Highlights the pane a drop would land in.</summary>
+    [ObservableProperty] private bool _isDropTarget;
+
+    // ---- dynamic columns -----------------------------------------------
+
+    /// <summary>
+    /// Set by the view as the pane resizes. Columns drop out in priority order
+    /// as space runs out rather than being squeezed or clipped — which is what
+    /// makes a narrow split pane still readable.
+    /// </summary>
+    [ObservableProperty] private double _viewportWidth = 1000;
+
+    /// <summary>
+    /// Set from the window's UI scale. Column content grows with the type
+    /// scale, so the widths at which columns stop fitting have to grow with it
+    /// too — fixed thresholds meant that at 2x every column still claimed to
+    /// fit while overflowing the pane.
+    /// </summary>
+    /// <summary>
+    /// The text scale, pushed in by the shell. Column thresholds are about how
+    /// much room *text* needs, so they follow the font axis — not the icon one.
+    /// This was left orphaned by the font/icon split and nothing assigned it,
+    /// so the thresholds silently stopped following the text size.
+    /// </summary>
+    [ObservableProperty] private double _textScale = 1.0;
+
+    /// <summary>
+    /// Type and icon scale for THIS pane. Per tab and per split side, because a
+    /// reference listing beside a working one wants different sizes — which is
+    /// the whole reason for having two panes.
+    /// </summary>
+    [ObservableProperty] private double _fontScale = 1.0;
+    [ObservableProperty] private double _iconScale = 1.0;
+
+    /// <summary>
+    /// Scale per LAYOUT, not per pane.
+    ///
+    /// The three modes want genuinely different proportions — a grid tile and a
+    /// details row are not the same object at different zooms — so one shared
+    /// pair meant enlarging the grid also enlarged the details rows, and the
+    /// size readout showed a number that did not describe what was on screen.
+    ///
+    /// `FontScale` and `IconScale` remain the ACTIVE pair, because everything
+    /// downstream reads them: the metric pipeline, the column thresholds, the
+    /// typed-size flyout. This dictionary is only what the inactive modes are
+    /// holding while they wait.
+    /// </summary>
+    private readonly Dictionary<ViewMode, (double Font, double Icon)> _scales = new()
+    {
+        [ViewMode.Details] = (1.0, 1.0),
+        [ViewMode.Grid]    = (1.0, 1.0),
+        [ViewMode.Compact] = (1.0, 1.0),
+    };
+
+    /// <summary>
+    /// True only while a mode switch is loading the incoming mode's pair.
+    /// Without it the assignment would immediately record itself back into the
+    /// slot it just came from, and every mode would converge on one value again
+    /// — the bug this exists to fix, reintroduced by its own fix.
+    /// </summary>
+    private bool _swappingScales;
+
+    /// <summary>
+    /// Gives every mode the same starting pair. Used when a session or a folder
+    /// supplies one scale: it expressed an opinion about the pane, not about a
+    /// particular layout, so no mode should be left at a stale 1.0.
+    /// </summary>
+    private void SeedScales(double font, double icon)
+    {
+        foreach (var mode in _scales.Keys.ToList()) _scales[mode] = (font, icon);
+    }
+
+    /// <summary>
+    /// The bases the scales multiply. Exposed as real sizes rather than as a
+    /// multiplier, because "14" is something a person can reason about and
+    /// "1.15" is not.
+    /// </summary>
+    private const double BaseFontSize = 14;
+    private const double BaseIconSize = 26;
+
+    private const double MinScale = 0.7;
+    private const double MaxScale = 2.5;
+
+    /// <summary>
+    /// What "share" would act on: the selected folder, or this one. Shown in
+    /// the menu so the target is visible before clicking rather than inferred
+    /// from the result afterwards.
+    /// </summary>
+    public string ShareTargetLabel
+    {
+        get
+        {
+            var name = SelectedEntry is { IsDirectory: true } selected
+                ? selected.Name
+                : PathRules.LeafName(CurrentPath);
+
+            return string.IsNullOrEmpty(name) ? "this folder" : name;
+        }
+    }
+
+    public double FontPoints
+    {
+        get => Math.Round(FontScale * BaseFontSize);
+        set => FontScale = Math.Clamp(value / BaseFontSize, MinScale, MaxScale);
+    }
+
+    public double IconPixels
+    {
+        get => Math.Round(IconScale * BaseIconSize);
+        set => IconScale = Math.Clamp(value / BaseIconSize, MinScale, MaxScale);
+    }
+
+    partial void OnFontScaleChanged(double value)
+    {
+        if (!_swappingScales) _scales[View] = (value, IconScale);
+
+        OnPropertyChanged(nameof(FontPoints));
+        // Column thresholds are measured in text width, so they follow the font
+        // axis of the pane they belong to.
+        TextScale = value;
+        ScaleChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    partial void OnIconScaleChanged(double value)
+    {
+        if (!_swappingScales) _scales[View] = (FontScale, value);
+
+        OnPropertyChanged(nameof(IconPixels));
+        ScaleChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Raised so the shell can persist the change.</summary>
+    public event EventHandler? ScaleChanged;
+
+    /// <summary>
+    /// Forces every pane-level metric to be recomputed and rewritten.
+    ///
+    /// Needed because the metrics now mix two sources — this pane's scale and
+    /// the global spacing settings — and only the first of those raises a
+    /// property change. Without this a spacing change would reach only the panes
+    /// that happened to rescale afterwards.
+    /// </summary>
+    public void RefreshScale() => OnPropertyChanged(nameof(IconScale));
+
+    public bool ShowSize => ViewportWidth >= 340 * TextScale;
+    public bool ShowModified => ViewportWidth >= 520 * TextScale;
+    public bool ShowPermissions => ViewportWidth >= 680 * TextScale;
+    public bool ShowMetadata =>
+        ViewportWidth >= 840 * TextScale && !IsRecentListing && !IsTrashListing;
+
+    /// <summary>
+    /// True only in the two recent listings, where the rows come from a store
+    /// rather than a directory.
+    /// </summary>
+    public bool IsRecentListing => VirtualPaths.IsRecent(CurrentPath);
+
+    /// <summary>True in the trash listing, which gates restore and empty.</summary>
+    public bool IsTrashListing => CurrentPath == VirtualPaths.Trash;
+
+    /// <summary>
+    /// The parent folder of each row, shown ONLY in a recent listing — and not
+    /// optional there: those entries span the whole filesystem, so a bare
+    /// filename says nothing about which of four `config.toml` files you are
+    /// looking at.
+    ///
+    /// Shares column 2 with the metadata column rather than adding a seventh:
+    /// the two are mutually exclusive by construction (ShowMetadata is false
+    /// here), and inserting a column would renumber every element after it in
+    /// two separate grids — the kind of edit that goes wrong quietly.
+    /// </summary>
+    public bool ShowParentPath =>
+        (IsRecentListing || IsTrashListing) && ViewportWidth >= 420 * TextScale;
+
+    partial void OnTextScaleChanged(double value) => NotifyColumns();
+
+    private void NotifyColumns()
+    {
+        OnPropertyChanged(nameof(ShowSize));
+        OnPropertyChanged(nameof(ShowModified));
+        OnPropertyChanged(nameof(ShowPermissions));
+        OnPropertyChanged(nameof(ShowMetadata));
+        OnPropertyChanged(nameof(ShowParentPath));
+    }
+
+    partial void OnViewportWidthChanged(double value) => NotifyColumns();
+
+    [ObservableProperty] private string _previewTitle = "";
+    [ObservableProperty] private string _previewDetail = "";
+
+
+    private CancellationTokenSource? _previewCts;
+
+
+
+
+
+
+
+    /// <summary>An empty listing used to look identical to one still loading.</summary>
+    public bool IsEmpty => IsLoaded && !IsLoading && Entries.Count == 0;
+
+    /// <summary>Stable left-hand status: what is here and what is picked.</summary>
+    /// <summary>
+    /// Total size of the selection, so the status bar can report it the way
+    /// Dolphin does. Directories contribute nothing — measuring them would mean
+    /// walking the tree on every selection change.
+    /// </summary>
+    private string SelectionSize()
+    {
+        long total = 0;
+        var files = 0;
+
+        foreach (var entry in Selection)
+        {
+            if (entry.IsDirectory) continue;
+            total += entry.Length;
+            files++;
+        }
+
+        return files == 0 ? "" : $" ({ByteSize.Format(total)})";
+    }
+
+    public string Summary => Selection.Count switch
+    {
+        0 => $"{Entries.Count:N0} items",
+        1 => $"{Entries.Count:N0} items · 1 selected{SelectionSize()}",
+        var n => $"{Entries.Count:N0} items · {n:N0} selected{SelectionSize()}",
+    };
+
+    private void NotifyListingState()
+    {
+        OnPropertyChanged(nameof(CanUseTileLayouts));
+        OnPropertyChanged(nameof(CanUseGrid));
+        OnPropertyChanged(nameof(CanUseCompact));
+
+        // The drop-back to list view lived here: entering a folder past the
+        // compact limit switched layout and said so. Both tile layouts virtualize
+        // now, so there is nothing left to rescue anyone from.
+
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(ShareTargetLabel));
+    }
+
+    public bool IsDetailsView => View == ViewMode.Details;
+    public bool IsGridView => View == ViewMode.Grid;
+    public bool IsCompactView => View == ViewMode.Compact;
+
+    [RelayCommand]
+    public void ShowAsDetails() => View = ViewMode.Details;
+
+    [RelayCommand]
+    public void ShowAsGrid() => TrySetTileLayout(ViewMode.Grid, "grid");
+
+    /// <summary>
+    /// Dolphin's third mode: names only, flowing down and wrapping into
+    /// columns. The point is density — it fits several times as many entries on
+    /// screen as either other layout, which is what you want when you are
+    /// looking for a name rather than inspecting files.
+    /// </summary>
+    [RelayCommand]
+    public void ShowAsCompact() => TrySetTileLayout(ViewMode.Compact, "compact");
+
+    /// <summary>
+    /// Refuses rather than hangs. The message names the real reason and the
+    /// number, so it reads as a known limit and not a malfunction.
+    /// </summary>
+    private void TrySetTileLayout(ViewMode mode, string label)
+    {
+        // Kept as the single entry point for both tile layouts even though it no
+        // longer refuses anything — `label` is now unused, and the method stays
+        // only because a future layout might need to.
+        _ = label;
+
+        View = mode;
+    }
+
+    partial void OnViewChanged(ViewMode oldValue, ViewMode newValue)
+    {
+        // The outgoing mode keeps whatever it was left at, and the incoming one
+        // restores its own. `_swappingScales` stops these two assignments being
+        // recorded against the mode we are arriving in.
+        _scales[oldValue] = (FontScale, IconScale);
+
+        var (font, icon) = _scales[newValue];
+
+        _swappingScales = true;
+        try
+        {
+            // Assigned, not suppressed: the metric pipeline, the column
+            // thresholds and the size readout all have to follow. Only the
+            // bookkeeping above is skipped.
+            FontScale = font;
+            IconScale = icon;
+        }
+        finally
+        {
+            _swappingScales = false;
+        }
+
+        // Timed because the un-virtualized layouts realize a container per
+        // item, and how bad that is at a given count is the one number the
+        // guard above should be set from.
+        // Threshold 200, not 1,000: the measured cost is ~0.4 ms/item in grid
+        // and ~0.8 in compact, so the interesting range — where realization is
+        // still tolerable — sits BELOW a thousand. A 1,000-item floor measured
+        // only the region that was already too slow.
+        var realizeWatch = newValue != ViewMode.Details && Entries.Count > 200
+            ? System.Diagnostics.Stopwatch.StartNew()
+            : null;
+
+        if (realizeWatch is not null)
+            Dispatcher.UIThread.Post(() =>
+            {
+                realizeWatch.Stop();
+                Console.Error.WriteLine(
+                    $"[vaktari] tiles: {newValue} with {Entries.Count:N0} items "
+                    + $"realized in {realizeWatch.ElapsedMilliseconds} ms");
+            }, DispatcherPriority.Background);
+
+        // Populate the incoming layout FIRST. Its ListBox cannot hold a
+        // selection for items it does not yet have, so carrying the selection
+        // before the items exist would silently drop it.
+        NotifyLayoutEntries();
+
+        CarrySelection(oldValue, newValue);
+
+        OnPropertyChanged(nameof(IsDetailsView));
+        OnPropertyChanged(nameof(IsGridView));
+        OnPropertyChanged(nameof(IsCompactView));
+        OnPropertyChanged(nameof(SelectedEntries));
+
+        // The whole state in one line. "Status bar says 300 items but the pane
+        // is empty" means Entries is populated and the bound layout is not —
+        // which can only be View and the entries properties disagreeing, or a
+        // ListBox still holding the empty array from when it was hidden.
+        Console.Error.WriteLine(
+            $"[vaktari] view: {oldValue}->{newValue} entries={Entries.Count:N0} "
+            + $"details={DetailsEntries.Count():N0} grid={GridEntries.Count():N0} "
+            + $"compact={CompactEntries.Count():N0} "
+            + $"remember={Settings.AppSettings.Current.General.RememberViewPerFolder}");
+
+        RememberFolderView();
+    }
+
+    [RelayCommand]
+    public void ToggleView()
+        => View = View == ViewMode.Details ? ViewMode.Grid : ViewMode.Details;
+
+    public bool CanGoBack => _back.Count > 0;
+    public bool CanGoForward => _forward.Count > 0;
+    /// <summary>
+    /// A virtual listing has no parent, and the Up button must be DISABLED
+    /// there rather than merely inert.
+    ///
+    /// `GetParent` is `Path.GetDirectoryName`, which returns an EMPTY STRING —
+    /// not null — for a path with no separator in it, so
+    /// "vaktari:recent-files" reported a parent, enabled the button, and then
+    /// did nothing when pressed because `NavigateAsync` rejects a blank path.
+    /// An enabled control that does nothing is worse than a disabled one: it
+    /// invites the user to conclude the application is broken.
+    /// </summary>
+    public bool CanGoUp => !string.IsNullOrEmpty(CurrentPath)
+                           && !VirtualPaths.IsVirtual(CurrentPath)
+                           && !string.IsNullOrEmpty(_fs.GetParent(CurrentPath));
+
+        public async Task NavigateAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        // Already here, already loaded: do nothing at all.
+        //
+        // Reloading tore the listing down and rebuilt it — and because entries
+        // paint in readdir order and only sort once enumeration finishes, the
+        // rebuild flashed the same files in filesystem order before they
+        // settled. Clicking a place you are already viewing looked like the
+        // folder briefly changed. Refreshing on purpose is F5's job; a
+        // navigation to where you already are is not a request to refresh.
+        if (IsLoaded && !IsLoading
+            && string.Equals(CurrentPath, path, StringComparison.Ordinal))
+            return;
+
+        if (!string.IsNullOrEmpty(CurrentPath) && CurrentPath != path)
+        {
+            _back.Push(CurrentPath);
+            _forward.Clear();
+        }
+
+        await LoadAsync(path).ConfigureAwait(false);
+
+        // After the load, and only if it worked — a path that could not be read
+        // is not somewhere the user goes, and counting it would push dead
+        // folders up the list.
+        // Recording the recent listing itself would be circular: it would put
+        // "recent locations" at the top of recent locations.
+        if (IsLoaded && !VirtualPaths.IsVirtual(path))
+        {
+            Recents?.Record(path, RecentKind.Folder);
+        }
+    }
+
+    [RelayCommand]
+    public async Task GoBackAsync()
+    {
+        if (!CanGoBack) return;
+        _forward.Push(CurrentPath);
+        await LoadAsync(_back.Pop()).ConfigureAwait(false);
+    }
+
+    [RelayCommand]
+    public async Task GoForwardAsync()
+    {
+        if (!CanGoForward) return;
+        _back.Push(CurrentPath);
+        await LoadAsync(_forward.Pop()).ConfigureAwait(false);
+    }
+
+    [RelayCommand]
+    public async Task GoUpAsync()
+    {
+        // Guarded here as well as in CanGoUp: the button's IsEnabled binds to
+        // that property, but a keyboard shortcut reaches this command directly
+        // and would bypass it.
+        if (!CanGoUp) return;
+
+        if (_fs.GetParent(CurrentPath) is { Length: > 0 } parent)
+            await NavigateAsync(parent).ConfigureAwait(false);
+    }
+
+    [RelayCommand]
+    public Task OpenAsync(FileEntry entry)
+    {
+        if (entry.IsDirectory) return NavigateAsync(entry.FullPath);
+
+        // Recorded on the ATTEMPT, not on success: IApplicationLauncher.Open
+        // returns void, so there is nothing to test. Asking to open a file is
+        // the user's act either way, which is the recency semantic that matters
+        // — and a file with no handler is rare next to the cost of pretending
+        // to know whether the launch worked.
+        Recents?.Record(entry.FullPath, RecentKind.File);
+
+        _launcher?.Open(entry.FullPath);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Drops the selected entries from the recency store — Dolphin's "Forget",
+    ///
+    /// **It removes the RECORD, never the file.** That distinction is the whole
+    /// point of the action: a recent list you cannot prune is a log rather than
+    /// a tool, but a Forget that deleted things would be catastrophic next to a
+    /// Delete one row above it in the same menu.
+    ///
+    /// The listing is built from the store, so it has to be rebuilt afterwards
+    /// — nothing watches a virtual path, by design.
+    /// </summary>
+    [RelayCommand]
+    private async Task ForgetRecentAsync()
+    {
+        if (Recents is null) return;
+
+        var paths = SelectionPaths();
+        if (paths.Count == 0) return;
+
+        foreach (var path in paths) Recents.Forget(path);
+
+        if (VirtualPaths.IsRecent(CurrentPath)) await RefreshAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Puts the selected trashed items back.
+    ///
+    /// The listing shows ORIGINAL paths, and Restore needs the trash KEY, so
+    /// the mapping is looked up from the store rather than derived from the
+    /// name — a deduplicated key like `notes.3.txt` cannot be reversed into
+    /// `notes.txt` reliably, and guessing would restore the wrong file.
+    /// </summary>
+    [RelayCommand]
+    private async Task RestoreFromTrashAsync()
+    {
+        if (Trash is null || !IsTrashListing) return;
+
+        var wanted = SelectionPaths().ToHashSet(StringComparer.Ordinal);
+        if (wanted.Count == 0) return;
+
+        var restored = 0;
+
+        foreach (var item in Trash.List())
+        {
+            if (!wanted.Contains(item.OriginalPath)) continue;
+
+            try
+            {
+                Trash.Restore(item.TrashName);
+                restored++;
+            }
+            catch (Exception ex)
+            {
+                // One failure must not abandon the rest of the selection.
+                Console.Error.WriteLine($"[vaktari] restore failed: {ex.Message}");
+            }
+        }
+
+        Status = restored == 0 ? "nothing restored" : $"restored {restored:N0} item(s)";
+
+        await RefreshAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Permanently deletes everything in the trash. **Always confirmed by the
+    /// caller** — this is the one action in the application with no undo and no
+    /// per-item review, so the prompt is not a preference the way trashing is.
+    /// </summary>
+    public async Task EmptyTrashAsync()
+    {
+        if (Trash is null) return;
+
+        var result = await Trash.EmptyAsync(CancellationToken.None).ConfigureAwait(false);
+
+        Status = $"emptied {Core.Naming.BinName} — removed {result.Removed:N0}, "
+               + $"freed {ByteSize.Format(result.BytesFreed)}";
+
+        if (IsTrashListing) await RefreshAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Fetches version-control state for a folder and publishes it if that
+    /// folder is still the one being shown.
+    ///
+    /// Fire-and-forget from the load path, so it carries its own catch-all:
+    /// an unobserved exception on a pool thread is a process abort, and this
+    /// runs a subprocess.
+    /// </summary>
+    private async Task RefreshVcsAsync(string path, int generation)
+    {
+        var empty = new Dictionary<string, Vaktari.Core.Vcs.VcsState>();
+
+        // The setting is read HERE rather than at startup, so turning it off
+        // takes effect on the next folder load without a restart — and turning
+        // it on does not need one either.
+        // Written as "explicitly off" rather than "not on", so a settings group
+        // that is somehow null reads as the DEFAULT (enabled) instead of
+        // throwing. `SettingsState` declares `Vcs { get; init; } = new()` and
+        // should never hand back null — but it did, this method's catch-all
+        // swallowed the NullReferenceException, and the decorations silently
+        // stopped. **A feature must not depend on a settings group being
+        // non-null to work at all.**
+        if (Vcs is null
+            || Settings.AppSettings.Current.Vcs is { ShowDecorations: false }
+            || VirtualPaths.IsVirtual(path))
+        {
+            VcsStates = empty;
+
+            // Clear rather than skip: navigating from a repository into a
+            // virtual listing must not leave the previous folder's marks
+            // standing.
+            Thumbnails.RowVcs.Publish(path, null);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                IsRepository = false;
+                StartWatchingRepository(null);
+            });
+
+            // Say WHICH of the three reasons. Returning silently made "no marks"
+            // mean "no provider", "switched off" or "not a real folder" with no
+            // way to tell them apart — and this method's only other output is a
+            // line that simply never appears.
+            Console.Error.WriteLine(
+                "[vaktari] vcs: skipped — "
+                + (Vcs is null ? "no provider (is git installed?)"
+                   : Settings.AppSettings.Current.Vcs is { ShowDecorations: false }
+                       ? "disabled in settings"
+                   : "virtual listing")
+                + $" · {path}");
+
+            return;
+        }
+
+        try
+        {
+            var snapshot = await Vcs.StatusAsync(path, _cts?.Token ?? default)
+                .ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                // The same guard every other dispatcher block here uses:
+                // cancelling does not unqueue a callback already in flight, and
+                // publishing this against a newer folder would decorate the
+                // wrong rows.
+                if (generation != _generation) return;
+
+                VcsStates = snapshot?.States ?? empty;
+
+                // Started from here because this is where the root is already
+                // known — FindRoot walked for it, and asking twice would mean
+                // two directory walks per folder open.
+                StartWatchingRepository(snapshot?.Root);
+
+                // A snapshot with a Root means we are in a repository even when
+                // every file is clean — the column should appear, empty, rather
+                // than flicker in only once something is modified.
+                IsRepository = snapshot is not null;
+
+                // Hand it to the row decorator. Rows are already on screen by
+                // now — status is fetched AFTER the listing deliberately — so
+                // publishing raises an event that makes the realized rows look
+                // again.
+                Thumbnails.RowVcs.Publish(path, snapshot?.States);
+
+                Console.Error.WriteLine(
+                    $"[vaktari] vcs: {Vcs.Name} · {VcsStates.Count} decorated "
+                    + $"· root={snapshot?.Root ?? "(none)"} · {path}");
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer navigation; the newer one owns the state.
+        }
+        catch (Exception ex)
+        {
+            // Type as well as message. "Object reference not set" alone does not
+            // say which reference, and this catch-all had been quietly turning a
+            // crash into an absence of marks.
+            Console.Error.WriteLine($"[vaktari] vcs: {ex.GetType().Name}: {ex}");
+        }
+    }
+
+    /// <summary>Paths of the selection, falling back to the focused row.</summary>
+    public IReadOnlyList<string> SelectionPaths()
+        => Selection.Count > 0
+            ? Selection.Select(e => e.FullPath).ToList()
+            : SelectedEntry is { } one ? [one.FullPath] : [];
+
+    private void Track(IOperationHandle handle)
+    {
+        OperationStarted?.Invoke(this, handle);
+
+        // The listing is refreshed once, at the end — refreshing per item would
+        // rebuild the view thousands of times during a large copy.
+        _ = handle.Completion.ContinueWith(
+            _ => Dispatcher.UIThread.Post(() => _ = RefreshAsync()),
+            TaskScheduler.Default);
+    }
+
+    partial void OnSelectedEntryChanged(FileEntry? value)
+    {
+        if (IsPreviewVisible) _ = RefreshPreviewAsync();
+
+        OpenWithOptions.Clear();
+        if (_launcher is null || value is not { IsDirectory: false } entry) return;
+
+        // Enumeration shells out to xdg-mime, so keep it off the UI thread.
+        var path = entry.FullPath;
+        _ = Task.Run(() =>
+        {
+            var options = _launcher.GetOpenWithOptions(path);
+            Dispatcher.UIThread.Post(() =>
+            {
+                OpenWithOptions.Clear();
+                foreach (var option in options) OpenWithOptions.Add(option);
+            });
+        });
+    }
+
+    [RelayCommand]
+    public void OpenWithApp(LaunchOption? option)
+    {
+        if (option is null || SelectedEntry is not { } entry) return;
+
+        // Same act as OpenAsync, so it belongs in the recent list too. Missing
+        // this would make the list quietly depend on WHICH way you opened
+        // something, which nobody would guess from the UI.
+        Recents?.Record(entry.FullPath, RecentKind.File);
+
+        _launcher?.OpenWith(entry.FullPath, option);
+    }
+
+    [RelayCommand]
+    public void OpenTerminalHere() => _launcher?.OpenTerminal(CurrentPath);
+
+
+
+
+
+
+
+
+
+
+
+
+    [RelayCommand]
+    public Task RefreshAsync() => LoadAsync(CurrentPath);
+
+    [RelayCommand]
+    public Task OpenSelectedAsync()
+        => SelectedEntry is { } entry ? OpenAsync(entry) : Task.CompletedTask;
+
+
+
+
+
+
+
+
+    partial void OnCurrentPathChanged(string value)
+    {
+        // CurrentPath is assigned from LoadListingAsync after a ConfigureAwait,
+        // so this runs on a pool thread. Breadcrumbs is bound to the UI, and
+        // mutating it from here is a crash waiting for a slow directory.
+        // The column flags depend on the path too — a recent listing shows the
+        // parent-path column and hides the metadata one — and they are bound,
+        // so they are raised on the same hop rather than from here.
+        Dispatcher.UIThread.Post(() =>
+        {
+            RebuildBreadcrumbs();
+            OnPropertyChanged(nameof(IsRecentListing));
+            OnPropertyChanged(nameof(IsTrashListing));
+            OnPropertyChanged(nameof(ShowParentPath));
+            OnPropertyChanged(nameof(ShowMetadata));
+
+            // CanGoUp depends on CurrentPath, and the copy of this call inside
+            // LoadListingAsync runs on a POOL THREAD — where a binding update
+            // is not guaranteed to be applied. CanGoForward hid that, because
+            // it also changes when Back is pressed, which is on the UI thread;
+            // CanGoUp changes only with the path, so it stayed stale and the
+            // Up button remained enabled on a virtual listing.
+            NotifyNavigationState();
+        });
+
+        _ = RefreshFreeSpaceAsync(value);
+
+        // A virtual listing has no filename to fall back on: GetFileName of
+        // "vaktari:recent-files" is the whole string, since it contains no
+        // separator, and that is what the tab would have been titled.
+        if (VirtualPaths.IsVirtual(value))
+        {
+            Title = VirtualPaths.Label(value);
+            return;
+        }
+
+        // LeafName gives the root back as itself, so the "/" fallback is no
+        // longer a Linux-shaped guess about what a root looks like.
+        Title = PathRules.LeafName(value);
+    }
+
+    /// <summary>
+    /// Restored tabs enumerate only when first activated. Recreating twenty
+    /// tabs eagerly means twenty listings at startup, and one of them sitting
+    /// on an unreachable share costs the whole window its SMB timeout.
+    /// </summary>
+    partial void OnIsActiveChanged(bool value)
+    {
+        if (value && !IsLoaded && !IsLoading && !string.IsNullOrEmpty(CurrentPath))
+            Detached(LoadAsync(CurrentPath), "load");
+    }
+
+    /// <summary>
+    /// Adopt persisted state without touching the filesystem. ShowHidden is set
+    /// under suppression because its change handler triggers a reload, which is
+    /// exactly what lazy restore is trying to avoid.
+    /// </summary>
+    public void RestoreFrom(TabState tab)
+    {
+        _suppressReload = true;
+        try
+        {
+            CurrentPath = tab.Path;
+            PathText = tab.Path;
+            Sort = tab.Sort;
+            SortDescending = tab.SortDescending;
+            ShowHidden = tab.ShowHidden;
+            View = tab.View;
+            GroupBy = tab.GroupBy;
+
+            // Guarded: a session written before these existed deserialises as
+            // 0, which would restore an invisible pane.
+            FontScale = tab.FontScale > 0 ? tab.FontScale : 1.0;
+            IconScale = tab.IconScale > 0 ? tab.IconScale : 1.0;
+
+            // Details keeps the original pair; the other two restore their own
+            // and fall back to it. **Zero means absent** — deserialization does
+            // not run property initializers here, so a session written before
+            // v13 has no grid or compact keys at all and every layout should
+            // start where details was left.
+            SeedScales(FontScale, IconScale);
+
+            _scales[ViewMode.Grid] = (
+                tab.GridFontScale > 0 ? tab.GridFontScale : FontScale,
+                tab.GridIconScale > 0 ? tab.GridIconScale : IconScale);
+
+            _scales[ViewMode.Compact] = (
+                tab.CompactFontScale > 0 ? tab.CompactFontScale : FontScale,
+                tab.CompactIconScale > 0 ? tab.CompactIconScale : IconScale);
+
+            // The active layout's pair has to become the live one, or a tab
+            // restored into grid would show the details size until the next
+            // switch.
+            var (font, icon) = _scales[View];
+
+            _swappingScales = true;
+            try { FontScale = font; IconScale = icon; }
+            finally { _swappingScales = false; }
+
+            _back.Clear();
+            foreach (var p in tab.BackStack) _back.Push(p);
+
+            _forward.Clear();
+            foreach (var p in tab.ForwardStack) _forward.Push(p);
+        }
+        finally
+        {
+            _suppressReload = false;
+        }
+
+        IsLoaded = false;
+        Status = "not loaded";
+        NotifyNavigationState();
+    }
+
+    /// <summary>
+    /// Load now if the pane was restored but never activated into a load.
+    /// Start() assigns ActiveTab while change notifications are suppressed, so
+    /// the usual activate-triggers-load path doesn't fire for it.
+    /// </summary>
+    public void RefreshIfUnloaded()
+    {
+        if (!IsLoaded && !IsLoading && !string.IsNullOrEmpty(CurrentPath))
+            Detached(LoadAsync(CurrentPath), "load");
+    }
+
+    public TabState ToTabState() => new()
+    {
+        Path = CurrentPath,
+        Sort = Sort,
+        SortDescending = SortDescending,
+        ShowHidden = ShowHidden,
+        View = View,
+        GroupBy = GroupBy,
+        // **All three read from `_scales`, including details.** The live
+        // `FontScale`/`IconScale` hold whichever layout is ON SCREEN, so writing
+        // them into the details slot would have saved the grid's size as the
+        // details size whenever the tab was left in grid. `_scales[View]` is kept
+        // current by `OnFontScaleChanged`, so the dictionary is the honest source.
+        FontScale = _scales[ViewMode.Details].Font,
+        IconScale = _scales[ViewMode.Details].Icon,
+
+        GridFontScale = _scales[ViewMode.Grid].Font,
+        GridIconScale = _scales[ViewMode.Grid].Icon,
+        CompactFontScale = _scales[ViewMode.Compact].Font,
+        CompactIconScale = _scales[ViewMode.Compact].Icon,
+
+        // Stacks serialise oldest-first so RestoreFrom can push in order.
+        BackStack = _back.Reverse().ToList(),
+        ForwardStack = _forward.Reverse().ToList(),
+    };
+
+    partial void OnShowHiddenChanged(bool value)
+    {
+        if (!_suppressReload) Detached(LoadAsync(CurrentPath), "load");
+    }
+
+    /// <summary>
+    /// Starts work nobody is going to await, and reports what it throws.
+    ///
+    /// **`_ = SomeAsync()` discards the Task and with it the exception**, which
+    /// then surfaces — if at all — as an unobserved-task crash long after the
+    /// call that caused it. `async void` here is deliberate and safe precisely
+    /// because it carries a catch; that is the rule this project already applies
+    /// to its event handlers.
+    /// </summary>
+    private static async void Detached(Task work, string area)
+    {
+        try
+        {
+            await work.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Vaktari.Core.Quiet.Swallowed(area, ex);
+        }
+    }
+
+    /// <summary>
+    /// Flips hidden-file visibility. Exists for the keyboard route only — the
+    /// settings flyout binds `ShowHidden` directly, so this must stay a plain
+    /// flip with no extra behaviour, or the two paths would diverge.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleHidden() => ShowHidden = !ShowHidden;
+
+    partial void OnIsLoadedChanged(bool value) => NotifyListingState();
+    partial void OnIsLoadingChanged(bool value) => NotifyListingState();
+
+    partial void OnSortChanged(SortField value)
+    {
+        NotifySortGlyphs();
+        if (!_suppressReload) ResortInPlace();
+    
+        RememberFolderView();
+    }
+
+    /// <summary>
+    /// Debounced because filtering rebuilds the visible collection, and doing
+    /// that per keystroke on a 200k listing would stutter badly.
+    /// </summary>
+    partial void OnFilterTextChanged(string value)
+    {
+        _filterDebounce?.Cancel();
+        _filterDebounce?.Dispose();
+        _filterDebounce = new CancellationTokenSource();
+        var ct = _filterDebounce.Token;
+
+        _ = Task.Delay(120, ct).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            Dispatcher.UIThread.Post(ApplyFilter);
+        }, TaskScheduler.Default);
+    }
+
+
+
+
+
+
+    /// <summary>Swaps the crumbs for an editable box — Ctrl+L, or clicking the
+    /// empty space beside them, exactly as Dolphin does it.</summary>
+    [ObservableProperty] private bool _isPathEditing;
+
+    private readonly PathCompleter _completer = new();
+
+
+    private bool _completingPath;
+
+
+
+
+
+
+
+
+
+
+
+
+    [RelayCommand] private void SortByName() => SortBy("name");
+    [RelayCommand] private void SortBySize() => SortBy("size");
+    [RelayCommand] private void SortByModified() => SortBy("modified");
+
+
+
+    [RelayCommand]
+    public void ClearFilter()
+    {
+        if (FilterText.Length > 0) FilterText = "";
+        else IsFilterVisible = false;
+    }
+
+    [RelayCommand]
+    public void ToggleFilter()
+    {
+        IsFilterVisible = !IsFilterVisible;
+        if (!IsFilterVisible && FilterText.Length > 0) FilterText = "";
+    }
+
+    private void ApplyFilter()
+    {
+        var filtered = string.IsNullOrWhiteSpace(FilterText)
+            ? _all
+            : _all.Where(e => e.Name.Contains(FilterText, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        _groupNow = DateTimeOffset.Now;
+
+        var sorted = filtered.ToList();
+        sorted.Sort(Compare);
+
+        // Before the swap, so a row realized by ReplaceAll already has its
+        // header available rather than reading a stale map.
+        RecomputeGroups(sorted);
+
+        Entries.ReplaceAll(sorted);
+
+        // Only when filtering. The plain count lives in Summary, and setting
+        // both made the status bar print "36 items   36 items".
+        Status = filtered.Count == _all.Count
+            ? ""
+            : $"filtered to {filtered.Count:N0} of {_all.Count:N0}";
+    }
+
+    partial void OnSortDescendingChanged(bool value)
+    {
+        NotifySortGlyphs();
+        if (!_suppressReload) ResortInPlace();
+    
+        RememberFolderView();
+    }
+
+    private async Task LoadAsync(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+
+        await LoadListingAsync(path).ConfigureAwait(false);
+    }
+
+    private async Task LoadListingAsync(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+
+        // Cancelling the previous navigation is what stops a dead network path
+        // from wedging the pane. It is not an optimisation.
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        var setupWatch = Stopwatch.StartNew();
+
+        var generation = ++_generation;
+
+        // Before CurrentPath moves, and guarded so the property setters this
+        // triggers do not immediately write the folder's own state back at it.
+        // BOTH flags. _restoringView stops the change hooks writing the folder's
+        // own state straight back at it; _suppressReload is the codebase's
+        // existing guard — without it, setting Sort here fires ResortInPlace and
+        // setting GroupBy fires ApplyFilter, both against the PREVIOUS folder's
+        // entries, mid-load. RestoreFrom has always used it for the same reason.
+        _restoringView = true;
+        _suppressReload = true;
+        try { ApplyFolderView(path); }
+        finally
+        {
+            _suppressReload = false;
+            _restoringView = false;
+        }
+
+        CurrentPath = path;
+        PathText = path;
+        IsLoading = true;
+        _all.Clear();
+        Entries.Reset();
+        NotifyNavigationState();
+
+        var phaseSetup = setupWatch.ElapsedMilliseconds;
+
+        var options = new ListingOptions { IncludeHidden = ShowHidden, BatchSize = 500 };
+
+        // The ONE branch that makes a recent listing possible. Both sources are
+        // the same IAsyncEnumerable shape, so everything below — batching, the
+        // generation guard, sorting, filtering, the status line — runs
+        // unchanged and knows nothing about where the rows came from.
+        var source =
+            VirtualPaths.IsRecent(path) ? RecentListing.EnumerateAsync(Recents, path, ct)
+            : path == VirtualPaths.Trash ? RecentListing.EnumerateTrashAsync(Trash, ct)
+            : _fs.EnumerateAsync(path, options, ct);
+
+        var sw = Stopwatch.StartNew();
+        var sinceFlush = Stopwatch.StartNew();
+        var pending = new List<FileEntry>(4096);
+        var count = 0;
+
+        try
+        {
+            await foreach (var batch in source.ConfigureAwait(false))
+            {
+                pending.AddRange(batch);
+
+                if (sinceFlush.ElapsedMilliseconds < FlushIntervalMs) continue;
+
+                var flush = pending;
+                pending = new List<FileEntry>(4096);
+                sinceFlush.Restart();
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    // Cancelling the token does NOT unqueue a dispatcher
+                    // callback that is already on its way. Without this check a
+                    // superseded enumeration appends its batch into the list the
+                    // newer navigation just cleared — which is the flash of
+                    // wrong files you get from clicking a place twice.
+                    if (generation != _generation) return;
+
+                    _all.AddRange(flush);
+                    Entries.AddRange(flush);
+                    count += flush.Count;
+                    Status = $"{count:N0} items…";
+                });
+            }
+
+            if (pending.Count > 0)
+            {
+                var tail = pending;
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (generation != _generation) return;
+
+                    _all.AddRange(tail);
+                    Entries.AddRange(tail);
+                    count += tail.Count;
+                });
+            }
+
+            var enumerateMs = sw.ElapsedMilliseconds;
+
+            // Sorting happens once, after enumeration, rather than per batch.
+            // Entries appear in readdir order while loading and settle when the
+            // listing completes — which keeps first paint at a few milliseconds.
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                // The worst one to miss: a superseded run reaching here would
+                // point the watcher at the folder it was loading, clear
+                // IsLoading for a navigation still in flight, and sort a list
+                // that now belongs to somewhere else.
+                if (generation != _generation) return;
+
+                if (FilterText.Length > 0) ApplyFilter(); else ResortInPlace();
+
+                // Nothing to watch: there is no directory behind a recent
+                // listing. Skipped explicitly rather than left to fail inside
+                // StartWatching's catch, because a silently swallowed failure
+                // is exactly the kind of thing that reads as working.
+                if (!VirtualPaths.IsVirtual(path)) StartWatching(path);
+                sw.Stop();
+
+                // Cleared, NOT set to the count. Summary already shows
+                // "36 items" and Status sat beside it showing the same thing,
+                // so the status bar read "36 items   36 items". Status is for
+                // messages; the count has an owner and this is not it.
+                Status = "";
+                IsLoading = false;
+                IsLoaded = true;
+
+                // AFTER the listing is on screen, never before it. Status can
+                // take seconds on a large repository and the folder must not
+                // wait on it — decorations arriving late is the correct
+                // trade-off, a listing that stalls is not.
+                _ = RefreshVcsAsync(path, generation);
+
+                // Says what the listing actually produced. "No files showing"
+                // has two very different causes — nothing enumerated, or
+                // nothing rendered — and only this separates them.
+                // Timing stays — it is how a 44-second stall was found at
+                // all. Heap, GC and thread-pool counters were for that hunt
+                // specifically and are noise in daily use, so they need asking
+                // for: VAKTARI_LOAD_DEBUG=1.
+                //
+                // The three phases SUM to the total; sw starts after setup is
+                // captured, so they are separate clocks, not slices of one.
+                var detail = Environment.GetEnvironmentVariable("VAKTARI_LOAD_DEBUG") == "1"
+                    ? $"heap {GC.GetTotalMemory(false) / (1024 * 1024)} MiB "
+                      + $"gc {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)} "
+                      + $"pool {ThreadPool.ThreadCount}t/{ThreadPool.PendingWorkItemCount}q "
+                    : "";
+
+                Console.Error.WriteLine(
+                    $"[vaktari] listing: {Entries.Count:N0} of {_all.Count:N0} "
+                    + $"in {phaseSetup + sw.ElapsedMilliseconds} ms "
+                    + $"(setup {phaseSetup} · enumerate {enumerateMs} · "
+                    + $"finish {sw.ElapsedMilliseconds - enumerateMs}) "
+                    + detail
+                    + $"· {View} · {path}");
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer navigation; the newer one owns the status.
+        }
+        catch (Exception ex)
+        {
+            // Dead paths stay visible with an explanation rather than being
+            // dropped or silently redirected — silently dropping a restored tab
+            // is what "it forgot" feels like.
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                // A failure in a navigation nobody is waiting for any more is
+                // not worth reporting over the one they are.
+                if (generation != _generation) return;
+
+                Status = $"{ex.GetType().Name}: {ex.Message}";
+                IsLoading = false;
+            });
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+    private void RemoveByPathSilently(string path)
+    {
+        var masterIndex = _all.FindIndex(e => e.FullPath == path);
+        if (masterIndex >= 0) _all.RemoveAt(masterIndex);
+
+        for (var i = 0; i < Entries.Count; i++)
+        {
+            if (Entries[i].FullPath != path) continue;
+            Entries.RemoveAt(i);
+            break;
+        }
+    }
+
+    private bool MatchesFilter(FileEntry entry)
+        => string.IsNullOrWhiteSpace(FilterText)
+           || entry.Name.Contains(FilterText, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Binary search for the insertion point under the current sort,
+    /// so a new file lands where it belongs instead of forcing a re-sort.</summary>
+    private int FindSortedIndex(IList<FileEntry> list, FileEntry entry)
+    {
+        int low = 0, high = list.Count;
+
+        while (low < high)
+        {
+            var mid = (low + high) / 2;
+            if (Compare(list[mid], entry) < 0) low = mid + 1;
+            else high = mid;
+        }
+
+        return low;
+    }
+
+    /// <summary>
+    /// Only says something when a filter is actually hiding rows, because that
+    /// is the part Summary cannot express — Summary counts what is on screen
+    /// and has no way to say "out of how many". With no filter there is nothing
+    /// to add, so it says nothing rather than repeating the count.
+    /// </summary>
+    private void UpdateCountStatus()
+        => Status = Entries.Count == _all.Count
+            ? ""
+            : $"{Entries.Count:N0} of {_all.Count:N0} items";
+
+    private void ResortInPlace()
+    {
+        if (Entries.Count == 0) return;
+
+        _groupNow = DateTimeOffset.Now;
+
+        var items = _all.Count > 0 ? _all.ToList() : Entries.ToList();
+        items.Sort(Compare);
+
+        RecomputeGroups(items);
+        Entries.ReplaceAll(items);
+    }
+
+
+
+    [RelayCommand] private void GroupByNone() => GroupBy = GroupMode.None;
+    [RelayCommand] private void GroupByName() => GroupBy = GroupMode.Name;
+    [RelayCommand] private void GroupBySize() => GroupBy = GroupMode.Size;
+    [RelayCommand] private void GroupByModified() => GroupBy = GroupMode.Modified;
+    [RelayCommand] private void GroupByKind() => GroupBy = GroupMode.Kind;
+
+
+    /// <summary>
+    /// The header a row should carry, or null. Computed once per rebuild rather
+    /// than per row: a row cannot see its predecessor, and asking each one to
+    /// work it out would be O(n) lookups on every realization.
+    /// </summary>
+    private readonly Dictionary<string, string> _groupHeaders = new(StringComparer.Ordinal);
+
+    // Captured once per sort: asking for the time inside a comparison would
+    // make the ordering depend on when each comparison happened.
+    private DateTimeOffset _groupNow = DateTimeOffset.Now;
+
+
+    /// <summary>Raised when headers change, so realized rows re-read them.</summary>
+    public event EventHandler? GroupingChanged;
+
+    private void RecomputeGroups(List<FileEntry> ordered)
+    {
+        _groupHeaders.Clear();
+
+        if (GroupBy != GroupMode.None)
+        {
+            string? previous = null;
+
+            foreach (var entry in ordered)
+            {
+                var label = Grouping.Label(entry, GroupBy, _groupNow);
+
+                // Only the first row of a run carries the header; the rest are
+                // plain, which is what makes it read as a group rather than a
+                // repeated label.
+                if (label != previous)
+                {
+                    _groupHeaders[entry.FullPath] = label;
+                    previous = label;
+                }
+            }
+        }
+
+        GroupingChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+
+    private void NotifyNavigationState()
+    {
+        OnPropertyChanged(nameof(CanGoBack));
+        OnPropertyChanged(nameof(CanGoForward));
+        OnPropertyChanged(nameof(CanGoUp));
+    }
+
+    public void Dispose()
+    {
+        _vcsRefresh?.Stop();
+        _repoWatcher?.Dispose();
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+
+        _watcher?.Dispose();
+        _watcher = null;
+    }
+}

@@ -1,0 +1,32 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+
+Name=Vaktari
+GenericName=File Manager
+Comment=Browse, search and share files
+
+# %F rather than %f: Vaktari opens several paths at once, and the desktop
+# passes them as separate arguments.
+Exec=vaktari %F
+Icon=vaktari
+Terminal=false
+StartupNotify=true
+
+# inode/directory is what makes this offerable as the default file manager;
+# without it the system will not list Vaktari when you go to change it.
+MimeType=inode/directory;
+
+Categories=System;Utility;Core;FileTools;FileManager;
+Keywords=files;folders;browse;explorer;manager;network;share;
+
+Actions=NewWindow;Home;
+
+[Desktop Action NewWindow]
+Name=Open a New Window
+Exec=vaktari
+
+[Desktop Action Home]
+Name=Open Home Folder
+Exec=vaktari %h
+StartupWMClass=Vaktari.Ui

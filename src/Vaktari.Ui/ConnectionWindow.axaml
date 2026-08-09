@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Vaktari.Ui.ViewModels"
+        x:Class="Vaktari.Ui.ConnectionWindow"
+        x:DataType="vm:ConnectionInfoViewModel"
+        Title="{Binding Title}"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="16">
+
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Title}"
+               FontSize="{DynamicResource FontSizeLarge}"
+               TextTrimming="CharacterEllipsis" Margin="0,0,0,12"/>
+
+    <Border DockPanel.Dock="Bottom" Margin="0,14,0,0">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button Content="Copy address" Padding="12,4"
+                  Command="{Binding CopyAddressCommand}"/>
+          <!-- Only offered where it means something: a discovered service that
+               was never mounted has nothing to disconnect from. -->
+          <Button Content="Disconnect" Padding="12,4"
+                  IsVisible="{Binding CanDisconnect}"
+                  Command="{Binding DisconnectCommand}"/>
+          <Button Content="Close" Padding="12,4" Command="{Binding CloseCommand}"/>
+        </StackPanel>
+        <TextBlock Text="{Binding Status}" VerticalAlignment="Center"
+                   TextWrapping="Wrap"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Foreground="{DynamicResource ViewDimText}"/>
+      </DockPanel>
+    </Border>
+
+    <ItemsControl ItemsSource="{Binding Rows}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:InfoRow">
+          <Grid ColumnDefinitions="130,*" Margin="0,3">
+            <TextBlock Grid.Column="0" Text="{Binding Label}"
+                       FontSize="{DynamicResource FontSizeSmall}"
+                       Foreground="{DynamicResource ViewDimText}"/>
+            <SelectableTextBlock Grid.Column="1" Text="{Binding Value}"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 FontFamily="monospace"
+                                 TextWrapping="Wrap"/>
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+  </DockPanel>
+</Window>

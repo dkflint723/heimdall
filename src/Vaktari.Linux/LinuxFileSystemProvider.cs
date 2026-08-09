@@ -1,0 +1,187 @@
+using System.IO.Enumeration;
+using System.Runtime.CompilerServices;
+using Vaktari.Core.FileSystem;
+
+namespace Vaktari.Linux;
+
+/// <summary>
+/// Linux implementation. The whole point of this class is the transform in
+/// <see cref="Enumerate"/>: FileSystemEnumerable lets us build a FileEntry
+/// directly from the kernel's directory entry, so a 200k-file listing costs
+/// 200k struct copies rather than 200k FileInfo allocations plus 200k stat
+/// calls.
+/// </summary>
+public sealed class LinuxFileSystemProvider : IFileSystemProvider
+{
+    public bool IsCaseSensitive => true;
+
+    public async IAsyncEnumerable<IReadOnlyList<FileEntry>> EnumerateAsync(
+        string path,
+        ListingOptions options,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        var channel = System.Threading.Channels.Channel.CreateBounded<FileEntry>(
+            new System.Threading.Channels.BoundedChannelOptions(options.BatchSize * 4)
+            {
+                SingleReader = true,
+                SingleWriter = true,
+                FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait,
+            });
+
+        // Enumeration runs off the UI thread. The directory read itself can block
+        // for a long time on a network mount and must never be on the dispatcher.
+        var producer = Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var entry in Enumerate(path, options))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    await channel.Writer.WriteAsync(entry, ct).ConfigureAwait(false);
+                }
+                channel.Writer.Complete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.Complete(ex);
+            }
+        }, ct);
+
+        var batch = new List<FileEntry>(options.BatchSize);
+
+        await foreach (var entry in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            batch.Add(entry);
+            if (batch.Count >= options.BatchSize)
+            {
+                yield return batch;
+                batch = new List<FileEntry>(options.BatchSize);
+            }
+        }
+
+        if (batch.Count > 0)
+            yield return batch;
+
+        await producer.ConfigureAwait(false);
+    }
+
+    private static FileSystemEnumerable<FileEntry> Enumerate(string path, ListingOptions options)
+    {
+        return new FileSystemEnumerable<FileEntry>(
+            path,
+            static (ref FileSystemEntry entry) => new FileEntry(
+                Name: entry.FileName.ToString(),
+                FullPath: entry.ToFullPath(),
+                Length: entry.IsDirectory ? 0 : entry.Length,
+                LastWriteTime: entry.LastWriteTimeUtc,
+                Flags: ToFlags(ref entry)),
+            new System.IO.EnumerationOptions
+            {
+                RecurseSubdirectories = false,
+                IgnoreInaccessible = true,
+                // We filter hidden ourselves — on Linux "hidden" is a leading dot,
+                // which System.IO's AttributesToSkip does not model.
+                AttributesToSkip = 0,
+                ReturnSpecialDirectories = false,
+            })
+        {
+            ShouldIncludePredicate = options.IncludeHidden
+                ? null
+                : static (ref FileSystemEntry entry) =>
+                    entry.FileName.Length == 0 || entry.FileName[0] != '.',
+        };
+    }
+
+    private static EntryFlags ToFlags(ref FileSystemEntry entry)
+    {
+        var flags = EntryFlags.None;
+
+        if (entry.IsDirectory)
+            flags |= EntryFlags.Directory;
+
+        if (entry.FileName.Length > 0 && entry.FileName[0] == '.')
+            flags |= EntryFlags.Hidden;
+
+        if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+            flags |= EntryFlags.Symlink;
+
+        if ((entry.Attributes & FileAttributes.ReadOnly) != 0)
+            flags |= EntryFlags.ReadOnly;
+
+        return flags;
+    }
+
+    public ValueTask<FileEntry?> GetEntryAsync(string path, CancellationToken ct)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists && !Directory.Exists(path))
+                return ValueTask.FromResult<FileEntry?>(null);
+
+            var isDir = (File.GetAttributes(path) & FileAttributes.Directory) != 0;
+            var name = Path.GetFileName(path);
+
+            var flags = EntryFlags.None;
+            if (isDir) flags |= EntryFlags.Directory;
+            if (name.StartsWith('.')) flags |= EntryFlags.Hidden;
+
+            return ValueTask.FromResult<FileEntry?>(new FileEntry(
+                name,
+                path,
+                isDir ? 0 : info.Length,
+                info.LastWriteTimeUtc,
+                flags));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return ValueTask.FromResult<FileEntry?>(null);
+        }
+    }
+
+    public IDisposable Watch(string path, Action<FileSystemChange> onChange)
+    {
+        // inotify via FileSystemWatcher for now. Watch out for the default
+        // fs.inotify.max_user_watches ceiling if this is ever made recursive.
+        var watcher = new FileSystemWatcher(path)
+        {
+            IncludeSubdirectories = false,
+            NotifyFilter = NotifyFilters.FileName
+                         | NotifyFilters.DirectoryName
+                         | NotifyFilters.LastWrite
+                         | NotifyFilters.Size,
+        };
+
+        watcher.Created += (_, e) => onChange(new FileSystemChange(ChangeKind.Added, e.FullPath));
+        watcher.Deleted += (_, e) => onChange(new FileSystemChange(ChangeKind.Removed, e.FullPath));
+        watcher.Changed += (_, e) => onChange(new FileSystemChange(ChangeKind.Changed, e.FullPath));
+        watcher.Renamed += (_, e) => onChange(new FileSystemChange(ChangeKind.Renamed, e.FullPath, e.OldFullPath));
+
+        watcher.EnableRaisingEvents = true;
+        return watcher;
+    }
+
+    public async ValueTask<bool> IsReachableAsync(string path, TimeSpan timeout, CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+
+        try
+        {
+            // Directory.Exists on a dead NFS/SMB mount blocks for the mount's own
+            // timeout and ignores cancellation, so it goes on the pool and we
+            // abandon it rather than wait.
+            return await Task.Run(() => Directory.Exists(path), cts.Token)
+                             .WaitAsync(timeout, cts.Token)
+                             .ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is OperationCanceledException or TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    public string Combine(string basePath, string name) => Path.Combine(basePath, name);
+
+    public string? GetParent(string path) => Path.GetDirectoryName(path);
+}
