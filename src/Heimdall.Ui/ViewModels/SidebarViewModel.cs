@@ -169,12 +169,52 @@ public sealed partial class SidebarViewModel : ObservableObject
     private void FocusSearch()
     {
         Rail = RailState.Full;
+        IsSearchOpen = true;
 
         // Re-raised rather than set once. The flag was already true after the
         // first Ctrl+F, so a second one changed nothing and the caret stayed
         // where it was. Same pattern as PaneViewModel.RefreshScale().
         IsSearching = false;
         IsSearching = true;
+    }
+
+    /// <summary>
+    /// Whether the toolbar shows the search FIELD or just its icon.
+    ///
+    /// **Separate from <see cref="IsSearching"/>, which is not a state.** That
+    /// flag is a one-shot trigger for the focus behaviour — set false then true
+    /// to re-fire it — so it is true forever after the first Ctrl+F and cannot
+    /// answer "is the field open".
+    ///
+    /// The field used to be a fixed 230px that never yielded, and on the active
+    /// side of a split it plus the filter button consumed the entire path bar:
+    /// measured, the crumbs were left showing "C:" and nothing else, so the one
+    /// thing a path bar exists to say was the thing there was no room for.
+    /// </summary>
+    [ObservableProperty] private bool _isSearchOpen;
+
+    /// <summary>
+    /// Collapses the field back to its icon when you leave it, but only when it
+    /// is empty.
+    ///
+    /// **A query holds it open**, because the results popup is anchored to the
+    /// field: collapsing with a query live would take away both the results and
+    /// the text that produced them, and clicking a result means moving focus
+    /// out of the box to reach it.
+    /// </summary>
+    [RelayCommand]
+    private void CloseSearchIfEmpty()
+    {
+        if (!Search.HasQuery) IsSearchOpen = false;
+    }
+
+    /// <summary>Escape: abandon the search outright, whatever is in it.</summary>
+    [RelayCommand]
+    private void DismissSearch()
+    {
+        Search.Query = "";
+        IsSearching = false;
+        IsSearchOpen = false;
     }
 
 

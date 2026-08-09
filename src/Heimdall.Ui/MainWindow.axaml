@@ -594,7 +594,29 @@
                    The split's two path bars would otherwise show the same query
                    twice and leave "which box am I typing in" ambiguous. -->
               <Panel IsVisible="{Binding IsActiveGroup}">
+
+                <!-- Collapsed: the field is a 230px block that never yielded,
+                     and on the active side of a split it plus the filter button
+                     took the whole path bar — the crumbs were reduced to "C:".
+                     A toolbar's permanent residents should be the ones you use
+                     constantly, and search is not one of them.
+
+                     Same magnifier as the field's own, so opening it reads as
+                     the icon growing rather than one control replacing another. -->
+                <Button IsVisible="{Binding !$parent[Window].((vm:ShellViewModel)DataContext).Sidebar.IsSearchOpen}"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.FocusSearchCommand}"
+                        Width="30" Height="26" Padding="0"
+                        Background="Transparent" BorderThickness="0"
+                        AutomationProperties.Name="search files  (ctrl+f)"
+                        ToolTip.Tip="search files  (ctrl+f)">
+                  <Path Width="13" Height="13" Stretch="Uniform"
+                        Data="M10.5 4 a6.5 6.5 0 1 0 0 13 a6.5 6.5 0 1 0 0 -13 M15.5 15.5 L20 20"
+                        Stroke="{DynamicResource ViewDimText}" StrokeThickness="1.03"
+                        StrokeLineCap="Round" Fill="Transparent"/>
+                </Button>
+
                 <Border x:Name="SearchBox" Width="230" Height="26" CornerRadius="4"
+                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.IsSearchOpen}"
                         Background="{DynamicResource ViewBackground}"
                         BorderThickness="1" BorderBrush="{DynamicResource SeparatorColour}">
                   <DockPanel>
@@ -613,11 +635,17 @@
                                IsVisible="{Binding !$parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.HasQuery}"/>
                     <TextBox Text="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.Query}"
                              local:FocusBehavior.FocusWhen="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.IsSearching}"
+                             local:FocusBehavior.LostFocusCommand="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.CloseSearchIfEmptyCommand}"
                              PlaceholderText="Search files"
                              Classes="flat"
                              Background="Transparent" BorderThickness="0"
                              MinHeight="0" Padding="0,3" VerticalContentAlignment="Center"
-                             FontSize="{DynamicResource FontSizeSmall}"/>
+                             FontSize="{DynamicResource FontSizeSmall}">
+                      <TextBox.KeyBindings>
+                        <KeyBinding Gesture="Escape"
+                                    Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.DismissSearchCommand}"/>
+                      </TextBox.KeyBindings>
+                    </TextBox>
                     <!-- Padding="0" collapsed the text presenter to the font's
                          line box, and the selection highlight is drawn to the
                          presenter while the glyphs sit on their own baseline —
