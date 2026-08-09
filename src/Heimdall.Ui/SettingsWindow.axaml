@@ -148,7 +148,7 @@
                       IsChecked="{Binding RememberViewPerFolder}">
               <StackPanel>
                 <TextBlock Text="Remember the view for each folder"/>
-                <TextBlock Text="Off, every folder uses the same view. On, a folder keeps the layout, sort and grouping you last gave it. Stored centrally rather than written into your folders, but a .directory file Dolphin already wrote is still honoured."
+                <TextBlock Text="Off, every folder uses the same view. On, a folder keeps the layout, sort and grouping you last gave it. Stored centrally rather than written into your folders, but a view another file manager has already written into a folder is still honoured."
                            FontSize="{DynamicResource FontSizeTiny}"
                            Foreground="{DynamicResource ViewDimText}"
                            TextWrapping="Wrap"/>
@@ -238,7 +238,7 @@
                      Foreground="{DynamicResource ViewDimText}"/>
 
           <StackPanel Spacing="8">
-            <CheckBox Content="Moving files to trash"
+            <CheckBox Content="{Binding ConfirmTrashLabel}"
                       FontSize="{DynamicResource FontSizeSmall}"
                       IsChecked="{Binding ConfirmMoveToTrash}"/>
 
@@ -370,7 +370,7 @@
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
-            <TextBlock Text="The first entry uses whatever Plasma is set to. Sizes still come from the per-pane scale, so this changes the face only."
+            <TextBlock Text="The first entry uses whatever your desktop is set to. Sizes still come from the per-pane scale, so this changes the face only."
                        FontSize="{DynamicResource FontSizeTiny}"
                        Foreground="{DynamicResource ViewDimText}"
                        TextWrapping="Wrap"/>
@@ -529,7 +529,7 @@
                          IsChecked="{Binding OpenWithSystem}">
               <StackPanel>
                 <TextBlock Text="Whatever the desktop is set to"/>
-                <TextBlock Text="Follows Plasma's own single-click setting, so this matches Dolphin without being configured twice."
+                <TextBlock Text="Follows your desktop's own single-click setting, so it matches the rest of your system without being configured twice."
                            FontSize="{DynamicResource FontSizeTiny}"
                            Foreground="{DynamicResource ViewDimText}"
                            TextWrapping="Wrap"/>
@@ -587,7 +587,7 @@
         </StackPanel>
         </ScrollViewer>
       </TabItem>
-      <TabItem Header="Trash">
+      <TabItem Header="{Binding BinTitle}">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                       Background="{DynamicResource AppBackground}">
         <StackPanel Spacing="14" Margin="20,16,20,16">
@@ -616,7 +616,7 @@
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
           <StackPanel Spacing="8">
-            <CheckBox Content="Limit the trash to a share of the disk"
+            <CheckBox Content="{Binding LimitBinLabel}"
                       FontSize="{DynamicResource FontSizeSmall}"
                       IsChecked="{Binding LimitTrashSize}"/>
 
@@ -649,7 +649,7 @@
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
-          <TextBlock Text="The trash is shared with the rest of the desktop, so this also removes what Dolphin and other applications put there — the same as Dolphin's own setting. Items whose deletion date cannot be read are always left alone. Files deleted from another drive live in a trash on that drive and are not covered."
+          <TextBlock Text="{Binding BinSweepExplanation}"
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"
                      TextWrapping="Wrap"/>

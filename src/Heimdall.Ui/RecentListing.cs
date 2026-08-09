@@ -44,7 +44,7 @@ public static class VirtualPaths
     public static string Label(string path) => path switch
     {
         Files => "Recent files",
-        Trash => "Trash",
+        Trash => Core.Naming.BinTitle,
         _ => "Recent locations",
     };
 }

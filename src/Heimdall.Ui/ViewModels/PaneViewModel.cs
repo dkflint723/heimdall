@@ -908,7 +908,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         var result = await Trash.EmptyAsync(CancellationToken.None).ConfigureAwait(false);
 
-        Status = $"emptied trash — removed {result.Removed:N0}, "
+        Status = $"emptied {Core.Naming.BinName} — removed {result.Removed:N0}, "
                + $"freed {ByteSize.Format(result.BytesFreed)}";
 
         if (IsTrashListing) await RefreshAsync().ConfigureAwait(false);

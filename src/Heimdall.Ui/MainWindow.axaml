@@ -1015,7 +1015,7 @@
               <MenuItem Header="Restore"
                         IsVisible="{Binding ActiveTab.IsTrashListing}"
                         Command="{Binding ActiveTab.RestoreFromTrashCommand}"/>
-              <MenuItem Header="Empty trash…"
+              <MenuItem Header="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinEmptyLabel}"
                         IsVisible="{Binding ActiveTab.IsTrashListing}"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"/>
               <Separator/>
@@ -1063,10 +1063,10 @@
                   <!-- The ellipsis is a promise: this one asks first. It is the
                        only action in the application with neither an undo nor a
                        per-item review, so it never fires straight from a click. -->
-                  <Button Content="Empty trash…"
+                  <Button Content="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinEmptyLabel}"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"
                           FontSize="{DynamicResource FontSizeSmall}" Padding="10,3"
-                          AutomationProperties.Name="permanently delete everything in the trash" ToolTip.Tip="permanently delete everything in the trash"/>
+                          AutomationProperties.Name="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinEmptyHint}" ToolTip.Tip="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinEmptyHint}"/>
                 </StackPanel>
               </Border>
 

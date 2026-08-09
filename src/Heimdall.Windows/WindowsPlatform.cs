@@ -58,6 +58,14 @@ public sealed class WindowsPlatform : IPlatform
 
     public string Name => "windows";
 
+    /// <summary>
+    /// Windows' own name for it, capitals and all. Explorer says "Recycle Bin"
+    /// in the shell namespace, in its confirmation dialog and on its context
+    /// menu, and WindowsPlacesProvider already labels the sidebar entry that
+    /// way — this is what stops the rest of the window disagreeing with it.
+    /// </summary>
+    public string BinName => "Recycle Bin";
+
     // ---- Required. ---------------------------------------------------------
 
     public IFileSystemProvider FileSystem { get; } = new WindowsFileSystemProvider();

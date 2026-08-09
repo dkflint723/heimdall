@@ -589,6 +589,33 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool IsSplit => Right is not null;
 
+    /// <summary>
+    /// What this desktop calls the bin, for labels that name it.
+    ///
+    /// Exposed on the view model rather than reached from markup with x:Static
+    /// because <c>InitializeComponent</c> runs before the platform is chosen —
+    /// an x:Static reference is resolved as the XAML is parsed and would bake in
+    /// the default. A binding is evaluated when the DataContext arrives, which
+    /// is after.
+    /// </summary>
+    public string BinName => Core.Naming.BinName;
+
+    /// <summary>The same inside a sentence: "the Recycle Bin", "the trash".</summary>
+    public string TheBin => Core.Naming.TheBin;
+
+    /// <summary>The same starting a label: "Recycle Bin", "Trash".</summary>
+    public string BinTitle => Core.Naming.BinTitle;
+
+    /// <summary>
+    /// "Empty Recycle Bin…" / "Empty trash…". The ellipsis is a promise that it
+    /// asks first, and it stays on both platforms.
+    /// </summary>
+    public string BinEmptyLabel => $"Empty {BinName}…";
+
+    public string BinEmptyHint => $"permanently delete everything in {TheBin}";
+
+
+
     // Hiding a control does not give its column back — an invisible pane in a
     // "*" column still reserves half the window. The definitions themselves
     // have to collapse, so they are driven from here.

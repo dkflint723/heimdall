@@ -82,6 +82,12 @@ public partial class MainWindow : Window
         platform = null!;
 #endif
 
+        // Before anything builds a label. The view models below read these, and
+        // so does every prompt sentence — adopting it here, beside the one place
+        // a platform is chosen, is what keeps the window from naming the bin
+        // two different ways.
+        Naming.Adopt(platform);
+
         _properties = platform.Properties;
         _accessEditor = platform.AccessEditor;
 
@@ -1452,9 +1458,9 @@ public partial class MainWindow : Window
                 + (result.OverLimit ? " · OVER LIMIT" : ""));
 
             if (result.Removed > 0)
-                _shell.OperationStatus = $"trash: removed {result.Removed} item(s), freed {freed}";
+                _shell.OperationStatus = $"{Naming.BinName}: removed {result.Removed} item(s), freed {freed}";
             else if (result.OverLimit)
-                _shell.OperationStatus = "trash is over its size limit";
+                _shell.OperationStatus = $"{Naming.BinTitle} is over its size limit";
         }
         catch (Exception ex)
         {
@@ -1718,13 +1724,13 @@ public partial class MainWindow : Window
         if (_shell.ActiveTab is null) return;
 
         var count = ViewModels.PaneViewModel.Trash?.List().Count ?? 0;
-        if (count == 0) { _shell.ActiveTab.Status = "the trash is already empty"; return; }
+        if (count == 0) { _shell.ActiveTab.Status = $"{Naming.TheBin} is already empty"; return; }
 
         _prompt = PromptMode.ConfirmEmptyTrash;
 
-        PromptLabel.Text = $"permanently delete {count:N0} item(s) from the trash? this cannot be undone";
+        PromptLabel.Text = $"permanently delete {count:N0} item(s) from {Naming.TheBin}? this cannot be undone";
         PromptInput.IsVisible = false;
-        PromptConfirm.Content = "empty trash";
+        PromptConfirm.Content = $"empty {Naming.BinName}";
         PromptConfirm.IsVisible = true;
         PromptCancel.IsVisible = true;
         PromptHint.Text = "esc to cancel";
@@ -1777,9 +1783,9 @@ public partial class MainWindow : Window
 
         _prompt = PromptMode.ConfirmTrash;
 
-        PromptLabel.Text = $"move {count} item(s) to trash?";
+        PromptLabel.Text = $"move {count} item(s) to {Naming.TheBin}?";
         PromptInput.IsVisible = false;
-        PromptConfirm.Content = "move to trash";
+        PromptConfirm.Content = $"move to {Naming.TheBin}";
         PromptConfirm.IsVisible = true;
         PromptCancel.IsVisible = true;
         PromptHint.Text = "esc to cancel";

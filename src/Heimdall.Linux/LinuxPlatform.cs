@@ -23,6 +23,13 @@ public sealed class LinuxPlatform : IPlatform
 
     public string Name => "linux";
 
+    /// <summary>
+    /// Lowercase, because it is a common noun here and the desktop treats it as
+    /// one: the freedesktop specification calls it the trash, and Dolphin and
+    /// Nautilus write it in running text without capitals.
+    /// </summary>
+    public string BinName => "trash";
+
     public IFileSystemProvider FileSystem { get; } = new LinuxFileSystemProvider();
     public IFileOperations Operations { get; } = new LinuxFileOperations();
     public IApplicationLauncher Launcher { get; } = new LinuxLauncher();

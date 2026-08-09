@@ -235,6 +235,52 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string VersionLine => $"Heimdall {Program.Version}";
 
     /// <summary>
+    /// What this desktop calls the bin, for labels that name it.
+    ///
+    /// Exposed on the view model rather than reached from markup with x:Static
+    /// because <c>InitializeComponent</c> runs before the platform is chosen —
+    /// an x:Static reference is resolved as the XAML is parsed and would bake in
+    /// the default. A binding is evaluated when the DataContext arrives, which
+    /// is after.
+    /// </summary>
+    public string BinName => Core.Naming.BinName;
+
+    /// <summary>The same inside a sentence: "the Recycle Bin", "the trash".</summary>
+    public string TheBin => Core.Naming.TheBin;
+
+    /// <summary>The same starting a label: "Recycle Bin", "Trash".</summary>
+    public string BinTitle => Core.Naming.BinTitle;
+
+    public string ConfirmTrashLabel => $"Moving files to {TheBin}";
+
+    public string LimitBinLabel => $"Limit {TheBin} to a share of the disk";
+
+    /// <summary>
+    /// What sweeping actually touches, which is not the same sentence on both
+    /// platforms.
+    ///
+    /// **The old text named another file manager**, and was on screen on
+    /// Windows, where that name means nothing. Neither branch names a specific
+    /// application now: what matters is that the bin is shared, not which
+    /// program it is shared with.
+    ///
+    /// The per-volume caveat is true on both, for the same reason: a file
+    /// deleted from another drive goes to a bin on that drive.
+    /// </summary>
+    public string BinSweepExplanation =>
+        Core.Naming.Platform != "windows"
+            ? "The trash is shared with the rest of the desktop, so this also "
+              + "removes what other applications put there. Items whose deletion "
+              + "date cannot be read are always left alone. Files deleted from "
+              + "another drive live in a trash on that drive and are not covered."
+            : "The Recycle Bin is shared with File Explorer, so this also removes "
+              + "what other applications put there. Items whose deletion date "
+              + "cannot be read are always left alone. Files deleted from another "
+              + "drive live in a Recycle Bin on that drive and are not covered.";
+
+
+
+    /// <summary>
     /// The file the running process came from, as the footer's tooltip.
     ///
     /// The version on its own does not answer "which copy am I running", which

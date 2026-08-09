@@ -99,6 +99,52 @@ public class SettingsViewModelTests
         Assert.Matches(@"^Heimdall \d+\.\d+\.\d+$", vm.VersionLine);
     }
 
+    /// <summary>
+    /// The sentences the settings page actually shows, in full, for each
+    /// platform's word.
+    ///
+    /// **Asserting the whole string rather than "contains Recycle Bin"**, since
+    /// the failure this guards against is grammatical, not lexical: dropping an
+    /// article gives "Moving files to Recycle Bin", and adding one where the
+    /// platform does not gives "Empty the Recycle Bin…". Both contain the right
+    /// noun and both read wrong.
+    ///
+    /// Naming is a process-wide static, so each case sets it and the class
+    /// restores it — otherwise the first test to run would decide the words for
+    /// every test after it.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData("Recycle Bin", "windows", "Moving files to the Recycle Bin",
+        "Limit the Recycle Bin to a share of the disk", "Recycle Bin")]
+    [InlineData("trash", "linux", "Moving files to the trash",
+        "Limit the trash to a share of the disk", "Trash")]
+    public void The_settings_page_uses_the_platform_word(
+        string bin, string platform, string confirm, string limit, string title)
+    {
+        var previousBin = Core.Naming.BinName;
+        var previousPlatform = Core.Naming.Platform;
+
+        try
+        {
+            Core.Naming.Adopt(bin, platform);
+
+            var vm = new SettingsViewModel(With(ThemeMode.FollowDesktop, followColours: false));
+
+            Assert.Equal(confirm, vm.ConfirmTrashLabel);
+            Assert.Equal(limit, vm.LimitBinLabel);
+            Assert.Equal(title, vm.BinTitle);
+
+            // And no other file manager gets named in copy that ships.
+            Assert.DoesNotContain("Dolphin", vm.BinSweepExplanation, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Plasma", vm.BinSweepExplanation, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(bin, vm.BinSweepExplanation, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Core.Naming.Adopt(previousBin, previousPlatform);
+        }
+    }
+
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]

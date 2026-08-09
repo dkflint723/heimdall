@@ -18,6 +18,25 @@ public interface IPlatform
 {
     string Name { get; }
 
+    /// <summary>
+    /// What this desktop calls the place deleted files go, as it writes it
+    /// itself: "Recycle Bin" on Windows, "trash" on a freedesktop desktop.
+    ///
+    /// **A platform fact, so it belongs on the platform seam** — the same
+    /// reasoning that puts the trash implementation here rather than letting
+    /// the UI guess. Windows already said "Recycle Bin" in the sidebar, because
+    /// that label comes from WindowsPlacesProvider, while every prompt and
+    /// setting around it said "trash". One feature, two names, one window.
+    ///
+    /// **Capitalised as the platform capitalises it**, which is the part a
+    /// find-and-replace gets wrong. "Recycle Bin" is a proper noun and keeps
+    /// its capitals mid-sentence; "trash" is a common noun and does not. Both
+    /// take a definite article in a sentence — Windows itself asks whether you
+    /// want to move a file to *the* Recycle Bin — so <see cref="TheBin"/>
+    /// exists rather than every call site guessing.
+    /// </summary>
+    string BinName { get; }
+
     IFileSystemProvider FileSystem { get; }
     IFileOperations Operations { get; }
     IApplicationLauncher Launcher { get; }
