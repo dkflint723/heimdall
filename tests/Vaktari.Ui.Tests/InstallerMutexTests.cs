@@ -59,4 +59,37 @@ public class InstallerMutexTests
         Assert.Matches(@"^AppMutex=\{#AppMutex\}", Regex.Match(
             text, @"^AppMutex=.*$", RegexOptions.Multiline).Value);
     }
+
+    /// <summary>
+    /// The uninstaller must hand the folder classes back before it deletes the
+    /// executable that would do it.
+    ///
+    /// **This is a repair, not a precaution.** Becoming the default writes a
+    /// shell verb pointing at the installed binary; removing the binary left
+    /// the verb behind, so afterwards every double-clicked folder tried to
+    /// launch a file that no longer existed. The error Windows shows names a
+    /// missing path, not the program that registered it, and the only way back
+    /// is the registry.
+    ///
+    /// Silent on both sides: rename the switch and the uninstall still
+    /// succeeds, having quietly done nothing.
+    /// </summary>
+    [Fact]
+    public void The_uninstaller_undoes_the_folder_registration()
+    {
+        var iss = Path.Combine(RepositoryRoot().FullName, "packaging", "vaktari.iss");
+        var text = File.ReadAllText(iss);
+
+        var run = Regex.Match(text, @"^\[UninstallRun\][^\[]*", RegexOptions.Multiline).Value;
+
+        Assert.False(string.IsNullOrWhiteSpace(run),
+            "vaktari.iss has no [UninstallRun]; nothing undoes the folder handler");
+
+        Assert.Contains(Vaktari.Ui.Program.RestoreFileManagerFlag, run, StringComparison.Ordinal);
+
+        // Per-user registration lives in HKCU, so an elevated uninstaller must
+        // drop back to the signed-in user or it inspects the wrong hive and
+        // finds nothing to undo.
+        Assert.Contains("runascurrentuser", run, StringComparison.Ordinal);
+    }
 }

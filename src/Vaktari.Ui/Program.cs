@@ -41,6 +41,43 @@ internal sealed class Program
     private static string Describe() => $"vaktari {Version}\n{RunningFrom}";
 
     /// <summary>
+    /// Hands the folder and drive classes back to whatever held them.
+    ///
+    /// **Reuses the application's own Restore rather than reimplementing it in
+    /// the installer.** The semantics are not obvious — an empty remembered
+    /// value means "nobody had claimed it", which restores differently from
+    /// "there was no record at all" — and a second copy of that reasoning in
+    /// Inno's Pascal would be the copy that rots.
+    ///
+    /// Never throws. This runs during an uninstall the user has already
+    /// committed to; failing loudly there would leave a half-removed program
+    /// and an error box about the registry.
+    /// </summary>
+    private static string RestoreFileManager()
+    {
+        try
+        {
+#if VAKTARI_WINDOWS
+            if (!OperatingSystem.IsWindows()) return "not Windows; nothing to undo";
+
+            var platform = new Vaktari.Windows.WindowsPlatform(
+                Session.JsonSessionStore.DefaultDirectory());
+
+            if (platform.DefaultFileManager is not { } manager)
+                return "this platform registers no folder handler";
+
+            return manager.Restore().Message;
+#else
+            return "this platform registers no folder handler";
+#endif
+        }
+        catch (Exception ex)
+        {
+            return $"could not undo the folder handler: {ex.Message}";
+        }
+    }
+
+    /// <summary>
     /// The name the Windows installer watches for, so it can tell that Vaktari
     /// is running before it starts replacing a 28 MB executable underneath it.
     ///
@@ -57,6 +94,18 @@ internal sealed class Program
     /// users" path too.
     /// </summary>
     public const string InstanceMutexName = "Vaktari.Ui.Running";
+
+    /// <summary>
+    /// The switch the uninstaller passes to undo the folder-handler
+    /// registration.
+    ///
+    /// **Named, and asserted against the installer script**, because a rename
+    /// on either side breaks nothing visibly: the application still starts, the
+    /// installer still builds, and the uninstall still succeeds. It simply stops
+    /// undoing the registration, and the first anyone knows is a machine that
+    /// cannot open a folder after removing a program.
+    /// </summary>
+    public const string RestoreFileManagerFlag = "--restore-file-manager";
 
     /// <summary>
     /// Held for the life of the process. Static so nothing collects it — a
@@ -97,6 +146,24 @@ internal sealed class Program
         if (args.Any(a => a is "--version" or "-V"))
         {
             Console.WriteLine(Describe());
+            return;
+        }
+
+        // **Uninstall calls this, and it exists because uninstalling used to
+        // leave the machine unable to open a folder.**
+        //
+        // Becoming the default writes a shell verb pointing at this executable.
+        // Removing the executable does not remove the verb, so after an
+        // uninstall every double-clicked folder tried to launch a file that was
+        // no longer there — and the error names a missing path, not the program
+        // that registered it. Windows offers no way back from that except the
+        // registry.
+        //
+        // Before the window, the settings, or the theme: this runs in a
+        // headless uninstall with no display and must not depend on any of them.
+        if (args.Any(a => a == RestoreFileManagerFlag))
+        {
+            Console.WriteLine(RestoreFileManager());
             return;
         }
 

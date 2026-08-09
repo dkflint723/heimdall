@@ -167,6 +167,25 @@ Source: "{#Payload}\*"; DestDir: "{app}"; \
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
+; **Undo the folder-handler registration before the executable goes.**
+;
+; Becoming the default writes a shell verb pointing at {app}\{#AppExe}.
+; Uninstalling removed the file and left the verb, so afterwards every
+; double-clicked folder tried to launch a path that no longer existed — and the
+; error Windows shows names a missing file, not the program that registered it.
+; There is no way out of that except the registry, which is not somewhere a user
+; should have to go because a program was removed.
+;
+; [UninstallRun] entries execute BEFORE files are deleted, which is the only
+; window in which the application can still undo its own work.
+;
+; runascurrentuser because the registration is per-user under HKCU: an elevated
+; uninstaller would otherwise look at the administrator's hive and find nothing.
+; skipifdoesntexist so a partially removed install does not fail the uninstall,
+; and RunOnceId so repeating it is harmless.
+[UninstallRun]
+Filename: "{app}\{#AppExe}"; Parameters: "--restore-file-manager";     RunOnceId: "RestoreFileManager"; Flags: runhidden runascurrentuser skipifdoesntexist
+
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
