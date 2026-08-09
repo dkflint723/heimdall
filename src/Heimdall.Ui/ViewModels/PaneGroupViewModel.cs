@@ -38,6 +38,23 @@ public sealed partial class PaneGroupViewModel : ObservableObject
     /// decides where new tabs and pasted files land.</summary>
     [ObservableProperty] private bool _isActiveGroup;
 
+    /// <summary>
+    /// Whether this side carries the controls that belong to the WINDOW rather
+    /// than to a pane: the details panel toggle, the split toggle, and the view
+    /// options menu.
+    ///
+    /// **They are one set of controls, and a split drew two of them.** Split
+    /// view is window state; the options menu opens window settings; the
+    /// details panel is per-side but is the odd one out in a group of three,
+    /// and two identical rows of icons in one toolbar reads as duplication
+    /// rather than as per-side choice. The layout buttons stay on both sides
+    /// because those genuinely differ per pane.
+    ///
+    /// True when there is no split, and on the RIGHT side when there is —
+    /// rightmost is where a window's own controls sit.
+    /// </summary>
+    [ObservableProperty] private bool _showsWindowControls = true;
+
     partial void OnActiveTabChanged(PaneViewModel? oldValue, PaneViewModel? newValue)
     {
         if (oldValue is not null)

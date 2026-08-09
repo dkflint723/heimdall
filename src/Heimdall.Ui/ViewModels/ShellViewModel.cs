@@ -917,8 +917,24 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsSplit));
         OnPropertyChanged(nameof(OtherGroup));
+        SyncWindowControls();
         NotifyColumns();
         MarkDirty();
+    }
+
+    /// <summary>
+    /// The window's own controls live on one side only: the right, when split,
+    /// and the only side otherwise.
+    ///
+    /// Driven from here rather than computed in each group, because a group has
+    /// no idea whether it is the left or the right of anything — that is the
+    /// shell's knowledge, and OnRightChanged is the single point every split
+    /// change passes through, including a session restored at startup.
+    /// </summary>
+    private void SyncWindowControls()
+    {
+        Left.ShowsWindowControls = Right is null;
+        if (Right is { } right) right.ShowsWindowControls = true;
     }
 
     partial void OnSplitRatioChanged(double value)

@@ -288,6 +288,7 @@
             <!-- The details panel is a different choice, so it sits outside the
                  chip rather than behind a rule. -->
             <ToggleButton Classes="seg"
+                          IsVisible="{Binding ShowsWindowControls}"
                           IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
                           AutomationProperties.Name="details panel for this side  (f11)"
                           ToolTip.Tip="details panel for this side  (f11)">
@@ -303,6 +304,7 @@
                  it is a view decision and belongs with the other view decisions,
                  not above a list of places it has nothing to do with. -->
             <ToggleButton Classes="seg"
+                          IsVisible="{Binding ShowsWindowControls}"
                           IsChecked="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit, Mode=OneWay}"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ToggleSplitCommand}"
                           AutomationProperties.Name="split view  (f3)" ToolTip.Tip="split view  (f3)">
@@ -320,6 +322,7 @@
                  sat furthest right and the source read backwards from the
                  screen. -->
             <Button Content="&#x2261;"
+                    IsVisible="{Binding ShowsWindowControls}"
                     FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
                     Foreground="{DynamicResource ViewDimText}"
                     Background="Transparent" BorderThickness="0"
