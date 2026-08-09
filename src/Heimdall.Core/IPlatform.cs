@@ -69,6 +69,14 @@ public interface IPlatform
     IIconThemeProvider? Icons { get; }
 
     /// <summary>
+    /// Null where the platform offers no way to become the default handler for
+    /// folders. Nullable rather than a no-op implementation, so the settings
+    /// page can omit the control entirely rather than showing one that cannot
+    /// work.
+    /// </summary>
+    IDefaultFileManager? DefaultFileManager { get; }
+
+    /// <summary>
     /// Null where the platform has no trash this application may prune. Kept
     /// separate from <see cref="Operations"/> deliberately: trashing one file
     /// and unattended bulk expiry are different risks.

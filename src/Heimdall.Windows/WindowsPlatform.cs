@@ -64,6 +64,8 @@ public sealed class WindowsPlatform : IPlatform
     /// menu, and WindowsPlacesProvider already labels the sidebar entry that
     /// way — this is what stops the rest of the window disagreeing with it.
     /// </summary>
+    public IDefaultFileManager? DefaultFileManager { get; } = new WindowsDefaultFileManager();
+
     public string BinName => "Recycle Bin";
 
     // ---- Required. ---------------------------------------------------------

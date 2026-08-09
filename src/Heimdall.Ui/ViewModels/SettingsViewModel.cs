@@ -34,9 +34,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsState _original;
 
-    public SettingsViewModel(SettingsState current)
+    private readonly Core.IDefaultFileManager? _defaults;
+
+    public SettingsViewModel(SettingsState current, Core.IDefaultFileManager? defaults = null)
     {
         _original = current;
+        _defaults = defaults;
+        _isDefaultFileManager = defaults?.IsDefault() ?? false;
 
         var startup = current.Startup;
         var general = current.General;
@@ -233,6 +237,56 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// exactly how a window and a command line end up naming different builds.
     /// </summary>
     public string VersionLine => $"Heimdall {Program.Version}";
+
+    // ---- default file manager ---------------------------------------------
+
+    /// <summary>Whether to offer the control at all. Null platform, no control:
+    /// a switch that cannot work is worse than an absent one.</summary>
+    public bool CanBeDefault => _defaults is not null;
+
+    /// <summary>The honest limits for this platform, or blank where none.</summary>
+    public string DefaultCaveat => _defaults?.Caveat ?? "";
+
+    public bool HasDefaultCaveat => DefaultCaveat.Length > 0;
+
+    [ObservableProperty] private bool _isDefaultFileManager;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDefaultStatus))]
+    private string _defaultStatus = "";
+
+    public bool HasDefaultStatus => DefaultStatus.Length > 0;
+
+    /// <summary>
+    /// **Applied immediately, not on Save**, and the label says so.
+    ///
+    /// Everything else in this dialog edits a copy and commits it whole, which
+    /// is what makes Cancel mean something. This does not: it writes to the
+    /// system — the registry on Windows, the desktop's MIME database on Linux —
+    /// and there is no honest way to stage that. A checkbox would promise the
+    /// dialog's usual contract and break it, so this is a button.
+    /// </summary>
+    [RelayCommand]
+    private void MakeDefault()
+    {
+        if (_defaults is null) return;
+
+        var result = _defaults.MakeDefault();
+
+        DefaultStatus = result.Message;
+        IsDefaultFileManager = _defaults.IsDefault();
+    }
+
+    [RelayCommand]
+    private void RestoreDefault()
+    {
+        if (_defaults is null) return;
+
+        var result = _defaults.Restore();
+
+        DefaultStatus = result.Message;
+        IsDefaultFileManager = _defaults.IsDefault();
+    }
 
     /// <summary>
     /// What this desktop calls the bin, for labels that name it.

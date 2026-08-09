@@ -177,6 +177,59 @@
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"
+                  IsVisible="{Binding CanBeDefault}"/>
+
+          <StackPanel Spacing="8" IsVisible="{Binding CanBeDefault}">
+            <TextBlock Text="Opening folders"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"/>
+
+            <!-- A BUTTON, not a checkbox, and that is the honest shape.
+                 Everything else on this page edits a copy and commits it when
+                 you press Save, which is what makes Cancel mean something. This
+                 writes to the system the moment it runs — the registry on
+                 Windows, the desktop's file-type database on Linux — and there
+                 is no way to stage that. A checkbox would promise the dialog's
+                 usual contract and quietly break it. -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Button Content="Make Heimdall the default"
+                      Padding="12,4"
+                      IsVisible="{Binding !IsDefaultFileManager}"
+                      Command="{Binding MakeDefaultCommand}"
+                      FontSize="{DynamicResource FontSizeSmall}"/>
+              <Button Content="Stop being the default"
+                      Padding="12,4"
+                      IsVisible="{Binding IsDefaultFileManager}"
+                      Command="{Binding RestoreDefaultCommand}"
+                      FontSize="{DynamicResource FontSizeSmall}"/>
+              <TextBlock Text="Heimdall opens folders now."
+                         IsVisible="{Binding IsDefaultFileManager}"
+                         VerticalAlignment="Center"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         Foreground="{DynamicResource ViewDimText}"/>
+            </StackPanel>
+
+            <!-- Applies immediately, so it says so where the button is rather
+                 than leaving someone to press Save and wonder. -->
+            <TextBlock Text="This one takes effect straight away rather than when you press Save."
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap"/>
+
+            <TextBlock Text="{Binding DefaultCaveat}"
+                       IsVisible="{Binding HasDefaultCaveat}"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap"/>
+
+            <TextBlock Text="{Binding DefaultStatus}"
+                       IsVisible="{Binding HasDefaultStatus}"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource AccentColour}"
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+
           <TextBlock Text="Status bar"
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"/>

@@ -28,6 +28,8 @@ public sealed class LinuxPlatform : IPlatform
     /// one: the freedesktop specification calls it the trash, and Dolphin and
     /// Nautilus write it in running text without capitals.
     /// </summary>
+    public IDefaultFileManager? DefaultFileManager { get; } = new LinuxDefaultFileManager();
+
     public string BinName => "trash";
 
     public IFileSystemProvider FileSystem { get; } = new LinuxFileSystemProvider();

@@ -39,6 +39,7 @@ public partial class MainWindow : Window
     private JsonRecentStore? _recents;
     private ITrashMaintenance? _trashMaintenance;
     private DispatcherTimer? _trashTimer;
+    private readonly IDefaultFileManager? _defaultFileManager;
     private readonly IPropertiesProvider _properties;
     private readonly IThemeProvider? _theme;
     private readonly IAccessEditor? _accessEditor;
@@ -87,6 +88,7 @@ public partial class MainWindow : Window
         // a platform is chosen, is what keeps the window from naming the bin
         // two different ways.
         Naming.Adopt(platform);
+        _defaultFileManager = platform.DefaultFileManager;
 
         _properties = platform.Properties;
         _accessEditor = platform.AccessEditor;
@@ -569,7 +571,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void ShowSettings()
     {
-        var model = new SettingsViewModel(AppSettings.Current);
+        var model = new SettingsViewModel(AppSettings.Current, _defaultFileManager);
         var window = new SettingsWindow(model);
 
         window.Closed += (_, _) =>
