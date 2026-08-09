@@ -43,4 +43,16 @@ public interface IPropertiesProvider
     /// </summary>
     ValueTask<SizeProgress> MeasureAsync(
         string path, IProgress<SizeProgress> progress, CancellationToken ct);
+
+    /// <summary>
+    /// Shows the DESKTOP's own properties dialog, where the desktop has one
+    /// worth deferring to, and reports whether it did.
+    ///
+    /// **Defaulted to "no", so a platform that has no such dialog says nothing
+    /// and keeps Heimdall's own window.** Windows overrides it: its sheet
+    /// carries Security, Details and the Unblock checkbox, none of which a
+    /// hand-written window can offer, and those are the reasons anyone opens
+    /// properties there.
+    /// </summary>
+    bool ShowSystemDialog(string path) => false;
 }

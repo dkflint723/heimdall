@@ -13,6 +13,13 @@ namespace Heimdall.Windows;
 /// </summary>
 public sealed class WindowsPropertiesProvider : IPropertiesProvider
 {
+    /// <summary>
+    /// The shell's sheet, in place of Heimdall's window. Everything a person
+    /// opens properties on Windows FOR — permissions, unblocking a downloaded
+    /// file, the pages other applications add — lives there and nowhere else.
+    /// </summary>
+    public bool ShowSystemDialog(string path) => ShellPropertySheet.Show(path);
+
     public ValueTask<FileDetails> GetAsync(string path, CancellationToken ct)
     {
         var isDirectory = Directory.Exists(path);

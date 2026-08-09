@@ -620,6 +620,18 @@ public partial class MainWindow : Window
 
         if (paths.Count == 0) return;
 
+        // **The desktop's own dialog wins where it has one.** On Windows that
+        // sheet carries Security, Details and the Unblock checkbox, and hosts
+        // the pages other applications add to the shell — none of which this
+        // application can reproduce, and all of which are why somebody opens
+        // properties there.
+        //
+        // One path only. The shell has SHMultiFileProperties for a selection,
+        // but it wants an ITEMIDLIST array rather than paths and shows a
+        // reduced sheet; a multi-select falls through to Heimdall's window,
+        // which handles several items properly already.
+        if (paths.Count == 1 && _properties.ShowSystemDialog(paths[0])) return;
+
         // Theme and metrics are application-scoped, so this inherits them.
         new PropertiesWindow(new PropertiesViewModel(_properties, paths, _accessEditor)).Show(this);
     }
