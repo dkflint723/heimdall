@@ -91,6 +91,22 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 AllowNoIcons=yes
 
+; **A renamed application must not keep installing into its old folder.**
+;
+; AppId is deliberately unchanged across the rename, so setup recognises an
+; existing Heimdall and replaces its entry in Installed apps rather than leaving
+; two copies of the same program under two names. The cost of that is this
+; setting: Inno defaults UsePreviousAppDir to yes, so it would reuse the
+; directory recorded by that older install -- and Vaktari would install itself
+; into a folder named Heimdall, indefinitely, on every machine that ever had the
+; old build.
+;
+; Off, so DefaultDirName above decides and the folder matches the name on the
+; window. Someone who chose a custom directory the first time will be offered
+; the default again rather than their own choice; that is the smaller surprise
+; of the two, and it only happens once.
+UsePreviousAppDir=no
+
 ; The mark on the executable, the installer and the entry in Installed apps.
 SetupIconFile=..\brand\icons\vaktari.ico
 UninstallDisplayIcon={app}\{#AppExe}
@@ -115,6 +131,25 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; \
     GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+; **Clear out the folder the old name left behind.**
+;
+; With UsePreviousAppDir off, an upgrade from Heimdall installs into a Vaktari
+; folder and simply abandons the old one -- a full copy of the previous version
+; sitting on disk, with a Start menu shortcut that still works and launches it.
+; Two working copies of the same program is worse than one.
+;
+; Only the DEFAULT old location. Somebody who installed Heimdall somewhere of
+; their own keeps a stale copy, which is untidy; guessing at directories and
+; deleting them is not untidy, it is dangerous. Leaving files behind is the
+; recoverable mistake.
+;
+; Safe to run when it is absent -- Inno skips a Type that matches nothing -- and
+; safe to run while the old copy exists, because AppMutex above refuses to start
+; the install at all while any copy is running.
+[InstallDelete]
+Type: filesandordirs; Name: "{autopf}\Heimdall"
+Type: filesandordirs; Name: "{group}\..\Heimdall"
 
 [Files]
 ; The publish DIRECTORY is the deliverable, not the executable: libSkiaSharp.dll
