@@ -70,6 +70,8 @@ public sealed partial class PaneViewModel
     [RelayCommand]
     public async Task NewFolderAsync()
     {
+        if (RefusedVirtualDestination(CurrentPath)) return;
+
         var baseName = Path.Combine(CurrentPath, "New folder");
         var target = Directory.Exists(baseName) ? XdgDeduplicate(baseName) : baseName;
 
@@ -105,6 +107,8 @@ public sealed partial class PaneViewModel
     [RelayCommand]
     public async Task NewFileAsync(NewFileKind? kind)
     {
+        if (RefusedVirtualDestination(CurrentPath)) return;
+
         if (kind is null) return;
 
         try
@@ -158,6 +162,11 @@ public sealed partial class PaneViewModel
     /// a folder row rather than on the listing's background.</summary>
     public void PasteIntoFolder(string destination, IReadOnlyList<string> paths, bool move)
     {
+        // The DESTINATION, not CurrentPath. Dropping onto a real folder row
+        // while a virtual listing is showing is legitimate — Recent rows carry
+        // real paths — and guarding on CurrentPath would break it.
+        if (RefusedVirtualDestination(destination)) return;
+
         if (_ops is null || paths.Count == 0) return;
 
         var handle = move
@@ -171,6 +180,7 @@ public sealed partial class PaneViewModel
     public void PasteInto(IReadOnlyList<string> paths, bool move)
     {
         if (_ops is null || paths.Count == 0) return;
+        if (RefusedVirtualDestination(CurrentPath)) return;
 
         var handle = move
             ? _ops.Move(paths, CurrentPath, _ => ValueTask.FromResult(ConflictResolution.KeepBoth))
@@ -179,11 +189,52 @@ public sealed partial class PaneViewModel
         Track(handle);
     }
 
+    /// <summary>
+    /// Refuses an operation that would act on a real path while the listing is
+    /// showing the bin.
+    ///
+    /// **A bin row carries the item's ORIGINAL path**, which RecentListing says
+    /// in as many words — that is what makes the Path column and Restore work.
+    /// It also means every command that reads the selection is pointed at a
+    /// location the item no longer occupies. Trash something called notes.txt,
+    /// write a new notes.txt, then delete the bin row: the NEW file is
+    /// destroyed, permanently, and the row is still there afterwards. The
+    /// confirmation cannot help, because it names a count rather than a path.
+    ///
+    /// Refusal rather than redirection: the sensible action on a binned item is
+    /// Restore or Empty, and both already exist.
+    /// </summary>
+    private bool RefusedInBin()
+    {
+        if (!IsTrashListing) return false;
+
+        Status = $"already in {Vaktari.Core.Naming.TheBin} — use Restore, or empty it";
+        return true;
+    }
+
+    /// <summary>
+    /// Refuses a write whose DESTINATION is one of the virtual listings.
+    ///
+    /// **In the bin, CurrentPath is the literal string "vaktari:trash"**, and on
+    /// Linux that is a perfectly legal relative directory name. Pasting there
+    /// created a folder called `vaktari:trash` in the process's working
+    /// directory, moved the files into it, deleted the originals, and reported
+    /// success. Windows escaped only because a colon is illegal in a path,
+    /// which is luck rather than a guard.
+    /// </summary>
+    private bool RefusedVirtualDestination(string destination)
+    {
+        if (!VirtualPaths.IsVirtual(destination)) return false;
+
+        Status = "this listing is a view, not a folder — open a real folder first";
+        return true;
+    }
+
     /// <summary>Delete key. Recoverable, so no confirmation prompt.</summary>
     [RelayCommand]
     public void TrashSelected()
     {
-        if (_ops is null) return;
+        if (_ops is null || RefusedInBin()) return;
 
         var paths = SelectionPaths();
         if (paths.Count == 0) return;
@@ -195,7 +246,7 @@ public sealed partial class PaneViewModel
     [RelayCommand]
     public void DeleteSelected()
     {
-        if (_ops is null) return;
+        if (_ops is null || RefusedInBin()) return;
 
         var paths = SelectionPaths();
         if (paths.Count == 0) return;
@@ -206,6 +257,10 @@ public sealed partial class PaneViewModel
     [RelayCommand]
     public void BeginRename()
     {
+        // Renaming a bin row would rename whatever now occupies the original
+        // path, which is the same hazard delete has and is just as invisible.
+        if (RefusedInBin()) return;
+
         if (SelectedEntry is { } entry) RenameRequested?.Invoke(this, entry);
     }
 

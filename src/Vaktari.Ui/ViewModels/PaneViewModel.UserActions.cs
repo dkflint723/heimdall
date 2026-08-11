@@ -70,6 +70,8 @@ public sealed partial class PaneViewModel
     [RelayCommand]
     public async Task NewFromTemplateAsync(FileTemplate? template)
     {
+        if (RefusedVirtualDestination(CurrentPath)) return;
+
         if (template is null || _ops is null) return;
 
         try

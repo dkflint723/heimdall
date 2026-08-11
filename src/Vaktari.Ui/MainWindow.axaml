@@ -850,9 +850,11 @@
                               </MenuItem.Styles>
                             </MenuItem>
               <Separator/>
-              <MenuItem Header="Cut"   Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
+              <MenuItem Header="Cut"   Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"
+                                      IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
               <MenuItem Header="Copy"  Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
-              <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"/>
+              <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"
+                                      IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
               <MenuItem Header="Copy to"
                                       IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyToInMenu}"
                                       ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
@@ -892,15 +894,18 @@
                                       Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveToOtherPaneCommand}"
                                       IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
               <Separator/>
-              <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"/>
+              <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"
+                                      IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
               <MenuItem Header="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinMoveLabel}"
-                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TrashSelectionCommand}"/>
+                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TrashSelectionCommand}"
+                                      IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
               <Separator/>
               <!--
                    One "New" rather than three top-level entries that all create
                    something.
               -->
-              <MenuItem Header="New">
+              <MenuItem Header="New"
+                                      IsVisible="{Binding !ActiveTab.IsTrashListing}">
                 <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
                 <MenuItem Header="New file" ItemsSource="{Binding ActiveTab.NewFileKinds}">
                                 <MenuItem.ItemTemplate>

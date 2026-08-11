@@ -1145,6 +1145,19 @@ public partial class MainWindow : Window
 
         var destination = FolderRowAt(e.Source) ?? pane.CurrentPath;
 
+        // A virtual listing is a view, not a folder, so its background has
+        // nowhere to put anything. The paste path refuses it too, but that
+        // refusal arrives as a line of status text after the drop; the cursor
+        // can say it beforehand, which is when it is still useful. Read from
+        // `destination` rather than the pane, so a real folder ROW inside
+        // Recent still takes a drop.
+        if (VirtualPaths.IsVirtual(destination))
+        {
+            e.DragEffects = DragDropEffects.None;
+            HighlightDropTarget(null);
+            return;
+        }
+
         // Refuse a drop that would achieve nothing, so the cursor says so
         // before the click rather than a duplicate appearing after it.
         if (Meaningful(e.DataTransfer, destination).Count == 0)
