@@ -832,235 +832,219 @@
 
           <ItemsControl.ContextMenu>
             <ContextMenu x:DataType="vm:PaneGroupViewModel">
-              <ContextMenu.Styles>
-                <Style Selector="ContextMenu ScrollViewer">
-                  <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
-                  <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
-                </Style>
-              </ContextMenu.Styles>
               <MenuItem Header="Open"
-                        Command="{Binding ActiveTab.OpenSelectedCommand}"/>
+                                      Command="{Binding ActiveTab.OpenSelectedCommand}"/>
               <MenuItem Header="Open with"
-                        ItemsSource="{Binding ActiveTab.OpenWithOptions}">
-                <MenuItem.ItemTemplate>
-                  <DataTemplate x:DataType="fs:LaunchOption">
-                    <TextBlock Text="{Binding Name}"/>
-                  </DataTemplate>
-                </MenuItem.ItemTemplate>
-                <MenuItem.Styles>
-                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:LaunchOption">
-                    <Setter Property="Command"
-                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.OpenWithAppCommand}"/>
-                    <Setter Property="CommandParameter" Value="{Binding}"/>
-                  </Style>
-                </MenuItem.Styles>
-              </MenuItem>
+                                      ItemsSource="{Binding ActiveTab.OpenWithOptions}">
+                              <MenuItem.ItemTemplate>
+                                <DataTemplate x:DataType="fs:LaunchOption">
+                                  <TextBlock Text="{Binding Name}"/>
+                                </DataTemplate>
+                              </MenuItem.ItemTemplate>
+                              <MenuItem.Styles>
+                                <Style Selector="MenuItem > MenuItem" x:DataType="fs:LaunchOption">
+                                  <Setter Property="Command"
+                                          Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.OpenWithAppCommand}"/>
+                                  <Setter Property="CommandParameter" Value="{Binding}"/>
+                                </Style>
+                              </MenuItem.Styles>
+                            </MenuItem>
               <Separator/>
-              <MenuItem Header="Open in new tab"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenInNewTabCommand}"
-                        CommandParameter="{Binding ActiveTab.SelectedEntry}"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowOpenInNewTabInMenu}"/>
-
-              <MenuItem Header="Add to places"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).AddSelectionToPlacesCommand}"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowAddToPlacesInMenu}"/>
-
-              <MenuItem Header="Copy location"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyLocationCommand}"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyLocationInMenu}"/>
-
-              <MenuItem Header="Copy"  Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
               <MenuItem Header="Cut"   Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
+              <MenuItem Header="Copy"  Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
               <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"/>
-              <Separator/>
-              <!-- Destinations are the Places the user already keeps, so pinning
-                   a folder makes it a transfer target for free. -->
               <MenuItem Header="Copy to"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyToInMenu}"
-                        ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
-                <MenuItem.ItemTemplate>
-                  <DataTemplate x:DataType="vm:PlaceItemViewModel">
-                    <TextBlock Text="{Binding Label}"/>
-                  </DataTemplate>
-                </MenuItem.ItemTemplate>
-                <MenuItem.Styles>
-                  <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
-                    <Setter Property="Command"
-                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopySelectionToCommand}"/>
-                    <Setter Property="CommandParameter" Value="{Binding}"/>
-                  </Style>
-                </MenuItem.Styles>
-              </MenuItem>
+                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyToInMenu}"
+                                      ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
+                              <MenuItem.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PlaceItemViewModel">
+                                  <TextBlock Text="{Binding Label}"/>
+                                </DataTemplate>
+                              </MenuItem.ItemTemplate>
+                              <MenuItem.Styles>
+                                <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
+                                  <Setter Property="Command"
+                                          Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopySelectionToCommand}"/>
+                                  <Setter Property="CommandParameter" Value="{Binding}"/>
+                                </Style>
+                              </MenuItem.Styles>
+                            </MenuItem>
               <MenuItem Header="Move to"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowMoveToInMenu}"
-                        ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
-                <MenuItem.ItemTemplate>
-                  <DataTemplate x:DataType="vm:PlaceItemViewModel">
-                    <TextBlock Text="{Binding Label}"/>
-                  </DataTemplate>
-                </MenuItem.ItemTemplate>
-                <MenuItem.Styles>
-                  <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
-                    <Setter Property="Command"
-                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveSelectionToCommand}"/>
-                    <Setter Property="CommandParameter" Value="{Binding}"/>
-                  </Style>
-                </MenuItem.Styles>
-              </MenuItem>
+                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowMoveToInMenu}"
+                                      ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
+                              <MenuItem.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PlaceItemViewModel">
+                                  <TextBlock Text="{Binding Label}"/>
+                                </DataTemplate>
+                              </MenuItem.ItemTemplate>
+                              <MenuItem.Styles>
+                                <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
+                                  <Setter Property="Command"
+                                          Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveSelectionToCommand}"/>
+                                  <Setter Property="CommandParameter" Value="{Binding}"/>
+                                </Style>
+                              </MenuItem.Styles>
+                            </MenuItem>
               <MenuItem Header="Copy to other pane"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyToOtherPaneCommand}"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
+                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyToOtherPaneCommand}"
+                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
               <MenuItem Header="Move to other pane"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveToOtherPaneCommand}"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
+                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveToOtherPaneCommand}"
+                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
               <Separator/>
-              <MenuItem Header="Duplicate"     Command="{Binding ActiveTab.DuplicateSelectedCommand}"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowDuplicateInMenu}"/>
               <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"/>
-              <MenuItem Header="Rename in bulk…"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"/>
               <MenuItem Header="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinMoveLabel}"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TrashSelectionCommand}"/>
+                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TrashSelectionCommand}"/>
               <Separator/>
-              <!-- Sorting by type has existed since the first build with no way
-                   to reach it: there is no type column to click. -->
-              <!-- Read-only and read-write are separate commands, not a toggle:
-                   the difference is "people can look" versus "people can
-                   overwrite", which is not a checkbox decision. -->
-              <MenuItem IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}">
-                <MenuItem.Header>
-                  <!-- Names the folder, so which one gets served is visible
-                       before clicking rather than discovered afterwards. -->
-                  <TextBlock>
-                    <Run Text="Share"/><Run Text=" "/><Run Text="{Binding ActiveTab.ShareTargetLabel}"/><Run Text=" over network"/>
-                  </TextBlock>
-                </MenuItem.Header>
-                <MenuItem Header="Read-only"
-                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderCommand}"/>
-                <MenuItem Header="Allow uploads"
-                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderWritableCommand}"/>
+              <!--
+                   One "New" rather than three top-level entries that all create
+                   something.
+              -->
+              <MenuItem Header="New">
+                <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
+                <MenuItem Header="New file" ItemsSource="{Binding ActiveTab.NewFileKinds}">
+                                <MenuItem.ItemTemplate>
+                                  <DataTemplate x:DataType="fs:NewFileKind">
+                                    <TextBlock Text="{Binding Label}"/>
+                                  </DataTemplate>
+                                </MenuItem.ItemTemplate>
+                                <MenuItem.Styles>
+                                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:NewFileKind">
+                                    <Setter Property="Command"
+                                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFileCommand}"/>
+                                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                                  </Style>
+                                </MenuItem.Styles>
+                              </MenuItem>
+                <MenuItem Header="New from template"
+                                        ItemsSource="{Binding ActiveTab.Templates}"
+                                        IsVisible="{Binding ActiveTab.HasTemplates}">
+                                <MenuItem.ItemTemplate>
+                                  <DataTemplate x:DataType="fs:FileTemplate">
+                                    <TextBlock Text="{Binding Name}"/>
+                                  </DataTemplate>
+                                </MenuItem.ItemTemplate>
+                                <MenuItem.Styles>
+                                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:FileTemplate">
+                                    <Setter Property="Command"
+                                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFromTemplateCommand}"/>
+                                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                                  </Style>
+                                </MenuItem.Styles>
+                              </MenuItem>
               </MenuItem>
-
-              <!-- When the backend is missing the menu says so and offers to
-                   fix it, rather than hiding a feature with no explanation.
-                   The click is the consent — nothing installs on its own. -->
-              <MenuItem Header="Share over network — install copyparty…"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanInstallSharing}"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).InstallSharingCommand}"/>
+              <!--
+                   Sorting and grouping are one decision about how the listing reads,
+                   and were two adjacent submenus making it look like two.
+              -->
+              <MenuItem Header="Arrange">
+                <MenuItem Header="Sort by"
+                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowSortByInMenu}">
+                                <MenuItem Header="Name" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsSortedByName, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.SortByNameCommand}"/>
+                                <MenuItem Header="Size" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsSortedBySize, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.SortBySizeCommand}"/>
+                                <MenuItem Header="Modified" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsSortedByModified, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.SortByModifiedCommand}"/>
+                                <MenuItem Header="Type" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsSortedByKind, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.SortByKindCommand}"/>
+                                <Separator/>
+                                <MenuItem Header="Descending" ToggleType="CheckBox"
+                                          IsChecked="{Binding ActiveTab.SortDescending, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.ToggleSortDirectionCommand}"/>
+                              </MenuItem>
+                <MenuItem Header="Group by">
+                                <MenuItem Header="None" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsUngrouped, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.GroupByNoneCommand}"/>
+                                <Separator/>
+                                <MenuItem Header="Name" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsGroupedByName, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.GroupByNameCommand}"/>
+                                <MenuItem Header="Size" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsGroupedBySize, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.GroupBySizeCommand}"/>
+                                <MenuItem Header="Modified" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsGroupedByModified, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.GroupByModifiedCommand}"/>
+                                <MenuItem Header="Type" ToggleType="Radio"
+                                          IsChecked="{Binding ActiveTab.IsGroupedByKind, Mode=OneWay}"
+                                          Command="{Binding ActiveTab.GroupByKindCommand}"/>
+                              </MenuItem>
+              </MenuItem>
+              <!--
+                   Everything real but rare. Moved, not deleted: a command that is
+                   one extra hover away is still better than one that no longer
+                   exists, and every entry here had a settings checkbox precisely
+                   because the menu had grown too long to scan.
+              -->
+              <MenuItem Header="More">
+                <MenuItem Header="Open in new tab"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenInNewTabCommand}"
+                                        CommandParameter="{Binding ActiveTab.SelectedEntry}"
+                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowOpenInNewTabInMenu}"/>
+                <MenuItem Header="Add to places"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).AddSelectionToPlacesCommand}"
+                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowAddToPlacesInMenu}"/>
+                <MenuItem Header="Copy location"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyLocationCommand}"
+                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyLocationInMenu}"/>
+                <MenuItem Header="Duplicate"     Command="{Binding ActiveTab.DuplicateSelectedCommand}"
+                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowDuplicateInMenu}"/>
+                <MenuItem Header="Rename in bulk…"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"/>
+                <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
+                <MenuItem Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"
+                                        IsVisible="{Binding ActiveTab.HasScripts}">
+                                <MenuItem.ItemTemplate>
+                                  <DataTemplate x:DataType="core:ScriptCommand">
+                                    <TextBlock Text="{Binding Name}"/>
+                                  </DataTemplate>
+                                </MenuItem.ItemTemplate>
+                                <MenuItem.Styles>
+                                  <Style Selector="MenuItem > MenuItem" x:DataType="core:ScriptCommand">
+                                    <Setter Property="Command"
+                                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.RunScriptCommand}"/>
+                                    <Setter Property="CommandParameter" Value="{Binding}"/>
+                                  </Style>
+                                </MenuItem.Styles>
+                              </MenuItem>
+                <MenuItem Header="Scripts folder…"
+                                        Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
+                <MenuItem IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}">
+                                <MenuItem.Header>
+                                  <!-- Names the folder, so which one gets served is visible
+                                       before clicking rather than discovered afterwards. -->
+                                  <TextBlock>
+                                    <Run Text="Share"/><Run Text=" "/><Run Text="{Binding ActiveTab.ShareTargetLabel}"/><Run Text=" over network"/>
+                                  </TextBlock>
+                                </MenuItem.Header>
+                                <MenuItem Header="Read-only"
+                                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderCommand}"/>
+                                <MenuItem Header="Allow uploads"
+                                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderWritableCommand}"/>
+                              </MenuItem>
+                <MenuItem Header="Share over network — install copyparty…"
+                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanInstallSharing}"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).InstallSharingCommand}"/>
+              </MenuItem>
               <Separator/>
-              <MenuItem Header="Group by">
-                <MenuItem Header="None" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsUngrouped, Mode=OneWay}"
-                          Command="{Binding ActiveTab.GroupByNoneCommand}"/>
-                <Separator/>
-                <MenuItem Header="Name" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsGroupedByName, Mode=OneWay}"
-                          Command="{Binding ActiveTab.GroupByNameCommand}"/>
-                <MenuItem Header="Size" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsGroupedBySize, Mode=OneWay}"
-                          Command="{Binding ActiveTab.GroupBySizeCommand}"/>
-                <MenuItem Header="Modified" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsGroupedByModified, Mode=OneWay}"
-                          Command="{Binding ActiveTab.GroupByModifiedCommand}"/>
-                <MenuItem Header="Type" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsGroupedByKind, Mode=OneWay}"
-                          Command="{Binding ActiveTab.GroupByKindCommand}"/>
-              </MenuItem>
-              <MenuItem Header="Sort by"
-                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowSortByInMenu}">
-                <MenuItem Header="Name" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsSortedByName, Mode=OneWay}"
-                          Command="{Binding ActiveTab.SortByNameCommand}"/>
-                <MenuItem Header="Size" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsSortedBySize, Mode=OneWay}"
-                          Command="{Binding ActiveTab.SortBySizeCommand}"/>
-                <MenuItem Header="Modified" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsSortedByModified, Mode=OneWay}"
-                          Command="{Binding ActiveTab.SortByModifiedCommand}"/>
-                <MenuItem Header="Type" ToggleType="Radio"
-                          IsChecked="{Binding ActiveTab.IsSortedByKind, Mode=OneWay}"
-                          Command="{Binding ActiveTab.SortByKindCommand}"/>
-                <Separator/>
-                <MenuItem Header="Descending" ToggleType="CheckBox"
-                          IsChecked="{Binding ActiveTab.SortDescending, Mode=OneWay}"
-                          Command="{Binding ActiveTab.ToggleSortDirectionCommand}"/>
-              </MenuItem>
-              <Separator/>
-              <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
-              <MenuItem Header="New from template"
-                        ItemsSource="{Binding ActiveTab.Templates}"
-                        IsVisible="{Binding ActiveTab.HasTemplates}">
-                <MenuItem.ItemTemplate>
-                  <DataTemplate x:DataType="fs:FileTemplate">
-                    <TextBlock Text="{Binding Name}"/>
-                  </DataTemplate>
-                </MenuItem.ItemTemplate>
-                <MenuItem.Styles>
-                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:FileTemplate">
-                    <Setter Property="Command"
-                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFromTemplateCommand}"/>
-                    <Setter Property="CommandParameter" Value="{Binding}"/>
-                  </Style>
-                </MenuItem.Styles>
-              </MenuItem>
-              <!-- Built-in kinds, so this works on a machine with an empty
-                   Templates folder — which is every machine by default. The
-                   template list above stays for anything the user has put
-                   there. -->
-              <MenuItem Header="New file" ItemsSource="{Binding ActiveTab.NewFileKinds}">
-                <MenuItem.ItemTemplate>
-                  <DataTemplate x:DataType="fs:NewFileKind">
-                    <TextBlock Text="{Binding Label}"/>
-                  </DataTemplate>
-                </MenuItem.ItemTemplate>
-                <MenuItem.Styles>
-                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:NewFileKind">
-                    <Setter Property="Command"
-                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFileCommand}"/>
-                    <Setter Property="CommandParameter" Value="{Binding}"/>
-                  </Style>
-                </MenuItem.Styles>
-              </MenuItem>
-              <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
-              <Separator/>
-              <MenuItem Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"
-                        IsVisible="{Binding ActiveTab.HasScripts}">
-                <MenuItem.ItemTemplate>
-                  <DataTemplate x:DataType="core:ScriptCommand">
-                    <TextBlock Text="{Binding Name}"/>
-                  </DataTemplate>
-                </MenuItem.ItemTemplate>
-                <MenuItem.Styles>
-                  <Style Selector="MenuItem > MenuItem" x:DataType="core:ScriptCommand">
-                    <Setter Property="Command"
-                            Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.RunScriptCommand}"/>
-                    <Setter Property="CommandParameter" Value="{Binding}"/>
-                  </Style>
-                </MenuItem.Styles>
-              </MenuItem>
-              <MenuItem Header="Scripts folder…"
-                        Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
-              <!-- Only in the two recent listings, where it is the one action
-                   that has no equivalent in a real folder. It drops the record,
-                   never the file — sitting this close to Delete, that has to be
-                   unmistakable, which is why the header says so. -->
-              <Separator IsVisible="{Binding ActiveTab.IsRecentListing}"/>
               <MenuItem Header="Forget (keeps the file)"
-                        IsVisible="{Binding ActiveTab.IsRecentListing}"
-                        Command="{Binding ActiveTab.ForgetRecentCommand}"/>
-              <!-- Trash only. Restore puts the selection back where it came
-                   from; Empty is confirmed by the window, because it is the one
-                   action with neither an undo nor a per-item review. -->
-              <Separator IsVisible="{Binding ActiveTab.IsTrashListing}"/>
+                                      IsVisible="{Binding ActiveTab.IsRecentListing}"
+                                      Command="{Binding ActiveTab.ForgetRecentCommand}"/>
               <MenuItem Header="Restore"
-                        IsVisible="{Binding ActiveTab.IsTrashListing}"
-                        Command="{Binding ActiveTab.RestoreFromTrashCommand}"/>
+                                      IsVisible="{Binding ActiveTab.IsTrashListing}"
+                                      Command="{Binding ActiveTab.RestoreFromTrashCommand}"/>
               <MenuItem Header="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinEmptyLabel}"
-                        IsVisible="{Binding ActiveTab.IsTrashListing}"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"/>
+                                      IsVisible="{Binding ActiveTab.IsTrashListing}"
+                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"/>
               <Separator/>
               <MenuItem Header="Properties"
-                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"/>
+                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"/>
             </ContextMenu>
           </ItemsControl.ContextMenu>
 
