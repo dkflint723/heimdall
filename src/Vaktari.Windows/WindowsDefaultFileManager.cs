@@ -90,6 +90,84 @@ internal sealed class WindowsDefaultFileManager : IDefaultFileManager
         + "\"show in folder\" from other programs still open Explorer: those go "
         + "to it directly rather than asking Windows what a folder should open in.";
 
+    /// <summary>
+    /// The verb a previous name of this application registered.
+    ///
+    /// Upgrading from Heimdall deletes that installation and leaves its verb
+    /// behind pointing at a binary that no longer exists — after which every
+    /// double-clicked folder fails with an error naming a missing file. This is
+    /// the same wound the uninstaller now avoids, arriving by a different route,
+    /// and it was found by auditing rather than by anyone hitting it twice.
+    /// </summary>
+    private const string PreviousVerb = "OpenInHeimdall";
+
+    /// <summary>
+    /// Removes a dead registration left by a previous name, and hands the class
+    /// back to whoever held it before that.
+    ///
+    /// **Only when the command genuinely points at something missing.** A
+    /// Heimdall that is still installed and still works is not ours to
+    /// dispossess — somebody may be running both.
+    ///
+    /// Quiet and best-effort: this runs at startup, and a registry it cannot
+    /// read is not a reason to fail to launch.
+    /// </summary>
+    public void HealPreviousName()
+    {
+        foreach (var cls in Classes)
+        {
+            try
+            {
+                using var shell = Registry.CurrentUser.OpenSubKey(
+                    $@"{_root}\{cls}\shell", writable: true);
+
+                if (shell is null) continue;
+                if (shell.GetValue(null) as string != PreviousVerb) continue;
+
+                using (var command = shell.OpenSubKey($@"{PreviousVerb}\command"))
+                {
+                    var line = command?.GetValue(null) as string ?? "";
+                    if (line.Length > 0 && TargetExists(line)) continue;
+                }
+
+                // The old name's own record of who held it first. Falling back
+                // to clearing the value leaves the class unclaimed, which is
+                // what Windows looked like before anybody registered.
+                var previous = PreviousOwner(cls);
+
+                if (previous is { Length: > 0 }) shell.SetValue(null, previous);
+                else shell.DeleteValue("", throwOnMissingValue: false);
+
+                shell.DeleteSubKeyTree(PreviousVerb, throwOnMissingSubKey: false);
+
+                Console.Error.WriteLine(
+                    $"[vaktari] cleared a dead {PreviousVerb} registration on {cls}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[vaktari] could not heal {cls}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>The executable out of a `"path" "%1"` command line.</summary>
+    private static bool TargetExists(string command)
+    {
+        var exe = command.StartsWith('"')
+            ? command[1..].Split('"').FirstOrDefault() ?? ""
+            : command.Split(' ').FirstOrDefault() ?? "";
+
+        return exe.Length > 0 && File.Exists(exe);
+    }
+
+    private string? PreviousOwner(string cls)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(
+            @"Software\Heimdall\DefaultFileManager");
+
+        return key?.GetValue(cls) as string;
+    }
+
     public bool IsDefault()
     {
         foreach (var cls in Classes)

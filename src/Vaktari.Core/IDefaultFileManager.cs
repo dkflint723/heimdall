@@ -43,4 +43,19 @@ public interface IDefaultFileManager
     /// are none worth saying.
     /// </summary>
     string Caveat { get; }
+
+    /// <summary>
+    /// Clears a registration left by a PREVIOUS NAME of this application that
+    /// now points at a binary which no longer exists.
+    ///
+    /// Called once at startup. It exists because upgrading across the rename
+    /// removes the old installation and leaves its folder-handler registration
+    /// behind, after which every double-clicked folder fails with an error
+    /// naming a missing file — the same wound the uninstaller avoids, reached
+    /// by a different route.
+    ///
+    /// A no-op by default: only a platform that registers anything can have
+    /// left something stale.
+    /// </summary>
+    void HealPreviousName() { }
 }

@@ -90,6 +90,15 @@ public partial class MainWindow : Window
         Naming.Adopt(platform);
         _defaultFileManager = platform.DefaultFileManager;
 
+        // Clears a folder-handler registration left by a previous name of this
+        // application pointing at a binary that no longer exists. Upgrading
+        // from Heimdall removes that install and leaves its verb behind, after
+        // which every double-clicked folder fails — the same wound the
+        // uninstaller avoids, reached by a different route. Acts only when the
+        // command is genuinely dead, so a Heimdall someone still runs is left
+        // alone.
+        platform.DefaultFileManager?.HealPreviousName();
+
         _properties = platform.Properties;
         _accessEditor = platform.AccessEditor;
 
