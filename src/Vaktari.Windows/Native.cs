@@ -476,4 +476,35 @@ internal static partial class Native
         /// <summary>DNS_A_DATA.IpAddress, in network order.</summary>
         internal const int AAddress = Data;
     }
+
+    // ---- open-with chooser ------------------------------------------------
+
+    [Flags]
+    internal enum OpenAsFlags : uint
+    {
+        AllowRegistration = 0x00000001,
+        Exec = 0x00000004,
+    }
+
+    /// <summary>
+    /// OPENASINFO. Sequential and Unicode, matching the header; the two strings
+    /// are marshalled as LPWStr rather than left to the default, which on a
+    /// struct is ANSI.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct OpenAsInfo
+    {
+        [MarshalAs(UnmanagedType.LPWStr)] internal string FileName;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string? ClassName;
+        internal OpenAsFlags Flags;
+    }
+
+    // DllImport, like ShellExecuteEx and for the same reason: OPENASINFO carries
+    // string fields and is not blittable, so the source generator cannot marshal
+    // it. Flagged explicitly so the exception to the project's LibraryImport rule
+    // is visible rather than looking like an oversight.
+    [DllImport("shell32.dll", EntryPoint = "SHOpenWithDialog", CharSet = CharSet.Unicode)]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Interoperability", "SYSLIB1054",
+        Justification = "OPENASINFO is not blittable; the generator cannot marshal it.")]
+    internal static extern int SHOpenWithDialog(nint parent, ref OpenAsInfo info);
 }

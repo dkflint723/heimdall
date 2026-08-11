@@ -11,6 +11,64 @@ namespace Vaktari.Windows;
 /// </summary>
 public sealed class WindowsLauncher : IApplicationLauncher
 {
+    /// <summary>
+    /// Windows has its own chooser, so this offers that rather than a
+    /// home-made one.
+    ///
+    /// SHOpenWithDialog is the dialog the shell shows for "Open with > Choose
+    /// another app": it lists what is installed, offers "Look for another app
+    /// on this PC" to browse, and can make the choice permanent. Reproducing
+    /// any of that would be worse in every respect, and would not update the
+    /// association the rest of the system reads.
+    /// </summary>
+    public bool CanChooseApplication => true;
+
+    public bool ChooseApplication(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
+
+        var shown = false;
+
+        // The shell wants an STA, exactly as IAssocHandler.Invoke and the
+        // property sheet do. Joined, unlike the property sheet: this dialog is
+        // modal and returns when it closes, so there is nothing to keep alive
+        // afterwards and the caller wants to know whether it ran.
+        var thread = new Thread(() => shown = ShowOnThisThread(path)) { IsBackground = true };
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        return shown;
+    }
+
+    private static bool ShowOnThisThread(string path)
+    {
+        var info = new Native.OpenAsInfo
+        {
+            FileName = path,
+            ClassName = null,
+
+            // EXEC opens the file once something is chosen — without it the
+            // dialog sets the association and does nothing, which reads as the
+            // menu entry having failed.
+            //
+            // ALLOW_REGISTRATION is what puts "Always use this app" on it. That
+            // is the whole point of choosing: a chooser that forgets is a
+            // one-shot launcher.
+            Flags = Native.OpenAsFlags.Exec | Native.OpenAsFlags.AllowRegistration,
+        };
+
+        var hr = Native.SHOpenWithDialog(IntPtr.Zero, ref info);
+
+        // The user pressing Cancel comes back as ERROR_CANCELLED, which is not
+        // a failure worth reporting anywhere.
+        if (hr == 0 || hr == unchecked((int)0x800704C7)) return true;
+
+        Console.Error.WriteLine($"[vaktari] open-with chooser refused: 0x{hr:X8}");
+        return false;
+    }
+
     public void Open(string path)
     {
         try

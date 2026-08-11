@@ -1064,6 +1064,16 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             {
                 OpenWithOptions.Clear();
                 foreach (var option in options) OpenWithOptions.Add(option);
+
+                // Last, and only where the desktop has a chooser to show. The
+                // installed applications are the answer most of the time; this
+                // is the way out when none of them is, and it belongs at the
+                // bottom of the list it escapes from.
+                if (_launcher.CanChooseApplication)
+                {
+                    OpenWithOptions.Add(
+                        new LaunchOption("Choose another app…", "", null) { IsChooser = true });
+                }
             });
         });
     }
@@ -1072,6 +1082,17 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public void OpenWithApp(LaunchOption? option)
     {
         if (option is null || SelectedEntry is not { } entry) return;
+
+        // The chooser opens the file itself once something is picked, so it
+        // records the same way — and is checked BEFORE the recent entry,
+        // because a cancelled chooser opened nothing and must not claim to.
+        if (option.IsChooser)
+        {
+            if (_launcher?.ChooseApplication(entry.FullPath) is true)
+                Recents?.Record(entry.FullPath, RecentKind.File);
+
+            return;
+        }
 
         // Same act as OpenAsync, so it belongs in the recent list too. Missing
         // this would make the list quietly depend on WHICH way you opened

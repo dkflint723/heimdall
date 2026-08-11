@@ -69,8 +69,9 @@ anything.
 
 ## Finding things
 
-**Search** from the sidebar, with results streaming in as they are found rather
-than all appearing at the end.
+**Search** from the toolbar — `Ctrl+F`, or the magnifier beside the path — with
+results streaming in as they are found rather than all appearing at the end. The
+field folds back into its icon when you leave it empty.
 
 **Filter** the current listing with `Ctrl+I` — type to narrow what is on screen,
 `Escape` to clear.
@@ -183,11 +184,12 @@ other.
 | | | | |
 |---|---|---|---|
 | `Enter` | open | `Ctrl+C` `Ctrl+X` `Ctrl+V` | copy, cut, paste |
-| `Backspace` | up one folder | `Delete` | move to trash |
+| `Backspace` | back | `Delete` | move to the bin |
 | `Alt+←` `Alt+→` | back, forward | `Shift+Delete` | delete permanently |
 | `Alt+↑` | up one folder | `Ctrl+Z` | undo |
 | `Ctrl+A` | select everything | `F2` | rename |
 | `Ctrl+T` | new tab | `Shift+F2` | rename in bulk |
+| `Ctrl+1`…`Ctrl+9` | jump to a tab | `Alt+↑` | up one folder |
 | `Ctrl+W` | close tab | `Ctrl+Shift+N` | new folder |
 | `Ctrl+Tab` `Ctrl+Shift+Tab` | next, previous tab | `Alt+Enter` | properties |
 | `F3` | split view | `F4` | terminal here |
