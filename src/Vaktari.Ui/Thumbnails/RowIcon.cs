@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -153,6 +154,26 @@ public static class RowIcon
     {
         if (!entry.IsDirectory) return;
 
+        // Answers already bought. Scrolling down a folder of folders and back
+        // up re-realizes every row and asked the disk again each time, so the
+        // cost was not once per folder but once per time it crossed the
+        // viewport — and a directory open is the one thing this probe was
+        // written to keep cheap.
+        //
+        // **The write time is what makes keeping the answer safe.** Creating or
+        // removing an entry updates the containing folder's mtime, on NTFS and
+        // ext4 alike, and that transition is precisely the one being cached: a
+        // folder that gains its first file gets a new key and is asked again.
+        // A stale answer here would be a folder drawn as empty while holding
+        // something, which is the lie this cache must not tell.
+        var probeKey = (entry.FullPath, entry.LastWriteTime);
+
+        if (Probed.TryGetValue(probeKey, out var known))
+        {
+            if (known) paint(FileTypeIcon.For(entry.Name, isDirectory: true, hasContents: true));
+            return;
+        }
+
         // **Not on a share.** Opening a directory is a network round trip on
         // SMB or WebDAV, and this runs once per realized row — a screenful of
         // folders is a screenful of round trips, paid again on every scroll
@@ -172,6 +193,13 @@ public static class RowIcon
                 }
             }, token).ConfigureAwait(true);
 
+            // Cleared wholesale rather than evicted one at a time: this is a
+            // bool per folder, so the bound exists to stop a long session
+            // browsing a filesystem from retaining every folder it ever passed,
+            // not to protect a working set worth the bookkeeping of an LRU.
+            if (Probed.Count >= MaxProbed) Probed.Clear();
+            Probed[probeKey] = full;
+
             if (full && !token.IsCancellationRequested)
                 paint(FileTypeIcon.For(entry.Name, isDirectory: true, hasContents: true));
         }
@@ -179,6 +207,15 @@ public static class RowIcon
         {
             // Scrolled away before the probe finished. The ordinary folder icon
             // is already on screen, which is the right thing to leave there.
+            // Nothing is recorded: an unfinished probe has no answer to keep.
         }
     }
+
+    /// <summary>Folders already probed, keyed by path and write time — see
+    /// <see cref="ShowContentsIfAnyAsync"/> for why the timestamp is in the
+    /// key.</summary>
+    private static readonly ConcurrentDictionary<(string Path, DateTimeOffset Written), bool>
+        Probed = new();
+
+    private const int MaxProbed = 4096;
 }

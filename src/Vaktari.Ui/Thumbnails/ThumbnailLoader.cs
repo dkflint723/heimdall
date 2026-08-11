@@ -20,8 +20,39 @@ public static class ThumbnailLoader
     /// </summary>
     private const int MaxCached = 2400;
 
+    /// <summary>
+    /// **The count alone does not bound anything that matters.** Entries are
+    /// not comparable: a 512 pixel grid tile is a megabyte of pixels and a 64
+    /// pixel row icon is sixteen kilobytes, sixty-four times less, so 2400 of
+    /// them is anywhere between 40 MB and 2.4 GB depending only on which layout
+    /// somebody happened to be using. The stated purpose of this cache is that
+    /// a file manager must not grow without limit while you browse, and a limit
+    /// that varies by a factor of sixty is not one.
+    ///
+    /// 192 MB, with the count kept as a second ceiling: bytes catch the tile
+    /// case, the count still catches a pathological run of tiny images.
+    /// </summary>
+    private const long MaxCachedBytes = 192L * 1024 * 1024;
+
     private static readonly ConcurrentDictionary<string, Bitmap> Cache = new();
     private static readonly ConcurrentQueue<string> Order = new();
+
+    /// <summary>Decoded pixels currently held, by the estimate in
+    /// <see cref="BytesOf"/>.</summary>
+    private static long _cachedBytes;
+
+    /// <summary>What the cache is holding, in bytes — for the test that pins
+    /// the bound, since the number is otherwise unobservable.</summary>
+    internal static long CachedBytes => Interlocked.Read(ref _cachedBytes);
+
+    /// <summary>Empties the cache, for tests that need a known starting
+    /// point — the state is static and would otherwise carry between them.</summary>
+    internal static void Forget()
+    {
+        Cache.Clear();
+        while (Order.TryDequeue(out _)) { }
+        Interlocked.Exchange(ref _cachedBytes, 0);
+    }
 
     public static IThumbnailProvider? Provider { get; set; }
 
@@ -81,63 +112,84 @@ public static class ThumbnailLoader
 
     public static async Task<Bitmap?> LoadAsync(string path, int size, CancellationToken ct)
     {
-        if (Provider is null) return null;
+        if (Provider is not { } provider) return null;
 
         var key = $"{path}|{size}";
         if (Cache.TryGetValue(key, out var cached)) return cached;
 
-        // A picture too small to be worth showing gets NO thumbnail, so the
-        // generic mime icon stands instead.
+        // **Everything past this point reads the disk, and all of it used to
+        // run on the UI thread.** Only the decode was ever moved off it; the
+        // header read below and the provider call after it are synchronous file
+        // access wearing an async signature — two File.Exists calls and an open
+        // stream apiece — and they ran once per visible row, per layout, on the
+        // thread drawing the scroll. On a local disk that is invisible; over
+        // SMB it is the difference between a list that scrolls and one that
+        // stops dead, and the whole point of the remote size limit above is
+        // that this project already knows remote reads are not free.
         //
-        // [stated] the ask: "for images like this favicon.png file, can we make
-        // them just fall back to using a generic image icon instead of trying to
-        // render something such low resolution." A 32 pixel favicon blown up to
-        // fill a 256 pixel tile is mush, and mush reads as a rendering fault
-        // rather than as a small file.
-        //
-        // Measured on the ORIGINAL, never on `source`: the freedesktop cache may
-        // hold an already-upscaled thumbnail, so asking it how big the picture
-        // is would get the answer we are trying to avoid trusting.
-        //
-        // Half the requested size is the floor, which keeps this proportional —
-        // 128 for a tile, 32 for a details row — rather than pinning one number
-        // that is wrong at some other scale. **An unreadable or unknown format
-        // returns null from TryRead and is treated as "big enough", because
-        // declining to thumbnail a format we merely cannot measure would be a
-        // far larger regression than the blur.**
-        if (ImageSize.TryRead(path) is { } natural
-            && Math.Max(natural.Width, natural.Height) < size / 2)
-            return null;
-
-        var source = await Provider.GetThumbnailPathAsync(path, size, ct).ConfigureAwait(false);
-        if (source is null || ct.IsCancellationRequested) return null;
-
-        try
+        // One Task.Run around the lot rather than three: each hop back to the
+        // UI thread costs a dispatcher round trip, and nothing in between needs
+        // to be there.
+        var bitmap = await Task.Run<Bitmap?>(async () =>
         {
-            // DecodeToWidth so a huge original is never fully materialised —
-            // decoding a 40 megapixel photo to draw a 16 pixel icon is exactly
-            // the kind of work that makes scrolling stutter.
-            var bitmap = await Task.Run(() =>
+            // A picture too small to be worth showing gets NO thumbnail, so the
+            // generic mime icon stands instead.
+            //
+            // [stated] the ask: "for images like this favicon.png file, can we make
+            // them just fall back to using a generic image icon instead of trying to
+            // render something such low resolution." A 32 pixel favicon blown up to
+            // fill a 256 pixel tile is mush, and mush reads as a rendering fault
+            // rather than as a small file.
+            //
+            // Measured on the ORIGINAL, never on `source`: the freedesktop cache may
+            // hold an already-upscaled thumbnail, so asking it how big the picture
+            // is would get the answer we are trying to avoid trusting.
+            //
+            // Half the requested size is the floor, which keeps this proportional —
+            // 128 for a tile, 32 for a details row — rather than pinning one number
+            // that is wrong at some other scale. **An unreadable or unknown format
+            // returns null from TryRead and is treated as "big enough", because
+            // declining to thumbnail a format we merely cannot measure would be a
+            // far larger regression than the blur.**
+            if (ImageSize.TryRead(path) is { } natural
+                && Math.Max(natural.Width, natural.Height) < size / 2)
+                return null;
+
+            var source = await provider.GetThumbnailPathAsync(path, size, ct).ConfigureAwait(false);
+            if (source is null || ct.IsCancellationRequested) return null;
+
+            try
             {
+                // DecodeToWidth so a huge original is never fully materialised —
+                // decoding a 40 megapixel photo to draw a 16 pixel icon is exactly
+                // the kind of work that makes scrolling stutter.
                 using var stream = File.OpenRead(source);
                 return Bitmap.DecodeToWidth(stream, size);
-            }, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Corrupt, unreadable, or an unsupported format — no thumbnail.
+                return null;
+            }
+        }, ct).ConfigureAwait(false);
 
-            Remember(key, bitmap);
-            return bitmap;
-        }
-        catch
-        {
-            // Corrupt, unreadable, or an unsupported format — no thumbnail.
-            return null;
-        }
+        if (bitmap is null) return null;
+
+        Remember(key, bitmap);
+        return bitmap;
     }
 
-    private static void Remember(string key, Bitmap bitmap)
+    /// <summary>
+    /// Internal rather than private only so the bound can be tested — the
+    /// alternative was decoding real images inside a headless test, which tests
+    /// Skia rather than the policy this is.
+    /// </summary>
+    internal static void Remember(string key, Bitmap bitmap)
     {
         if (!Cache.TryAdd(key, bitmap)) return;
 
         Order.Enqueue(key);
+        Interlocked.Add(ref _cachedBytes, BytesOf(bitmap));
 
         // Crude FIFO rather than true LRU: tracking access order would need a
         // lock on the read path, which is the path that has to stay fast.
@@ -154,9 +206,23 @@ public static class ThumbnailLoader
         // GC frees each bitmap once no row still points at it. That trades
         // prompt native-memory release for not corrupting the display, which is
         // the right way round.
-        while (Order.Count > MaxCached && Order.TryDequeue(out var oldest))
+        while ((Order.Count > MaxCached || Interlocked.Read(ref _cachedBytes) > MaxCachedBytes)
+               && Order.TryDequeue(out var oldest))
         {
-            Cache.TryRemove(oldest, out _);
+            if (Cache.TryRemove(oldest, out var evicted))
+                Interlocked.Add(ref _cachedBytes, -BytesOf(evicted));
         }
+    }
+
+    /// <summary>
+    /// What a decoded bitmap costs, near enough: four bytes a pixel, which is
+    /// what Skia holds these as. Deliberately an estimate — the exact figure
+    /// would mean asking the backend about stride and alpha per bitmap, and the
+    /// point is a bound, not an audit.
+    /// </summary>
+    private static long BytesOf(Bitmap bitmap)
+    {
+        var size = bitmap.PixelSize;
+        return (long)size.Width * size.Height * 4;
     }
 }

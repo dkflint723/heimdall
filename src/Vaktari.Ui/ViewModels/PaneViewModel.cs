@@ -936,7 +936,14 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// an unobserved exception on a pool thread is a process abort, and this
     /// runs a subprocess.
     /// </summary>
-    private async Task RefreshVcsAsync(string path, int generation)
+    /// <summary>
+    /// <paramref name="ct"/> is read by the CALLER, on the UI thread that owns
+    /// <c>_cts</c>. Reading it in here means racing the next navigation, which
+    /// disposes that source — and a disposed source throws from `.Token`, on a
+    /// pool thread, where the only trace is a swallowed exception and marks
+    /// that stopped appearing.
+    /// </summary>
+    private async Task RefreshVcsAsync(string path, int generation, CancellationToken ct)
     {
         var empty = new Dictionary<string, Vaktari.Core.Vcs.VcsState>();
 
@@ -984,8 +991,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         try
         {
-            var snapshot = await Vcs.StatusAsync(path, _cts?.Token ?? default)
-                .ConfigureAwait(false);
+            var snapshot = await Vcs.StatusAsync(path, ct).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -1560,7 +1566,15 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 // take seconds on a large repository and the folder must not
                 // wait on it — decorations arriving late is the correct
                 // trade-off, a listing that stalls is not.
-                _ = RefreshVcsAsync(path, generation);
+                // Off the dispatcher, not merely un-awaited. An async method
+                // runs synchronously up to its first await, and the stretch
+                // before this one's is not free: git status walks parent
+                // directories looking for .git and then STARTS A PROCESS, both
+                // on the thread that has just finished drawing the listing.
+                // "After the listing is on screen" was already the intent; this
+                // is what makes it true rather than nearly true.
+                var vcsToken = _cts?.Token ?? default;
+                _ = Task.Run(() => RefreshVcsAsync(path, generation, vcsToken));
 
                 // Says what the listing actually produced. "No files showing"
                 // has two very different causes — nothing enumerated, or

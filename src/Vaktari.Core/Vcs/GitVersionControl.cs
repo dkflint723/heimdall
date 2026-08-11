@@ -138,30 +138,45 @@ public sealed class GitVersionControl : IVersionControl
 
             if (process is null) return null;
 
-            // Both streams concurrently. Reading one to completion first
-            // deadlocks as soon as the child fills the buffer of the other —
-            // this codebase has fixed that same bug five times.
-            var stdout = process.StandardOutput.ReadToEndAsync(ct);
-            var stderr = process.StandardError.ReadToEndAsync(ct);
-
-            await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(10), ct)
-                .ConfigureAwait(false);
-
-            if (!process.WaitForExit(2000))
+            // **Giving up on the wait does not stop the child.** Dispose
+            // releases the handle and leaves git running, so the ten-second
+            // timeout below — and the token, which fires the moment the user
+            // navigates away — would each leak a git.exe. The listing that
+            // takes too long is precisely the one people leave, so the two
+            // paths that abandon the wait are the two that leak, once per
+            // navigation, for as long as they keep trying.
+            try
             {
-                try { process.Kill(entireProcessTree: true); } catch (Exception ex) { Quiet.Swallowed("vcs", ex); }
-                return null;
-            }
+                // Both streams concurrently. Reading one to completion first
+                // deadlocks as soon as the child fills the buffer of the other —
+                // this codebase has fixed that same bug five times.
+                var stdout = process.StandardOutput.ReadToEndAsync(ct);
+                var stderr = process.StandardError.ReadToEndAsync(ct);
 
-            if (process.ExitCode != 0)
+                await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(10), ct)
+                    .ConfigureAwait(false);
+
+                if (!process.WaitForExit(2000))
+                {
+                    Kill(process);
+                    return null;
+                }
+
+                if (process.ExitCode != 0)
+                {
+                    Console.Error.WriteLine(
+                        $"[vaktari] vcs: git status exited {process.ExitCode} — {(await stderr).Trim()}");
+
+                    return null;
+                }
+
+                output = await stdout.ConfigureAwait(false);
+            }
+            catch
             {
-                Console.Error.WriteLine(
-                    $"[vaktari] vcs: git status exited {process.ExitCode} — {(await stderr).Trim()}");
-
-                return null;
+                Kill(process);
+                throw;
             }
-
-            output = await stdout.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -174,6 +189,24 @@ public sealed class GitVersionControl : IVersionControl
         }
 
         return new VcsSnapshot(root, Parse(output, root, folder));
+    }
+
+    /// <summary>
+    /// Ends a git that is no longer being waited on. Never throws: it races
+    /// with normal exit by definition, and a child that finished on its own
+    /// between the check and the call is the good outcome, not an error worth
+    /// reporting to anybody.
+    /// </summary>
+    private static void Kill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex)
+        {
+            Quiet.Swallowed("vcs", ex);
+        }
     }
 
     /// <summary>

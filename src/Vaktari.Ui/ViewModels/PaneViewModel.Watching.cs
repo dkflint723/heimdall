@@ -147,7 +147,15 @@ public sealed partial class PaneViewModel
             _vcsRefresh.Tick += (_, _) =>
             {
                 _vcsRefresh!.Stop();
-                _ = RefreshVcsAsync(CurrentPath, _generation);
+
+                // Off the dispatcher for the same reason as the load path: the
+                // synchronous head of this call starts a process, and a tick
+                // handler runs on the UI thread.
+                var path = CurrentPath;
+                var generation = _generation;
+                var token = _cts?.Token ?? default;
+
+                _ = Task.Run(() => RefreshVcsAsync(path, generation, token));
             };
         }
 
