@@ -919,7 +919,8 @@
               <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"/>
               <MenuItem Header="Rename in bulk…"
                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"/>
-              <MenuItem Header="Move to trash" Command="{Binding ActiveTab.TrashSelectedCommand}"/>
+              <MenuItem Header="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinMoveLabel}"
+                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TrashSelectionCommand}"/>
               <Separator/>
               <!-- Sorting by type has existed since the first build with no way
                    to reach it: there is no type column to click. -->

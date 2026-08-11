@@ -16,8 +16,15 @@ public sealed class LinuxScriptRunner : IScriptRunner
 
         ScriptsDirectory = Path.Combine(dataHome, "vaktari", "scripts");
 
-        // Carried over from the old name, once, so scripts written before the
+        // Carried over from the old names, once, so scripts written before a
         // rename keep working without being moved by hand.
+        //
+        // **Both renames, newest first.** This tried rove and not heimdall,
+        // which meant the sweep that renamed the project would have silently
+        // orphaned every script anybody had written under the previous name —
+        // and scripts are user-authored content, not application state.
+        Vaktari.Core.PreviousName.Adopt(
+            Path.Combine(dataHome, "vaktari"), Path.Combine(dataHome, "heimdall"));
         Vaktari.Core.PreviousName.Adopt(
             Path.Combine(dataHome, "vaktari"), Path.Combine(dataHome, "rove"));
         EnsureDirectory();
@@ -114,6 +121,19 @@ public sealed class LinuxScriptRunner : IScriptRunner
 
         info.Environment["VAKTARI_CWD"] = workingDirectory;
         info.Environment["VAKTARI_SELECTED"] = paths.Count.ToString();
+
+        // **The old names, still set, because scripts are the user's code.**
+        //
+        // The rename swept these along with everything else, which would have
+        // broken every script anybody had already written — silently, since a
+        // shell reading an unset variable gets an empty string and carries on.
+        // A script that did `cd "$HEIMDALL_CWD"` would have run in the wrong
+        // directory rather than failed.
+        //
+        // Deprecated, not supported: the documented names are the VAKTARI_ ones
+        // and these exist so nothing breaks on the day of the rename.
+        info.Environment["HEIMDALL_CWD"] = workingDirectory;
+        info.Environment["HEIMDALL_SELECTED"] = paths.Count.ToString();
 
         // The old names are still set. Scripts are the user's own code living
         // outside this repo, and a rename here should not silently break them.

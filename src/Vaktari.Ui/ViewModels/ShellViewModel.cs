@@ -612,6 +612,15 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public string BinEmptyLabel => $"Empty {BinName}…";
 
+    /// <summary>
+    /// "Move to the Recycle Bin" / "Move to the trash".
+    ///
+    /// The one bin label that was still hardcoded, so the context menu said
+    /// "trash" on Windows while the prompt beside it, the settings page and the
+    /// sidebar all said Recycle Bin.
+    /// </summary>
+    public string BinMoveLabel => $"Move to {TheBin}";
+
     public string BinEmptyHint => $"permanently delete everything in {TheBin}";
 
 
@@ -695,6 +704,24 @@ public sealed partial class ShellViewModel : ObservableObject
 
     /// <summary>Put the window back to the width it had before it was grown.</summary>
     public event EventHandler? ReleaseRequested;
+
+    /// <summary>
+    /// Asks the window to bin the selection, so the confirmation setting is
+    /// honoured.
+    ///
+    /// **The context menu used to call TrashSelectedCommand directly**, which
+    /// skipped the prompt entirely: with "ask before moving files to the bin"
+    /// turned on, the Delete key asked and the identical menu entry did not.
+    /// The one path where somebody has explicitly requested a safety net is the
+    /// worst place to have two routes with different behaviour.
+    ///
+    /// An event rather than a command that prompts, because the prompt bar
+    /// belongs to the window — the same shape EmptyTrashRequested already uses.
+    /// </summary>
+    public event EventHandler? TrashSelectionRequested;
+
+    [RelayCommand]
+    private void TrashSelection() => TrashSelectionRequested?.Invoke(this, EventArgs.Empty);
 
     public event EventHandler? EmptyTrashRequested;
 

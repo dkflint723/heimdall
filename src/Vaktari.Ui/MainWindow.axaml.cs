@@ -185,6 +185,16 @@ public partial class MainWindow : Window
         _shell.PropertiesRequested += (_, _) => ShowProperties();
         _shell.SettingsRequested += (_, _) => ShowSettings();
         _shell.EmptyTrashRequested += (_, _) => AskConfirmEmptyTrash();
+
+        // Exactly what Delete does, so the menu and the key cannot disagree
+        // about whether the confirmation setting applies.
+        _shell.TrashSelectionRequested += (_, _) =>
+        {
+            if (_shell.ActiveTab is not { } pane) return;
+
+            if (AppSettings.Current.General.ConfirmMoveToTrash) AskConfirmTrash();
+            else pane.TrashSelectedCommand.Execute(null);
+        };
         _shell.GrowRequested += (_, by) => GrowToFit(by);
         _shell.ReleaseRequested += (_, _) => ReleaseGrownWidth();
         _shell.BatchRenameRequested += (_, _) => ShowBatchRename();

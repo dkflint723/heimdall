@@ -134,6 +134,19 @@ public sealed class WindowsScriptRunner : IScriptRunner
         info.Environment["VAKTARI_CWD"] = workingDirectory;
         info.Environment["VAKTARI_SELECTED"] = paths.Count.ToString();
 
+        // **The old names, still set, because scripts are the user's code.**
+        //
+        // The rename swept these along with everything else, which would have
+        // broken every script anybody had already written — silently, since a
+        // shell reading an unset variable gets an empty string and carries on.
+        // A script that did `cd "$HEIMDALL_CWD"` would have run in the wrong
+        // directory rather than failed.
+        //
+        // Deprecated, not supported: the documented names are the VAKTARI_ ones
+        // and these exist so nothing breaks on the day of the rename.
+        info.Environment["HEIMDALL_CWD"] = workingDirectory;
+        info.Environment["HEIMDALL_SELECTED"] = paths.Count.ToString();
+
         using var process = Process.Start(info)
             ?? throw new InvalidOperationException($"Could not start {script.Name}.");
 
