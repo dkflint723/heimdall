@@ -889,6 +889,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         if (wanted.Count == 0) return;
 
         var restored = 0;
+        var failed = 0;
 
         foreach (var item in Trash.List())
         {
@@ -902,11 +903,22 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             catch (Exception ex)
             {
                 // One failure must not abandon the rest of the selection.
+                failed++;
                 Console.Error.WriteLine($"[vaktari] restore failed: {ex.Message}");
             }
         }
 
-        Status = restored == 0 ? "nothing restored" : $"restored {restored:N0} item(s)";
+        // **The failures are counted out loud.** Restoring four items where one
+        // could not be put back reported "restored 3", and the row that stayed
+        // behind looked like one the user had simply not selected. Console
+        // output is not somewhere anybody is going to look.
+        Status = (restored, failed) switch
+        {
+            (0, 0) => "nothing restored",
+            (0, _) => $"could not restore {failed:N0} item(s) — see the log",
+            (_, 0) => $"restored {restored:N0} item(s)",
+            _ => $"restored {restored:N0}, {failed:N0} failed",
+        };
 
         await RefreshAsync().ConfigureAwait(false);
     }
@@ -920,11 +932,35 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         if (Trash is null) return;
 
-        var result = await Trash.EmptyAsync(CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            var result = await Trash.EmptyAsync(CancellationToken.None).ConfigureAwait(false);
 
-        Status = $"emptied {Core.Naming.BinName} — removed {result.Removed:N0}, "
-               + $"freed {ByteSize.Format(result.BytesFreed)}";
+            // On the UI thread. ConfigureAwait(false) above means this
+            // continuation is on a pool thread, and Status raises
+            // PropertyChanged straight into a binding — every other status
+            // written after an await in this class goes through the dispatcher
+            // for that reason, and this one did not.
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                Status = $"emptied {Core.Naming.BinName} — removed {result.Removed:N0}, "
+                       + $"freed {ByteSize.Format(result.BytesFreed)}");
+        }
+        catch (Exception ex)
+        {
+            // **A failure here was completely silent.** Emptying is the one
+            // action with no undo, so "did it work?" is a question people
+            // actually ask — and a file the shell still has open, or a
+            // permission the recycle bin will not give up, left the items in
+            // place, the status line blank, and the listing unchanged. Nothing
+            // to distinguish that from an empty bin.
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                Status = $"could not empty {Core.Naming.TheBin}: {ex.Message}");
 
+            Console.Error.WriteLine($"[vaktari] empty failed: {ex}");
+        }
+
+        // Outside the try: whatever happened, some of it may have gone, and a
+        // listing still showing deleted rows is worse than one that is late.
         if (IsTrashListing) await RefreshAsync().ConfigureAwait(false);
     }
 
@@ -935,8 +971,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// Fire-and-forget from the load path, so it carries its own catch-all:
     /// an unobserved exception on a pool thread is a process abort, and this
     /// runs a subprocess.
-    /// </summary>
-    /// <summary>
+    ///
     /// <paramref name="ct"/> is read by the CALLER, on the UI thread that owns
     /// <c>_cts</c>. Reading it in here means racing the next navigation, which
     /// disposes that source — and a disposed source throws from `.Token`, on a

@@ -19,6 +19,13 @@ public partial class PinnedPlacesJsonContext : JsonSerializerContext;
 public sealed class LinuxPlacesProvider : IPlacesProvider
 {
     private readonly string _pinsPath;
+    /// <summary>
+    /// **Replaced, never mutated in place** — the same reason as the Windows
+    /// provider: building the places list reads this off the UI thread while
+    /// pinning writes it on the UI thread, and an Add mid-enumeration throws
+    /// from a task nobody awaits. Copy-on-write rather than a lock; a reader
+    /// finishes against the list it started with.
+    /// </summary>
     private List<PinnedPlace> _pins = [];
 
     public event EventHandler? PlacesChanged;
@@ -91,7 +98,10 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
             }
         }
 
-        foreach (var pin in _pins)
+        // Captured once: this runs off the UI thread and pinning runs on it.
+        var pins = _pins;
+
+        foreach (var pin in pins)
         {
             if (!seen.Add(Normalise(pin.Path))) continue;
 
@@ -287,7 +297,7 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
     {
         if (_pins.Any(p => p.Path == path)) return ValueTask.CompletedTask;
 
-        _pins.Add(new PinnedPlace(path, label ?? Path.GetFileName(path.TrimEnd('/'))));
+        _pins = [.. _pins, new PinnedPlace(path, label ?? Path.GetFileName(path.TrimEnd('/')))];
         SavePins();
         return ValueTask.CompletedTask;
     }
@@ -295,7 +305,7 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
     public ValueTask UnpinAsync(string id, CancellationToken ct)
     {
         var path = id.StartsWith("pin:", StringComparison.Ordinal) ? id[4..] : id;
-        _pins.RemoveAll(p => p.Path == path);
+        _pins = _pins.Where(p => p.Path != path).ToList();
         SavePins();
         return ValueTask.CompletedTask;
     }
@@ -349,7 +359,7 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
 
         // Anything previously imported that duplicates a built-in is dropped
         // too, so an existing places.json is repaired rather than preserved.
-        _pins.RemoveAll(pin => builtIn.Contains(pin.Path.TrimEnd('/')));
+        _pins = _pins.Where(pin => !builtIn.Contains(pin.Path.TrimEnd('/'))).ToList();
 
         if (_pins.Count != before || builtIn.Overlaps(_pins.Select(p => p.Path.TrimEnd('/'))))
         {
@@ -380,7 +390,7 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
                 if (builtIn.Contains(dir.TrimEnd('/'))) continue;
 
                 if (!_pins.Any(p => p.Path == dir))
-                    _pins.Add(new PinnedPlace(dir, title));
+                    _pins = [.. _pins, new PinnedPlace(dir, title)];
             }
         }
         catch { /* a malformed bookmarks file is not worth failing startup over */ }
@@ -406,7 +416,8 @@ public sealed class LinuxPlacesProvider : IPlacesProvider
                 if (builtIn.Contains(dir.TrimEnd('/'))) continue;
 
                 if (!_pins.Any(p => p.Path == dir))
-                    _pins.Add(new PinnedPlace(dir, label ?? Path.GetFileName(dir.TrimEnd('/'))));
+                    _pins = [.. _pins,
+                        new PinnedPlace(dir, label ?? Path.GetFileName(dir.TrimEnd('/')))];
             }
         }
         catch { /* same */ }

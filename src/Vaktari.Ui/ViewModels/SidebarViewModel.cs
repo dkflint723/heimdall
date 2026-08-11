@@ -229,17 +229,35 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        if (_places is null) return;
+        if (_places is not { } places) return;
 
-        await _places.ImportExistingAsync(CancellationToken.None).ConfigureAwait(false);
+        // Off the calling thread — which is the UI thread, during startup.
+        // Importing reads every .lnk in Links and Network Shortcuts and
+        // resolves each one through the shell, which is a lot of disk before
+        // the window has drawn anything.
+        await Task.Run(() => places.ImportExistingAsync(CancellationToken.None).AsTask())
+                  .ConfigureAwait(false);
+
         await ReloadAsync().ConfigureAwait(false);
     }
 
     public async Task ReloadAsync()
     {
-        if (_places is null) return;
+        if (_places is not { } places) return;
 
-        var groups = await _places.GetPlacesAsync(CancellationToken.None).ConfigureAwait(false);
+        // **The providers are synchronous behind an async signature**, so this
+        // ran wherever it was called from, and it is called from the UI thread
+        // at startup and after every pin. On Windows it enumerates drives and
+        // asks each one whether it is ready, its size and its label — and a
+        // mapped drive whose server is gone answers those by blocking for the
+        // SMB timeout. That is a window frozen before it has drawn, for as long
+        // as the network takes to give up, and nothing on screen to say why.
+        //
+        // Task.Run here rather than inside each provider: there are two of them
+        // and one caller, and the caller is the part that knows it is on the UI
+        // thread.
+        var groups = await Task.Run(() => places.GetPlacesAsync(CancellationToken.None).AsTask())
+                               .ConfigureAwait(false);
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {

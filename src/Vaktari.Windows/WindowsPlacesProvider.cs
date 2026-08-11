@@ -26,6 +26,18 @@ public partial class PinnedPlacesJsonContext : JsonSerializerContext;
 public sealed class WindowsPlacesProvider : IPlacesProvider
 {
     private readonly string _pinsPath;
+    /// <summary>
+    /// **Replaced, never mutated in place.** Building the places list reads
+    /// this, and that build moved off the UI thread because enumerating drives
+    /// blocks for the SMB timeout on a disconnected mapped drive. Pinning still
+    /// happens on the UI thread, so an Add during that enumeration would throw
+    /// "collection was modified" from a background task nobody is awaiting.
+    ///
+    /// Copy-on-write instead of a lock: a reader captures the reference it
+    /// started with and finishes against a consistent list, a writer publishes
+    /// a new one, and reference assignment is atomic. The lists are a handful
+    /// of entries, so copying them costs nothing worth measuring.
+    /// </summary>
     private List<PinnedPlace> _pins;
 
     public event EventHandler? PlacesChanged;
@@ -67,6 +79,9 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
 
     private List<Place> BuildUserPlaces()
     {
+        // Captured once: this runs off the UI thread and pinning runs on it.
+        var pins = _pins;
+
         // Case-insensitively, because C:\Users\flint and c:\users\flint are one
         // folder here — the same reason PathRules.Comparison is platform-dependent.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -105,7 +120,7 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
             });
         }
 
-        foreach (var pin in _pins)
+        foreach (var pin in pins)
         {
             if (!seen.Add(PathRules.Normalise(pin.Path))) continue;
 
@@ -239,7 +254,7 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
     {
         if (_pins.Any(p => PathRules.Same(p.Path, path))) return ValueTask.CompletedTask;
 
-        _pins.Add(new PinnedPlace(path, label ?? PathRules.LeafName(path)));
+        _pins = [.. _pins, new PinnedPlace(path, label ?? PathRules.LeafName(path))];
         SavePins();
         return ValueTask.CompletedTask;
     }
@@ -247,7 +262,7 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
     public ValueTask UnpinAsync(string id, CancellationToken ct)
     {
         var path = id.StartsWith("pin:", StringComparison.Ordinal) ? id[4..] : id;
-        _pins.RemoveAll(p => PathRules.Same(p.Path, path));
+        _pins = _pins.Where(p => !PathRules.Same(p.Path, path)).ToList();
         SavePins();
         return ValueTask.CompletedTask;
     }
@@ -313,7 +328,9 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
 
         // Anything previously imported that duplicates a built-in is dropped
         // too, so an existing places.json is repaired rather than preserved.
-        _pins.RemoveAll(pin => builtIn.Contains(PathRules.Normalise(pin.Path)));
+        _pins = _pins
+            .Where(pin => !builtIn.Contains(PathRules.Normalise(pin.Path)))
+            .ToList();
 
         if (_pins.Count != before)
         {
@@ -346,8 +363,8 @@ public sealed class WindowsPlacesProvider : IPlacesProvider
                 if (builtIn.Contains(PathRules.Normalise(target))) continue;
                 if (_pins.Any(p => PathRules.Same(p.Path, target))) continue;
 
-                _pins.Add(new PinnedPlace(
-                    target, Path.GetFileNameWithoutExtension(shortcut)));
+                _pins = [.. _pins, new PinnedPlace(
+                    target, Path.GetFileNameWithoutExtension(shortcut))];
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
