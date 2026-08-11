@@ -64,7 +64,15 @@ fi
 chmod +x "$LIB/Vaktari.Ui"
 ln -sfn "$LIB/Vaktari.Ui" "$BIN/vaktari"
 
-[[ -f "$LIB/vaktari.png" ]] && cp -f "$LIB/vaktari.png" "$ICONS/vaktari.png"
+# Scalable first: it is what the release now carries, and an SVG scales to
+# whatever size the panel asks for. The PNG line stays for a tarball built
+# before the icons were shipped, where it simply finds nothing.
+if [[ -f "$LIB/vaktari.svg" ]]; then
+    mkdir -p "$HOME/.local/share/icons/hicolor/scalable/apps"
+    cp -f "$LIB/vaktari.svg"           "$HOME/.local/share/icons/hicolor/scalable/apps/vaktari.svg"
+fi
+
+[[ -f "$LIB/vaktari.png" ]] && cp -f "$LIB/vaktari.png" "$ICONS/vaktari.png" || true
 
 # The symbolic variant if the release carries one. A dark panel wants a
 # single-colour glyph, not the full-colour plate.

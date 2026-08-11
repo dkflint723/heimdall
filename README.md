@@ -111,7 +111,22 @@ anything changes.
 so you can name them without a second click. Templates come from your
 `~/Templates` folder, alongside a set of built-in file types.
 
-**Open with**, and **Open terminal here** (`F4`).
+**Open with** lists the applications actually registered for that file type,
+and *Choose another app…* opens your system's own picker — the one that can
+browse for an executable and remember the choice.
+
+**Open terminal here** (`F4`).
+
+**Opening a folder from elsewhere.** Vaktari can register as the program that
+opens folders and drives, from Settings — so double-clicking a folder anywhere
+opens it here. Pass it a file and it opens that file's folder, which is what
+makes `vaktari ~/Downloads/thing.zip` useful from a script or a launcher.
+
+One thing it cannot do, and no file manager on Windows can without replacing
+parts of the shell: **"Show in folder" from Chrome, Edge and Firefox always
+opens Explorer.** Those browsers call a Windows function that opens an Explorer
+window directly rather than asking the system what should open a folder, so
+there is no setting or registration that redirects it.
 
 **Checksums.** The properties window computes a file's hashes on request — only
 when you ask, since hashing a large file is not free — and the result is

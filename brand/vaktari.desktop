@@ -13,6 +13,12 @@ Icon=vaktari
 Terminal=false
 StartupNotify=true
 
+# In [Desktop Entry], where it means something. It sat at the bottom of
+# [Desktop Action Home], where the specification gives it no meaning at all, so
+# nothing read it. The value is the WM_CLASS Program.cs actually sets — it was
+# naming the assembly, which is not what the window reports.
+StartupWMClass=vaktari
+
 # inode/directory is what makes this offerable as the default file manager;
 # without it the system will not list Vaktari when you go to change it.
 MimeType=inode/directory;
@@ -29,4 +35,3 @@ Exec=vaktari
 [Desktop Action Home]
 Name=Open Home Folder
 Exec=vaktari %h
-StartupWMClass=Vaktari.Ui

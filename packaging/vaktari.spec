@@ -12,6 +12,15 @@ Version:        %{?version}%{!?version:0.0.0}
 Release:        1%{?dist}
 Summary:        A file manager for KDE that consumes the desktop instead of reimplementing it
 
+# Supersedes the package this was before the rename. Without it, `dnf upgrade`
+# installs vaktari and leaves the whole heimdall install in place — two copies
+# of the same program, one of them with a dead desktop entry.
+#
+# Unversioned Obsoletes on purpose: every heimdall that ever existed is
+# superseded, and there will never be a newer one.
+Obsoletes:      heimdall
+Provides:       heimdall = %{version}-%{release}
+
 License:        MIT
 URL:            https://github.com/dkflint723/vaktari
 Source0:        vaktari-linux-x64.tar.gz

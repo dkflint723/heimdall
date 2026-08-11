@@ -110,6 +110,16 @@ jobs:
           # licence the project ships under. The distro tarballs already carried
           # these; this one did not.
           cp LICENSE README.md dist/vaktari/
+
+          # The icons, which the tarball never carried. install.sh has always
+          # tried to install them and always found nothing: the application's
+          # own icon is an AvaloniaResource compiled INTO the assembly, so it
+          # never appears in the publish directory, and nothing else put one
+          # here. The result was a desktop entry whose Icon= key resolved to
+          # nothing and a blank tile in the launcher.
+          cp brand/icons/hicolor/scalable/apps/vaktari.svg dist/vaktari/
+          cp brand/icons/hicolor/symbolic/apps/vaktari-symbolic.svg dist/vaktari/
+
           chmod +x dist/vaktari/install.sh dist/vaktari/Vaktari.Ui
 
           tar -czf vaktari-linux-x64.tar.gz -C dist vaktari

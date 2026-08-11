@@ -1,14 +1,24 @@
 # Maintainer: Flint <noreply@users.noreply.github.com>
 #
-# NOTE ON THE NAME: `vaktari` is already taken in Arch's repositories by the
-# Samsung firmware flashing tool, so this package cannot use it. Check before
-# publishing:  pacman -Ss '^vaktari$'
+# NOTE ON THE NAME: this package was `vaktari-fm` when the project was called
+# Heimdall, because `heimdall` is taken in Arch's repositories by the Samsung
+# firmware flashing tool. That reason left with the rename — `vaktari` is free —
+# so the suffix is gone and the old name is superseded below.
+#
+# The rename sweep rewrote this note mechanically and left it claiming that
+# `vaktari` was the taken one, which is exactly backwards. Check before
+# publishing rather than trusting a comment:  pacman -Ss '^vaktari$'
 #
 # Unlike the RPM, this builds FROM SOURCE — that is the Arch convention, and the
 # AUR expects a PKGBUILD that a user's own machine can compile.
 
-pkgname=vaktari-fm
+pkgname=vaktari
 _projname=vaktari
+# Supersedes the package this was before the rename, so `pacman -Syu` replaces
+# it instead of leaving two file managers installed over each other.
+replaces=('heimdall-fm')
+conflicts=('heimdall-fm')
+
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="A file manager for KDE that consumes the desktop instead of reimplementing it"
