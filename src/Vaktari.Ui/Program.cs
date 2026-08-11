@@ -210,20 +210,58 @@ internal sealed class Program
             // window that never closes.
             instance.Dispose();
 
-            // Said out loud. Refusing silently with exit code 0 is
-            // indistinguishable from crashing on startup — which cost a
-            // diagnostic round trip when the published binary "did nothing"
-            // and the real answer was that a copy was already running.
-            Console.Error.WriteLine(
-                paths.Length > 0
-                    ? $"[vaktari] already running — handed over {paths.Length} path(s)"
-                    : "[vaktari] already running — raising the existing window");
+            // **The result decides what is said, and whether we stop here.**
+            //
+            // This line used to be printed BEFORE the attempt and the attempt's
+            // answer thrown away, so a handover that failed reported success
+            // and the process exited having opened nothing — indistinguishable,
+            // from outside, from working. The bug that made it fail every time
+            // lived in SingleInstance.Dispose, one line above this call.
+            var handed = SingleInstance.TryForward(paths);
 
-            SingleInstance.TryForward(paths);
-            return;
+            if (handed)
+            {
+                // Said out loud. Refusing silently with exit code 0 is
+                // indistinguishable from crashing on startup — which cost a
+                // diagnostic round trip when the published binary "did nothing"
+                // and the real answer was that a copy was already running.
+                Console.Error.WriteLine(
+                    paths.Length > 0
+                        ? $"[vaktari] already running — handed over {paths.Length} path(s)"
+                        : "[vaktari] already running — raising the existing window");
+
+                return;
+            }
+
+            // Nobody answered: a copy holds the lock but its channel is gone.
+            //
+            // With folders to show, opening our own window is the lesser fault.
+            // Two windows sharing a session file can duplicate tabs, which is
+            // why single-instance exists at all — but a file manager that does
+            // NOTHING when you double-click a folder is not a file manager, and
+            // this is the path the desktop takes for every folder on the
+            // machine. A visible extra window can be closed; a launch that
+            // vanishes leaves no way to even tell what went wrong.
+            //
+            // With no folders, there is nothing to show and the existing window
+            // is still there, so this stays out of the way as before.
+            if (paths.Length == 0)
+            {
+                Console.Error.WriteLine(
+                    "[vaktari] already running, but it did not answer — nothing to open");
+
+                return;
+            }
+
+            Console.Error.WriteLine(
+                "[vaktari] already running, but it did not answer — "
+                + $"opening {paths.Length} path(s) in a window of our own");
+        }
+        else
+        {
+            Instance = instance;
         }
 
-        Instance = instance;
         StartupPaths = paths;
 
         try

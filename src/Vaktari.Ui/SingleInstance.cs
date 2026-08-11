@@ -27,10 +27,24 @@ public sealed class SingleInstance : IDisposable
     /// <summary>Paths sent by a later launch, already on the UI thread.</summary>
     public event EventHandler<string[]>? PathsReceived;
 
+    /// <summary>
+    /// Where the lock and socket live, for tests only.
+    ///
+    /// **They must not use the real one.** The suite runs while the author's
+    /// own copy is open, these files are per-user rather than per-process, and
+    /// the first thing this class does with a socket it believes is stale is
+    /// delete it — which is precisely the fault being tested. A test that
+    /// reproduced the bug against the live path would break the running window
+    /// to prove the point.
+    /// </summary>
+    internal static string? RuntimeDirectoryOverride { get; set; }
+
     private static string RuntimeDirectory
     {
         get
         {
+            if (RuntimeDirectoryOverride is { } test) return test;
+
             // XDG_RUNTIME_DIR is per-session and cleared on logout, so a stale
             // lock cannot survive a reboot and block every future start.
             var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
@@ -42,8 +56,8 @@ public sealed class SingleInstance : IDisposable
         }
     }
 
-    private static string LockPath => Path.Combine(RuntimeDirectory, "vaktari.lock");
-    private static string SocketPath => Path.Combine(RuntimeDirectory, "vaktari.sock");
+    internal static string LockPath => Path.Combine(RuntimeDirectory, "vaktari.lock");
+    internal static string SocketPath => Path.Combine(RuntimeDirectory, "vaktari.sock");
 
     /// <summary>
     /// True when this process is the one and only. False means another already
@@ -145,9 +159,27 @@ public sealed class SingleInstance : IDisposable
 
     public void Dispose()
     {
+        // **Only the instance that won the lock owns the socket file.**
+        //
+        // This deleted it unconditionally, and the process that deletes it is
+        // the one that LOST — Program disposes the loser before forwarding, so
+        // the first handed-over folder removed the running window's socket and
+        // then tried to connect to the path it had just unlinked. It failed, as
+        // did every handover afterwards for the life of that window, and the
+        // launch exited having opened nothing.
+        //
+        // Nothing said so. TryForward's result was discarded, the "handed over"
+        // line was printed before the attempt, and the failure looked exactly
+        // like the intended behaviour: a second copy that starts and quietly
+        // gets out of the way. As the desktop's default file manager this is
+        // the whole feature — every double-clicked folder is a launch.
+        var owner = _lock is not null;
+
         try { _stopping?.Cancel(); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
         try { _listener?.Dispose(); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
         try { _lock?.Dispose(); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
+
+        if (!owner) return;
 
         try { if (File.Exists(SocketPath)) File.Delete(SocketPath); } catch (Exception ex) { Quiet.Swallowed("instance", ex); }
     }
