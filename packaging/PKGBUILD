@@ -74,6 +74,13 @@ package() {
     install -Dm644 brand/icons/hicolor/scalable/apps/vaktari.svg \
         "$pkgdir/usr/share/icons/hicolor/scalable/apps/$_projname.svg"
 
+    # The symbolic variant, which this package was silently dropping while the
+    # RPM shipped it. A dark panel or a monochrome menu wants the single-colour
+    # glyph, not the full-colour plate. The theme resolves it by the
+    # `-symbolic` filename suffix, not by the directory alone.
+    install -Dm644 brand/icons/hicolor/symbolic/apps/vaktari-symbolic.svg \
+        "$pkgdir/usr/share/icons/hicolor/symbolic/apps/$_projname-symbolic.svg"
+
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }

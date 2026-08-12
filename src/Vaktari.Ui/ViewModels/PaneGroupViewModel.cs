@@ -96,6 +96,50 @@ public sealed partial class PaneGroupViewModel : ObservableObject
     /// </summary>
     private const double MinimumListing = 420;
 
+    /// <summary>Below this the preview and the field labels start colliding, so
+    /// there is nothing left to read.</summary>
+    private const double NarrowestInfo = 220;
+
+    /// <summary>
+    /// Moves the details panel's edge by a drag of its handle.
+    ///
+    /// **Here rather than in the drag handler**, because the upper bound is
+    /// <see cref="MinimumListing"/> — past it <see cref="CanShowInfo"/> goes
+    /// false and the panel vanishes mid-drag, which is a fault and not a
+    /// resize. Writing that rule out a second time in the code-behind is how
+    /// the two come to disagree.
+    ///
+    /// Negated: the panel is docked to the right, so dragging its handle left
+    /// is a negative X and has to make the panel wider.
+    ///
+    /// A window too narrow to hold both refuses the drag rather than clamping
+    /// to something it cannot show.
+    /// </summary>
+    public void ResizeInfoBy(double dx)
+    {
+        // Before the first measure there is no width to reason about. 560 is
+        // the same ceiling the clamp lands on at a comfortable window size.
+        var widest = GroupWidth > 0
+            ? GroupWidth - MinimumListing * (ActiveTab?.TextScale ?? 1.0)
+            : 560;
+
+        if (widest < NarrowestInfo) return;
+
+        var wanted = Math.Clamp(InfoWidth - dx, NarrowestInfo, widest);
+        if (wanted == InfoWidth) return;
+
+        InfoWidth = wanted;
+
+        // Or the drag is forgotten at the next launch. The session is written
+        // on a dirty flag, and every other persisted change raises this — the
+        // width was simply a value nothing had ever been able to change before.
+        LayoutChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Raised when something persisted about this group's layout moves,
+    /// so the shell can mark the session dirty.</summary>
+    public event EventHandler? LayoutChanged;
+
     /// <summary>This side's full width, panel included. Fed by the view.</summary>
     [ObservableProperty] private double _groupWidth;
 
@@ -256,6 +300,23 @@ public sealed partial class PaneGroupViewModel : ObservableObject
     partial void OnInfoWidthChanged(double value) => NotifyInfoFit();
     partial void OnGroupWidthChanged(double value)
     {
+        // **A width dragged wide in a big window used to strand the panel.**
+        // The drag clamps against the group width AT THE TIME, and nothing
+        // re-clamped it afterwards — so widening the panel on a large display
+        // and later opening the window smaller left CanShowInfo false, the
+        // panel gone, and its handle gone with it. Getting it back meant
+        // finding a window as wide as the one it was dragged in.
+        //
+        // The panel now gives room back as the window narrows, down to the
+        // floor below which there is nothing left to read. Under that the old
+        // behaviour still applies: it hides, and returns when there is room.
+        if (value > 0)
+        {
+            var widest = value - MinimumListing * (ActiveTab?.TextScale ?? 1.0);
+
+            if (widest >= NarrowestInfo && InfoWidth > widest) InfoWidth = widest;
+        }
+
         NotifyInfoFit();
 
         if (!_roomRequestPending || value <= 0) return;

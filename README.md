@@ -79,7 +79,7 @@ field folds back into its icon when you leave it empty.
 **Recent files** and **recent locations**, banded by day. Any entry can be
 forgotten individually, which removes the record and never the file.
 
-**Pin a folder** with `Ctrl+D` to keep it in the sidebar.
+**Add a folder to places** with `Ctrl+D` to keep it in the sidebar.
 
 ## Selecting
 
@@ -211,7 +211,7 @@ other.
 | `Tab` | switch split side | `F5` | refresh |
 | `F8` | next layout | `Space` | quick preview |
 | `F11` | details panel | `Ctrl+H` | show hidden files |
-| `Ctrl+L` | edit the path | `Ctrl+D` | pin this folder |
+| `Ctrl+L` | edit the path | `Ctrl+D` | add this folder to places |
 | `Ctrl+F` | search | `Ctrl+B` | show or hide the sidebar |
 | `Ctrl+I` | filter the listing | `Ctrl+Shift+,` | settings |
 | `Escape` | clear the filter | `Ctrl` `+` `−` `0` | zoom in, out, reset |
@@ -255,7 +255,7 @@ UAC prompt, and it removes from *Installed apps* like anything else. The first
 page offers *Install for all users* if you would rather have it on the machine
 than the account.
 
-Uninstalling leaves your tabs, pinned places and folder views where they
+Uninstalling leaves your tabs, places and folder views where they
 are, under `%LOCALAPPDATA%\vaktari` — so reinstalling or upgrading picks up
 where you left off. Delete that folder by hand if you want them gone, but note
 that it also holds your settings, your recent folders and the `scripts\` folder

@@ -201,6 +201,22 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>A backend exists for this platform, but is not installed yet.</summary>
     public bool CanInstallSharing => _sharing is { IsAvailable: false } && !IsInstalling;
 
+    /// <summary>
+    /// Whether sharing has any presence in the menu at all.
+    ///
+    /// **Sharing used to disappear from the menu while it was being
+    /// installed.** It was two sibling entries — share, and install — gated on
+    /// two flags that are both false during the download, so clicking "install
+    /// copyparty" closed the menu and the next right-click showed nothing at
+    /// all where the feature had been. Nothing was broken and nothing said so.
+    ///
+    /// One submenu now, gated on there being a backend for this platform, with
+    /// the three states inside it: share it, install it, or installing. That
+    /// also settles the older complaint that one feature had two top-level
+    /// entries whose labels shared no words.
+    /// </summary>
+    public bool HasSharingEntry => _sharing is not null;
+
     [ObservableProperty] private bool _isInstalling;
 
     partial void OnIsInstallingChanged(bool value)
@@ -589,6 +605,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool IsSplit => Right is not null;
 
+    /// <summary>The other-pane transfers need both a second pane and something
+    /// to send. They were gated on the split alone, so an empty-space right-click
+    /// in a split window offered them and they returned on the empty selection.</summary>
+    public bool CanTransferToOtherPane => IsSplit && ActiveTab?.HasSelection == true;
+
     /// <summary>
     /// What this desktop calls the bin, for labels that name it.
     ///
@@ -746,12 +767,32 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private static Core.Settings.ContextMenuSettings Menu => Settings.AppSettings.Current.ContextMenu;
 
-    public bool ShowCopyToInMenu => Menu.ShowCopyTo;
-    public bool ShowMoveToInMenu => Menu.ShowMoveTo;
+    // The four that act on a selection carry the preference AND the selection.
+    // One menu serves a row and the empty space below it, so without the second
+    // half they were listed on an empty-space click and did nothing when picked.
+    //
+    // ShowAddToPlaces and ShowCopyLocation are deliberately NOT gated: their
+    // commands retarget the current folder when nothing is selected, which is a
+    // real answer rather than a silent no-op. See AddSelectionToPlaces below.
+    public bool ShowCopyToInMenu => Menu.ShowCopyTo && ActiveTab?.HasSelection == true;
+    public bool ShowMoveToInMenu => Menu.ShowMoveTo && ActiveTab?.HasSelection == true;
     public bool ShowSortByInMenu => Menu.ShowSortBy;
-    public bool ShowDuplicateInMenu => Menu.ShowDuplicate;
-    public bool ShowOpenInNewTabInMenu => Menu.ShowOpenInNewTab;
+    public bool ShowDuplicateInMenu => Menu.ShowDuplicate && ActiveTab?.HasSelection == true;
+    public bool ShowOpenInNewTabInMenu => Menu.ShowOpenInNewTab && ActiveTab?.HasSelection == true;
     public bool ShowAddToPlacesInMenu => Menu.ShowAddToPlaces;
+
+    /// <summary>
+    /// The selection row appears only when a FOLDER is selected.
+    ///
+    /// **Two entries were doing one thing.** Splitting "Add to places" into a
+    /// selection row and a current-folder row read well until you noticed that
+    /// the selection command falls back to the current folder for anything that
+    /// is not a directory — so with nothing selected, or a file selected, both
+    /// rows pinned the same path under two different labels, and the one naming
+    /// a selection was not acting on it.
+    /// </summary>
+    public bool ShowAddSelectionToPlaces
+        => Menu.ShowAddToPlaces && ActiveTab?.HasDirectorySelected == true;
     public bool ShowCopyLocationInMenu => Menu.ShowCopyLocation;
 
     /// <summary>
@@ -831,6 +872,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowDuplicateInMenu));
         OnPropertyChanged(nameof(ShowOpenInNewTabInMenu));
         OnPropertyChanged(nameof(ShowAddToPlacesInMenu));
+        OnPropertyChanged(nameof(ShowAddSelectionToPlaces));
         OnPropertyChanged(nameof(ShowCopyLocationInMenu));
 
         // Left and Right, not a Groups collection — this view model has no such
@@ -861,6 +903,12 @@ public sealed partial class ShellViewModel : ObservableObject
         var group = new PaneGroupViewModel(NewPane);
 
         group.LocationChanged += (_, _) => SyncSidebarLocation();
+
+        // The details panel's width is persisted, and until it had a working
+        // handle nothing could ever change it — so nothing marked the session
+        // dirty for it either, and a drag would have been forgotten by the next
+        // launch.
+        group.LayoutChanged += (_, _) => MarkDirty();
 
         // Forwarded rather than handled: only the window can change its own
         // width, and the group has no business knowing a window exists.
@@ -921,7 +969,7 @@ public sealed partial class ShellViewModel : ObservableObject
             OnPropertyChanged(nameof(ActiveTab));
             OnPropertyChanged(nameof(ActiveStatus));
             OnPropertyChanged(nameof(ActiveSummary));
-
+            NotifySelectionMenu();
         }
 
         MarkDirty();
@@ -935,7 +983,7 @@ public sealed partial class ShellViewModel : ObservableObject
         OnPropertyChanged(nameof(ActiveTab));
         OnPropertyChanged(nameof(ActiveStatus));
         OnPropertyChanged(nameof(OtherGroup));
-
+        NotifySelectionMenu();
 
         MarkDirty();
     }
@@ -944,14 +992,22 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsSplit));
         OnPropertyChanged(nameof(OtherGroup));
+        NotifySelectionMenu();
         SyncWindowControls();
         NotifyColumns();
         MarkDirty();
     }
 
     /// <summary>
-    /// The window's own controls live on one side only: the right, when split,
-    /// and the only side otherwise.
+    /// The split toggle lives on one side only: the right, when split, and the
+    /// only side otherwise.
+    ///
+    /// **It used to be "the window's own controls", plural, and that was the
+    /// defect.** The details-panel toggle was gated on this flag too — but the
+    /// panel is per split side, and its own tooltip says so, so the left half
+    /// ended up with a panel and no control that opened it. Splitting is
+    /// genuinely window-level state; a per-side control is not, and one flag
+    /// cannot mean both.
     ///
     /// Driven from here rather than computed in each group, because a group has
     /// no idea whether it is the left or the right of anything — that is the
@@ -1049,6 +1105,23 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void NotifyTransferTargets() => OnPropertyChanged(nameof(TransferTargets));
 
+    /// <summary>
+    /// The menu entries that need something to act on. Computed here rather
+    /// than on the pane because the preference and the selection live on
+    /// opposite sides, so nothing raises them on its own — and they go stale in
+    /// three ways, not one: the selection changes, the active tab changes
+    /// underneath them, and the split appears or goes away.
+    /// </summary>
+    private void NotifySelectionMenu()
+    {
+        OnPropertyChanged(nameof(ShowCopyToInMenu));
+        OnPropertyChanged(nameof(ShowMoveToInMenu));
+        OnPropertyChanged(nameof(ShowDuplicateInMenu));
+        OnPropertyChanged(nameof(ShowOpenInNewTabInMenu));
+        OnPropertyChanged(nameof(ShowAddSelectionToPlaces));
+        OnPropertyChanged(nameof(CanTransferToOtherPane));
+    }
+
     [RelayCommand]
     private void CopySelectionTo(PlaceItemViewModel? place) => TransferTo(place, move: false);
 
@@ -1106,9 +1179,15 @@ public sealed partial class ShellViewModel : ObservableObject
                               ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
     [RelayCommand]
-    private void OpenInNewTab(FileEntry entry)
+    private void OpenInNewTab(FileEntry? entry)
     {
-        if (entry.IsDirectory) ActiveGroup.AddTab(entry.FullPath);
+        // Nullable because the CommandParameter binds to the selected entry and
+        // one menu serves both a row and the empty space below it — on an
+        // empty-space click it resolves to null. FileEntry is a struct, so a
+        // RelayCommand<FileEntry> could not accept that and threw
+        // ArgumentException from the menu rather than doing nothing; taking
+        // FileEntry? is what lets the command be handed the empty case at all.
+        if (entry is { IsDirectory: true } folder) ActiveGroup.AddTab(folder.FullPath);
     }
 
     /// <summary>
@@ -1181,6 +1260,20 @@ public sealed partial class ShellViewModel : ObservableObject
     private void PinCurrent()
     {
         if (ActiveTab?.CurrentPath is { Length: > 0 } path) _ = Sidebar.PinAsync(path);
+    }
+
+    /// <summary>
+    /// The way back out, which did not exist: places could be added from two
+    /// places and removed from none.
+    ///
+    /// No confirmation. This removes a shortcut and never a folder — the same
+    /// bargain as Recent's "Forget (keeps the file)", which also asks nothing —
+    /// and putting it back is the same Ctrl+D that created it.
+    /// </summary>
+    [RelayCommand]
+    private void RemovePlace(PlaceItemViewModel? place)
+    {
+        if (place is { IsUserPinned: true }) _ = Sidebar.UnpinAsync(place.Id);
     }
 
     // ---- operations ----------------------------------------------------
@@ -1339,6 +1432,10 @@ public sealed partial class ShellViewModel : ObservableObject
                 // so it changes whenever the pane navigates.
                 NotifyTransferTargets();
                 MarkDirty();
+                break;
+
+            case nameof(PaneViewModel.Selection):
+                NotifySelectionMenu();
                 break;
 
             case nameof(PaneViewModel.Sort):

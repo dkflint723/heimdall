@@ -24,6 +24,26 @@ public static class FileConverters
     /// and a bare filename identifies nothing. Abbreviating home is what makes
     /// the column narrow enough to be worth having — most rows are under it.
     /// </summary>
+    /// <summary>
+    /// The full path for the recent listing's Path column, or nothing when the
+    /// user has turned row tooltips off.
+    ///
+    /// **"Show tooltips on rows" only ever suppressed one of the two.** The
+    /// setting was read in exactly one place — the modified column's age
+    /// description — while this column went on popping the full path over
+    /// every hover regardless. A preference that silences some tooltips and
+    /// not others is worse than one that does nothing, because the ones that
+    /// remain look like a fault rather than a setting.
+    ///
+    /// Gated in the converter for the same reason the age one is: a null Tip
+    /// shows no tooltip, so the preference costs a line and no binding
+    /// gymnastics, and reading it live means turning it off takes effect on
+    /// the next hover rather than the next launch.
+    /// </summary>
+    public static readonly IValueConverter PathTip =
+        new FuncValueConverter<FileEntry, string?>(entry =>
+            Settings.AppSettings.Current.General.ShowTooltips ? entry.FullPath : null);
+
     public static readonly IValueConverter ParentPath =
         new FuncValueConverter<FileEntry, string>(entry =>
         {

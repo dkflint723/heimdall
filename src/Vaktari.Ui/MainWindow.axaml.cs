@@ -670,6 +670,48 @@ public partial class MainWindow : Window
             group.GroupWidth = e.NewSize.Width;
     }
 
+    /// <summary>
+    /// Widens or narrows the details panel as its handle is dragged.
+    ///
+    /// **The panel had a resize handle that could not resize anything.** It was
+    /// a GridSplitter, and a splitter works by editing the Row or
+    /// ColumnDefinitions it sits between — the group is a DockPanel, which has
+    /// neither, so every drag was inert while the bar still painted itself and
+    /// still showed a west-east cursor. The sidebar hit the same trap and was
+    /// fixed the same way: a Thumb, and the width moved from here.
+    ///
+    /// The clamping lives in the group, which owns the width and the rule that
+    /// bounds it. This is the plumbing: which side was dragged, and how far.
+    /// From the DataContext rather than a name because in split view there are
+    /// two of these, and a name would find one.
+    /// </summary>
+    private void OnInfoHandleDrag(object? sender, VectorEventArgs e)
+    {
+        if (sender is Control { DataContext: PaneGroupViewModel group })
+            group.ResizeInfoBy(e.Vector.X);
+    }
+
+    /// <summary>
+    /// Keeps a sidebar place from opening a menu with nothing in it.
+    ///
+    /// **Avalonia opens a ContextMenu whether or not any child is visible.**
+    /// The only entry is "Remove from places", which means nothing on the rows
+    /// the user did not put there — Home, Documents, the drives, the shares —
+    /// so gating it left every one of those rows popping a 2px sliver of menu
+    /// background at the cursor. On a fresh install with no pins, that is every
+    /// row in the sidebar.
+    ///
+    /// Cancelling here is the only hook that stops the popup rather than its
+    /// contents. If this menu ever gains an entry that applies to any place,
+    /// this handler is what has to go.
+    /// </summary>
+    private void OnPlaceMenuOpening(object? sender, CancelEventArgs e)
+    {
+        if (sender is Control { DataContext: PlaceItemViewModel { IsUserPinned: true } }) return;
+
+        e.Cancel = true;
+    }
+
     /// <summary>Feeds the pane its own width so columns can drop out in
     /// priority order rather than being squeezed.</summary>
     private void OnListSizeChanged(object? sender, SizeChangedEventArgs e)

@@ -302,6 +302,9 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(Selection));
         OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(CanActOnSelection));
+        OnPropertyChanged(nameof(HasDirectorySelected));
     }
 
     /// <summary>The collection belonging to the layout currently on screen.</summary>
@@ -314,6 +317,34 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     /// <summary>What everything else should read. Never the raw collections.</summary>
     public IReadOnlyList<FileEntry> Selection => SelectedEntries.ToList();
+
+    /// <summary>
+    /// True when the right-click landed on something. One menu serves both a
+    /// row and the empty space below it, so the entries that act on a selection
+    /// hide there rather than sit enabled and do nothing — which is what they
+    /// did: every one of them guards on the selection and returns quietly.
+    ///
+    /// Gating on the selection is safe because a right-click on a row selects
+    /// that row first, so the entries are still there when you want them.
+    /// </summary>
+    public bool HasSelection => SelectedEntry is not null || SelectedEntries.Count > 0;
+
+    /// <summary>Cut, Rename and Move to bin: needs a selection, and the bin
+    /// listing is a view rather than a folder.</summary>
+    public bool CanActOnSelection => HasSelection && !IsTrashListing;
+
+    /// <summary>
+    /// Whether a FOLDER is selected, which is the only case where adding "the
+    /// selection" to places differs from adding the current folder.
+    ///
+    /// **Two entries did the same thing.** Splitting "Add to places" into a
+    /// selection one and a current-folder one read well until you noticed that
+    /// the selection command falls back to the current folder for anything that
+    /// is not a directory — so with nothing selected, or a file selected, both
+    /// rows pinned the same path under two different labels, and the one naming
+    /// a selection was not acting on it.
+    /// </summary>
+    public bool HasDirectorySelected => SelectedEntry is { IsDirectory: true };
 
     /// <summary>
     /// Carries the selection to the layout being switched to, so changing view
@@ -1091,6 +1122,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedEntryChanged(FileEntry? value)
     {
+        // The focused row counts as a selection on its own — a right-click sets
+        // it before the menu opens, and on a single-click it is all there is.
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(CanActOnSelection));
+        OnPropertyChanged(nameof(HasDirectorySelected));
+
         if (IsPreviewVisible) _ = RefreshPreviewAsync();
 
         OpenWithOptions.Clear();
@@ -1184,6 +1221,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             RebuildBreadcrumbs();
             OnPropertyChanged(nameof(IsRecentListing));
             OnPropertyChanged(nameof(IsTrashListing));
+            OnPropertyChanged(nameof(CanActOnSelection));
             OnPropertyChanged(nameof(ShowParentPath));
             OnPropertyChanged(nameof(ShowMetadata));
 

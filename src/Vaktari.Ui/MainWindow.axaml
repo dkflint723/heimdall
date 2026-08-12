@@ -172,9 +172,34 @@
         </ScrollViewer>
       </Border>
 
-      <GridSplitter DockPanel.Dock="Right" Width="4" ResizeDirection="Columns"
-                    IsVisible="{Binding IsInfoUsable}"
-                    Background="{DynamicResource BorderColour}"/>
+      <!-- **A 4px GridSplitter stood here and could not move anything.** A
+           splitter resizes by editing the Row or ColumnDefinitions it sits
+           between, and this group is a DockPanel, which has neither — the same
+           trap the sidebar handle's comment at the foot of this file exists to
+           explain. It drew a bar, showed a west-east resize cursor, and left
+           the panel on whatever InfoWidth was last restored to; nothing else
+           in the application writes that value.
+
+           Replaced with the shape that does work, which is the sidebar's: a
+           Thumb reports how far it was dragged and changes nothing itself, so
+           the width is moved in the handler. Transparent for the same reason
+           as the sidebar's — the panel's own left border is already the
+           separator, and this is grab area with a cursor to announce it.
+
+           DragDelta rather than x:Name and a constructor hook-up, because this
+           markup is a template: in split view there are two of these, and a
+           name would find one. The handler reads the group from the Thumb's
+           DataContext, exactly as OnGroupSizeChanged does. -->
+      <Thumb DockPanel.Dock="Right" Width="5"
+             Background="Transparent" Cursor="SizeWestEast"
+             IsVisible="{Binding IsInfoUsable}"
+             DragDelta="OnInfoHandleDrag">
+        <Thumb.Template>
+          <ControlTemplate>
+            <Border Background="{TemplateBinding Background}"/>
+          </ControlTemplate>
+        </Thumb.Template>
+      </Thumb>
 
 
         <!-- The accent rides the top of the ACTIVE side's tab bar. With two
@@ -286,9 +311,14 @@
             </Border>
 
             <!-- The details panel is a different choice, so it sits outside the
-                 chip rather than behind a rule. -->
+                 chip rather than behind a rule.
+
+                 **Not gated on ShowsWindowControls**, unlike the split toggle
+                 below. That flag is true on one side only, and the panel is
+                 per split side — the tooltip says as much — so gating it left
+                 the left half with a panel and no control that opened it. The
+                 split is genuinely window-level; this is not. -->
             <ToggleButton Classes="seg"
-                          IsVisible="{Binding ShowsWindowControls}"
                           IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
                           AutomationProperties.Name="details panel for this side  (f11)"
                           ToolTip.Tip="details panel for this side  (f11)">
@@ -321,8 +351,13 @@
                  four DockPanel.Dock="Right" children, where the first declared
                  sat furthest right and the source read backwards from the
                  screen. -->
+            <!-- Ungated for the same reason as the panel toggle: everything
+                 behind it — hidden files, text size, icon size — is per pane,
+                 and on the left half of a split there was no way to reach any
+                 of it. Clicking here makes this side active first (the window's
+                 tunnelling press handler), so the shell-level commands inside
+                 act on the pane that was clicked. -->
             <Button Content="&#x2261;"
-                    IsVisible="{Binding ShowsWindowControls}"
                     FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
                     Foreground="{DynamicResource ViewDimText}"
                     Background="Transparent" BorderThickness="0"
@@ -331,19 +366,16 @@
               <Flyout Placement="BottomEdgeAlignedRight">
                 <StackPanel Width="230" Spacing="10" Margin="4">
 
-                  <!-- The Layout radio group was here. The segmented control in
-                       the bar above is the same choice, one click away and
-                       always visible, so keeping it here as well meant two
+                  <!-- The Layout radio group and the "Details panel" checkbox
+                       were here. The segmented control and the panel toggle in
+                       the bar above are the same choices, one click away and
+                       always visible, so keeping them here as well meant two
                        controls for one decision that could disagree on which
                        looked authoritative. -->
 
-                  <CheckBox Content="Details panel  (f11)"
-                            FontSize="{DynamicResource FontSizeSmall}"
-                            IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"/>
-
                   <!-- A view setting, so it belongs with the view settings
                        rather than occupying every path bar permanently. -->
-                  <CheckBox Content="Show hidden files"
+                  <CheckBox Content="Show hidden files  (ctrl+h)"
                             FontSize="{DynamicResource FontSizeSmall}"
                             IsChecked="{Binding ActiveTab.ShowHidden}"/>
 
@@ -378,6 +410,7 @@
                                  Width="48" Height="26" Padding="0" MinHeight="0"
                                  Background="Transparent" BorderThickness="0"
                                  FontSize="{DynamicResource FontSizeSmall}"
+                                 AutomationProperties.Name="text size in this pane"
                                  TextAlignment="Center" VerticalContentAlignment="Center"/>
                         <Button Content="+" Width="30" Height="26" Padding="0"
                                 Background="Transparent" BorderThickness="0"
@@ -410,6 +443,7 @@
                                  Width="48" Height="26" Padding="0" MinHeight="0"
                                  Background="Transparent" BorderThickness="0"
                                  FontSize="{DynamicResource FontSizeSmall}"
+                                 AutomationProperties.Name="icon size in this pane"
                                  TextAlignment="Center" VerticalContentAlignment="Center"/>
                         <Button Content="+" Width="30" Height="26" Padding="0"
                                 Background="Transparent" BorderThickness="0"
@@ -423,11 +457,11 @@
 
                   </Grid>
 
-                  <TextBlock Text="ctrl + wheel to scale, ctrl + wheel click to reset · add shift for icons only"
+                  <TextBlock Text="ctrl+wheel to scale, ctrl+wheel click to reset · add shift for icons only"
                              FontSize="{DynamicResource FontSizeTiny}"
                              Foreground="{DynamicResource ViewDimText}"
                              TextWrapping="Wrap" Margin="0,2,0,4"/>
-                  <Button Content="Reset sizes" HorizontalAlignment="Stretch"
+                  <Button Content="Reset sizes  (ctrl+0)" HorizontalAlignment="Stretch"
                           FontSize="{DynamicResource FontSizeSmall}"
                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ZoomResetCommand}"/>
 
@@ -631,7 +665,7 @@
                          the hint below the placeholder rather than level with
                          it, so the field reads as one thing with a note on it
                          rather than two labels competing. -->
-                    <TextBlock DockPanel.Dock="Right" Text="ctrl f" Margin="6,0,8,0"
+                    <TextBlock DockPanel.Dock="Right" Text="ctrl+f" Margin="6,0,8,0"
                                VerticalAlignment="Center" Opacity="0.7"
                                FontSize="{DynamicResource FontSizeTiny}"
                                Foreground="{DynamicResource ViewDimText}"
@@ -639,7 +673,7 @@
                     <TextBox Text="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.Search.Query}"
                              local:FocusBehavior.FocusWhen="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.IsSearching}"
                              local:FocusBehavior.LostFocusCommand="{Binding $parent[Window].((vm:ShellViewModel)DataContext).Sidebar.CloseSearchIfEmptyCommand}"
-                             PlaceholderText="Search files"
+                             PlaceholderText="search files"
                              Classes="flat"
                              Background="Transparent" BorderThickness="0"
                              MinHeight="0" Padding="0,3" VerticalContentAlignment="Center"
@@ -831,10 +865,42 @@
         <ItemsControl ItemsSource="{Binding Tabs}" Background="{DynamicResource ViewBackground}">
 
           <ItemsControl.ContextMenu>
+            <!--
+                 One menu for a file row AND for the empty space below it, which
+                 is why so much of it is gated on HasSelection: everything that
+                 acts on a selection was listed, enabled, on an empty-space
+                 right-click, and did nothing at all when picked.
+
+                 Hiding rather than disabling, to match the Show*InMenu
+                 preferences already here. Safe to gate this way because a
+                 right-click selects the row under the pointer first — the
+                 entries are there whenever the click was on something.
+            -->
             <ContextMenu x:DataType="vm:PaneGroupViewModel">
+              <!-- **Every row here that has a key binding prints it.** Ten did
+                   and none said so, which left the keyboard route discoverable
+                   only by reading the source — and an entry nobody knows is
+                   reachable by key is the first one argued as redundant.
+
+                   InputGesture rather than the "  (ctrl+x)" suffix this file
+                   puts on tooltips and flyout labels: it is display-only, so it
+                   cannot collide with the Window.KeyBindings below or with the
+                   code-behind switch that actually owns Enter, Alt+Enter and
+                   Delete. MenuItem.HotKey is the property that WOULD register a
+                   second handler — deliberately not used. The theme also
+                   right-aligns the gesture in its own column, which a suffix
+                   baked into the header cannot do.
+
+                   Only rows with a real binding get one: a printed gesture that
+                   does nothing is worse than none, which is why "Open with",
+                   "Copy to", "Move to", "New", "More", "Scripts" and the share
+                   entry — parents with no command of their own — stay bare. -->
               <MenuItem Header="Open"
-                                      Command="{Binding ActiveTab.OpenSelectedCommand}"/>
+                                      Command="{Binding ActiveTab.OpenSelectedCommand}"
+                                      InputGesture="Enter"
+                                      IsVisible="{Binding ActiveTab.HasSelection}"/>
               <MenuItem Header="Open with"
+                                      IsVisible="{Binding ActiveTab.HasSelection}"
                                       ItemsSource="{Binding ActiveTab.OpenWithOptions}">
                               <MenuItem.ItemTemplate>
                                 <DataTemplate x:DataType="fs:LaunchOption">
@@ -849,11 +915,20 @@
                                 </Style>
                               </MenuItem.Styles>
                             </MenuItem>
-              <Separator/>
+              <!-- Gated with the block ABOVE it, not the one below. Open and
+                   Open with are the only entries up there and both need a
+                   selection, so without this the menu opened with a rule as its
+                   first item. Avalonia draws every separator it is given and
+                   collapses none of them. -->
+              <Separator IsVisible="{Binding ActiveTab.HasSelection}"/>
               <MenuItem Header="Cut"   Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"
-                                      IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
-              <MenuItem Header="Copy"  Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
+                                      InputGesture="Ctrl+X"
+                                      IsVisible="{Binding ActiveTab.CanActOnSelection}"/>
+              <MenuItem Header="Copy"  Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"
+                                      InputGesture="Ctrl+C"
+                                      IsVisible="{Binding ActiveTab.HasSelection}"/>
               <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"
+                                      InputGesture="Ctrl+V"
                                       IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
               <MenuItem Header="Copy to"
                                       IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyToInMenu}"
@@ -889,16 +964,21 @@
                             </MenuItem>
               <MenuItem Header="Copy to other pane"
                                       Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyToOtherPaneCommand}"
-                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
+                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanTransferToOtherPane}"/>
               <MenuItem Header="Move to other pane"
                                       Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveToOtherPaneCommand}"
-                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"/>
-              <Separator/>
+                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanTransferToOtherPane}"/>
+              <!-- Rename and the bin are the whole of the block below, and both
+                   need a selection outside the trash — so this rule goes with
+                   them, or it stacks against the one before New. -->
+              <Separator IsVisible="{Binding ActiveTab.CanActOnSelection}"/>
               <MenuItem Header="Rename"        Command="{Binding ActiveTab.BeginRenameCommand}"
-                                      IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
+                                      InputGesture="F2"
+                                      IsVisible="{Binding ActiveTab.CanActOnSelection}"/>
               <MenuItem Header="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinMoveLabel}"
                                       Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TrashSelectionCommand}"
-                                      IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
+                                      InputGesture="Delete"
+                                      IsVisible="{Binding ActiveTab.CanActOnSelection}"/>
               <Separator/>
               <!--
                    One "New" rather than three top-level entries that all create
@@ -906,7 +986,8 @@
               -->
               <MenuItem Header="New"
                                       IsVisible="{Binding !ActiveTab.IsTrashListing}">
-                <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"/>
+                <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"
+                                        InputGesture="Ctrl+Shift+N"/>
                 <MenuItem Header="New file" ItemsSource="{Binding ActiveTab.NewFileKinds}">
                                 <MenuItem.ItemTemplate>
                                   <DataTemplate x:DataType="fs:NewFileKind">
@@ -940,11 +1021,14 @@
               </MenuItem>
               <!--
                    Sorting and grouping are one decision about how the listing reads,
-                   and were two adjacent submenus making it look like two.
+                   and were two adjacent submenus making it look like two. The
+                   settings checkbox governs the whole submenu for the same reason:
+                   hiding one half and leaving the other stranded was never a state
+                   anyone asked for.
               -->
-              <MenuItem Header="Arrange">
-                <MenuItem Header="Sort by"
-                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowSortByInMenu}">
+              <MenuItem Header="Arrange"
+                                      IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowSortByInMenu}">
+                <MenuItem Header="Sort by">
                                 <MenuItem Header="Name" ToggleType="Radio"
                                           IsChecked="{Binding ActiveTab.IsSortedByName, Mode=OneWay}"
                                           Command="{Binding ActiveTab.SortByNameCommand}"/>
@@ -992,8 +1076,15 @@
                                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenInNewTabCommand}"
                                         CommandParameter="{Binding ActiveTab.SelectedEntry}"
                                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowOpenInNewTabInMenu}"/>
-                <MenuItem Header="Add to places"
+                <!-- Two entries because they are two commands: one pins what is
+                     selected, one pins the folder you are looking at. Ctrl+D is
+                     the latter, and had no visible home until now. -->
+                <MenuItem Header="Add selection to places"
                                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).AddSelectionToPlacesCommand}"
+                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowAddSelectionToPlaces}"/>
+                <MenuItem Header="Add this folder to places"
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).PinCurrentCommand}"
+                                        InputGesture="Ctrl+D"
                                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowAddToPlacesInMenu}"/>
                 <MenuItem Header="Copy location"
                                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyLocationCommand}"
@@ -1001,8 +1092,10 @@
                 <MenuItem Header="Duplicate"     Command="{Binding ActiveTab.DuplicateSelectedCommand}"
                                         IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowDuplicateInMenu}"/>
                 <MenuItem Header="Rename in bulk…"
-                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"/>
-                <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
+                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BatchRenameCommand}"
+                                        InputGesture="Shift+F2"/>
+                <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"
+                                        InputGesture="F4"/>
                 <MenuItem Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"
                                         IsVisible="{Binding ActiveTab.HasScripts}">
                                 <MenuItem.ItemTemplate>
@@ -1018,9 +1111,25 @@
                                   </Style>
                                 </MenuItem.Styles>
                               </MenuItem>
-                <MenuItem Header="Scripts folder…"
+                <!-- Says what it is for, because with no scripts installed the
+                     "Scripts" submenu above it is hidden and this row is left
+                     standing on its own, naming a folder nobody has heard of.
+                     No ellipsis: in this window that mark promises the entry
+                     asks before it acts, and this one opens the folder there
+                     and then. -->
+                <MenuItem Header="Add your own scripts"
                                         Command="{Binding ActiveTab.OpenScriptsFolderCommand}"/>
-                <MenuItem IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}">
+                <!-- **One entry for one feature, in whichever of its three
+                     states it is in.** It was two siblings, share and install,
+                     gated on two flags that are BOTH false while the install
+                     runs — so clicking install closed the menu and the next
+                     right-click showed nothing where sharing had been. Nothing
+                     was broken and nothing said so.
+
+                     Gated on there being a backend for this platform at all,
+                     and the three rows inside cover every state that gate
+                     allows, so the popup is never empty. -->
+                <MenuItem IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).HasSharingEntry}">
                                 <MenuItem.Header>
                                   <!-- Names the folder, so which one gets served is visible
                                        before clicking rather than discovered afterwards. -->
@@ -1029,27 +1138,45 @@
                                   </TextBlock>
                                 </MenuItem.Header>
                                 <MenuItem Header="Read-only"
+                                          IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}"
                                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderCommand}"/>
                                 <MenuItem Header="Allow uploads"
+                                          IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanShare}"
                                           Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShareFolderWritableCommand}"/>
+                                <!-- No ellipsis, by the rule stated above and on
+                                     the bin's Empty button: it promises the entry
+                                     asks first, and this one starts the download
+                                     the moment it is clicked. The entry already
+                                     names what it installs, so the label is the
+                                     question and the click is the answer. -->
+                                <MenuItem Header="Install copyparty to share folders"
+                                          IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanInstallSharing}"
+                                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).InstallSharingCommand}"/>
+                                <!-- Disabled and present, rather than absent: the
+                                     download is the one state where somebody is
+                                     waiting on an answer, and it is exactly the
+                                     state that used to show nothing. -->
+                                <MenuItem Header="Installing copyparty…" IsEnabled="False"
+                                          IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsInstalling}"/>
                               </MenuItem>
-                <MenuItem Header="Share over network — install copyparty…"
-                                        IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CanInstallSharing}"
-                                        Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).InstallSharingCommand}"/>
               </MenuItem>
-              <Separator/>
+              <!-- Gated on the one entry it introduces. Ungated it drew a rule
+                   with nothing under it in every listing that is not the recent
+                   one — which is most of them, including every ordinary folder —
+                   and Avalonia does not collapse the double rule that made with
+                   the one below. -->
+              <Separator IsVisible="{Binding ActiveTab.IsRecentListing}"/>
               <MenuItem Header="Forget (keeps the file)"
                                       IsVisible="{Binding ActiveTab.IsRecentListing}"
                                       Command="{Binding ActiveTab.ForgetRecentCommand}"/>
-              <MenuItem Header="Restore"
-                                      IsVisible="{Binding ActiveTab.IsTrashListing}"
-                                      Command="{Binding ActiveTab.RestoreFromTrashCommand}"/>
-              <MenuItem Header="{Binding $parent[Window].((vm:ShellViewModel)DataContext).BinEmptyLabel}"
-                                      IsVisible="{Binding ActiveTab.IsTrashListing}"
-                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).EmptyTrashCommand}"/>
+              <!-- Restore and the empty-bin entry are deliberately absent. The
+                   trash listing docks both as buttons above the column header on
+                   the same IsTrashListing gate these rows carried, so the menu
+                   could only ever repeat a pair of controls already on screen. -->
               <Separator/>
               <MenuItem Header="Properties"
-                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"/>
+                                      Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowPropertiesCommand}"
+                                      InputGesture="Alt+Enter"/>
             </ContextMenu>
           </ItemsControl.ContextMenu>
 
@@ -1301,7 +1428,7 @@
                              name alone identifies nothing. -->
                         <TextBlock Grid.Column="2" Width="{DynamicResource ColPathWide}" Margin="8,0,0,0"
                                    Text="{Binding Converter={x:Static vm:FileConverters.ParentPath}}"
-                                   ToolTip.Tip="{Binding FullPath}"
+                                   ToolTip.Tip="{Binding Converter={x:Static vm:FileConverters.PathTip}}"
                                    IsVisible="{Binding $parent[ListBox].((vm:PaneViewModel)DataContext).ShowParentPath}"
                                    FontSize="{DynamicResource FontSizeSmall}"
                                    Foreground="{DynamicResource ViewDimText}"
@@ -1727,6 +1854,29 @@
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
                                     Padding="12,6" Opacity="{Binding Opacity}">
+                              <!-- **Places could be added from two places and
+                                   removed from none.** Ctrl+D and the menu both
+                                   pinned one; the only way back out was editing
+                                   places.json by hand. Only on the rows the user
+                                   made — Home, the drives and the shares are not
+                                   theirs to remove, and the provider would
+                                   ignore the attempt. -->
+                              <Button.ContextMenu>
+                                <!-- Refused rather than opened empty. Avalonia
+                                     pops a ContextMenu whether or not any child
+                                     is visible, so gating the only entry gave
+                                     every row the user did NOT pin — which on a
+                                     fresh install is every row in the sidebar —
+                                     a 2px sliver of menu background at the
+                                     cursor. Cancelling in Opening is the one
+                                     hook that stops the popup itself. -->
+                                <ContextMenu Opening="OnPlaceMenuOpening">
+                                  <MenuItem Header="Remove from places"
+                                            IsVisible="{Binding IsUserPinned}"
+                                            Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).RemovePlaceCommand}"
+                                            CommandParameter="{Binding}"/>
+                                </ContextMenu>
+                              </Button.ContextMenu>
                               <StackPanel>
                                 <!-- ONE line: bar, icon, label, free space. The
                                      drive row used to be three lines tall, which
@@ -1864,7 +2014,8 @@
                     <Button DockPanel.Dock="Right" Content="+" Padding="4,0"
                             Background="Transparent" BorderThickness="0"
                             FontSize="{DynamicResource FontSizeTiny}"
-                            AutomationProperties.Name="connect to a server" ToolTip.Tip="connect to a server"
+                            AutomationProperties.Name="connect to a server…" ToolTip.Tip="connect to a server…"
+                            IsEnabled="{Binding CanConnect}"
                             Command="{Binding ConnectCommand}"/>
                     <TextBlock Text="REMOTE" FontSize="{DynamicResource FontSizeTiny}"
                                FontWeight="Medium" LetterSpacing="1.1"
@@ -1873,8 +2024,17 @@
                   <ItemsControl ItemsSource="{Binding Sidebar.Remotes}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="pl:RemoteMount">
+                        <!-- Name and tooltip on the row, not on the label: the
+                             label is deliberately allowed to be shorter than
+                             the truth, and a tooltip on the TextBlock only
+                             fires over the text — never over the icon, the
+                             "offline" tag or the padded remainder of the row.
+                             The discovered-service row above already does it
+                             this way, and the row had no accessible name at
+                             all. -->
                         <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Background="Transparent" BorderThickness="0" Padding="12,7"
+                                AutomationProperties.Name="{Binding Path}" ToolTip.Tip="{Binding Path}"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
                                 CommandParameter="{Binding Path}">
                           <Button.ContextMenu>
@@ -1885,7 +2045,11 @@
                               <MenuItem Header="Copy local path"
                                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopyRemotePathCommand}"
                                         CommandParameter="{Binding}"/>
-                              <Separator/>
+                              <!-- A rule was here too. Four entries carved into
+                                   three sections is more rules than menu, and it
+                                   made Disconnect read as its own category; this
+                                   is now actions, one rule, Properties — the
+                                   shape the discovered-service menu above uses. -->
                               <MenuItem Header="Disconnect"
                                         Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).DisconnectRemoteCommand}"
                                         CommandParameter="{Binding}"/>
@@ -1924,10 +2088,7 @@
                                      Foreground="{DynamicResource AccentColour}"
                                      VerticalAlignment="Center"/>
 
-                          <!-- The full path in the tooltip, because the label
-                               is now allowed to be shorter than the truth. -->
                           <TextBlock Text="{Binding Label}"
-                                     ToolTip.Tip="{Binding Path}"
                                      FontSize="{DynamicResource FontSizeBase}"
                                      TextTrimming="CharacterEllipsis"/>
                           </DockPanel>
@@ -1937,12 +2098,17 @@
                   </ItemsControl>
                 </StackPanel>
 
-                <!-- Connect stays reachable even with nothing mounted yet. -->
+                <!-- Connect stays reachable even with nothing mounted yet. The
+                     same command as the "+" beside REMOTE, so it carries the
+                     same name, the same tooltip and the same gate — the two
+                     used to disagree on both the wording and whether they
+                     could be clicked. -->
                 <Button IsVisible="{Binding !Sidebar.HasRemotes}"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                         Background="Transparent" BorderThickness="0" Padding="12,7"
                         Margin="0,8,0,12"
                         FontSize="{DynamicResource FontSizeBase}"
+                        AutomationProperties.Name="connect to a server…" ToolTip.Tip="connect to a server…"
                         IsEnabled="{Binding CanConnect}"
                         Command="{Binding ConnectCommand}">
                   <DockPanel>
@@ -1953,7 +2119,7 @@
                           StrokeThickness="{DynamicResource IconStroke}"
                           StrokeLineCap="Round" StrokeJoin="Round"
                           th:SidebarIcon.Token="server"/>
-                    <TextBlock Text="connect to server…"
+                    <TextBlock Text="connect to a server…"
                                FontSize="{DynamicResource FontSizeBase}"
                                VerticalAlignment="Center"/>
                   </DockPanel>
@@ -1963,8 +2129,9 @@
                      a folder open to the network must never be something you
                      have to remember. -->
                 <StackPanel IsVisible="{Binding HasShares}" Margin="0,8,0,12">
-                  <TextBlock Text="sharing" Margin="12,0,0,2"
-                             FontSize="{DynamicResource FontSizeSmall}"
+                  <TextBlock Text="SHARING" Margin="12,0,12,6"
+                             FontSize="{DynamicResource FontSizeTiny}"
+                             FontWeight="Medium" LetterSpacing="1.1"
                              Foreground="{DynamicResource ViewDimText}"/>
                   <ItemsControl ItemsSource="{Binding Shares}">
                     <ItemsControl.ItemTemplate>
@@ -2072,8 +2239,10 @@
 
          A Thumb rather than a GridSplitter, and that is forced: a splitter
          resizes by editing the Row or ColumnDefinitions it sits between, and
-         the sidebar lives in a DockPanel, which has neither. The window's two
-         working splitters are both inside Grids.
+         the sidebar lives in a DockPanel, which has neither. The window's one
+         GridSplitter, the split handle below, is inside a Grid. The details
+         panel had a second one that was not, which is why that panel now has
+         no handle at all.
 
          Transparent, because the sidebar's own 1px right border is already the
          separator; this is grab area, and the cursor announces it. The default

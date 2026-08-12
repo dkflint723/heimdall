@@ -307,9 +307,12 @@ RPM and runs it**, because a package that installs is the only proof that the
 **Arch** builds and validates `packaging/PKGBUILD`. Unlike the RPM it compiles
 from source, which is the Arch convention and what the AUR expects.
 
-> **The Arch package cannot be called `vaktari`.** That name is taken by the
-> Samsung firmware flashing tool. `pkgname=vaktari-fm` is a placeholder —
-> check with `pacman -Ss '^vaktari$'` and pick something before publishing.
+> **The Arch package is `vaktari`.** It was `vaktari-fm` when the project was
+> called Heimdall, because `heimdall` is taken in Arch's repositories by the
+> Samsung firmware flashing tool. The rename left that reason behind, so the
+> suffix is gone and `packaging/PKGBUILD` supersedes the old package with
+> `replaces=('heimdall-fm')`. Confirm the name is still free before publishing:
+> `pacman -Ss '^vaktari$'`.
 
 **Publishing to the AUR is deliberately not automated.** It needs an SSH key with
 push rights to `aur.archlinux.org`, and putting one in repository secrets so a
@@ -317,9 +320,9 @@ workflow can publish on your behalf is a decision worth making consciously. The
 manual path:
 
 ```bash
-git clone ssh://aur@aur.archlinux.org/vaktari-fm.git
-cp packaging/PKGBUILD packaging/.SRCINFO vaktari-fm/
-cd vaktari-fm && git commit -am "0.1.0" && git push
+git clone ssh://aur@aur.archlinux.org/vaktari.git
+cp packaging/PKGBUILD packaging/.SRCINFO vaktari/
+cd vaktari && git commit -am "0.1.0" && git push
 ```
 
 Update `sha256sums` in the PKGBUILD first — it ships as `SKIP`, which the AUR
@@ -329,30 +332,17 @@ accepts but which verifies nothing.
 
 ## 6. Things that will trip you up
 
-**`src/Vaktari.Ui/vaktari.png` must exist, and it is NOT in version
-control.** It is referenced as an `AvaloniaResource` and embedded in the binary,
-so a fresh clone fails to build with:
+**`src/Vaktari.Ui/vaktari.png` must exist for the build to succeed.** It is
+tracked, so a fresh clone has it — but it is referenced as an `AvaloniaResource`
+and embedded in the binary, so deleting it locally fails the build with:
 
 ```
 error MSB4018: The "GenerateAvaloniaResourcesTask" task failed unexpectedly.
 System.IO.FileNotFoundException: Could not find file '…/src/Vaktari.Ui/vaktari.png'
 ```
 
-**This is the one file whose loss breaks the build, and it currently lives on a
-single machine.** Fix it properly rather than working around it — from a checkout
-that has the file:
-
-```bash
-git check-ignore -v src/Vaktari.Ui/vaktari.png   # is a .gitignore rule hiding it?
-git add -f src/Vaktari.Ui/vaktari.png
-git commit -m "Commit the application icon"
-```
-
-The `-f` is needed only if an ignore rule matches it; a broad `*.png` pattern is
-the usual culprit.
-
-To unblock a build before that happens, any 128×128 PNG at that path will do —
-the build only needs a readable image, and the real one can replace it later.
+Restore it with `git checkout -- src/Vaktari.Ui/vaktari.png`. Any 128×128 PNG at
+that path also unblocks a build; the task only needs a readable image.
 
 **Debug builds carry `AvaloniaUI.DiagnosticsSupport`**, which is excluded from
 Release by condition. If you publish and the developer tools vanish, that is why.

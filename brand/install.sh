@@ -6,8 +6,10 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 share="${XDG_DATA_HOME:-$HOME/.local/share}"
 
-# The binary the desktop entry points at. Adjust if you publish elsewhere.
-binary="${1:-$HOME/dev/rove/src/Vaktari.Ui/bin/Release/net10.0/linux-x64/publish/Vaktari.Ui}"
+# The binary the launcher points at: this checkout's linux-x64 publish output.
+# Pass a path as the first argument if you publish somewhere else.
+repo="$(cd "$here/.." && pwd)"
+binary="${1:-$repo/src/Vaktari.Ui/bin/Release/net10.0/linux-x64/publish/Vaktari.Ui}"
 
 if [ ! -x "$binary" ]; then
   echo "warning: $binary is not executable yet — the entry will still install," >&2

@@ -274,6 +274,21 @@ public sealed partial class SidebarViewModel : ObservableObject
 
     public Task PinAsync(string path)
         => _places?.PinAsync(path, null, CancellationToken.None).AsTask() ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Takes a place back off the list, and rebuilds it so the row goes.
+    ///
+    /// Reloaded explicitly rather than waiting on PlacesChanged: the providers
+    /// raise that event on import, not on every write, and a row that stays put
+    /// after being removed reads as the command having failed.
+    /// </summary>
+    public async Task UnpinAsync(string id)
+    {
+        if (_places is not { } places) return;
+
+        await places.UnpinAsync(id, CancellationToken.None).ConfigureAwait(false);
+        await ReloadAsync().ConfigureAwait(false);
+    }
 }
 
 public sealed class PlaceGroupViewModel(PlaceGroup group)
@@ -297,6 +312,18 @@ public sealed partial class PlaceItemViewModel(Place place) : ObservableObject
     public string Path { get; } = place.Path;
     public string Icon { get; } = place.Icon;
     public bool IsAvailable { get; } = place.IsAvailable;
+
+    /// <summary>
+    /// Whether the user put this here, and so whether they can take it away.
+    ///
+    /// **Nothing in the interface could remove a place.** Both platform
+    /// providers implement UnpinAsync and nobody called it: Ctrl+D and the menu
+    /// added one, and the only way back out was to edit places.json by hand.
+    /// Home, the drives and the network shares are not the user's to remove and
+    /// the provider would ignore the attempt, so the entry appears only on the
+    /// rows where it means something.
+    /// </summary>
+    public bool IsUserPinned { get; } = place.IsUserPinned;
 
     /// <summary>Unreachable entries render dimmed and in place — never hidden,
     /// never silently dropped.</summary>
