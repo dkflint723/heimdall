@@ -22,6 +22,19 @@ namespace Vaktari.Ui.Tests;
 /// </summary>
 public sealed class RightClickSelectionTests
 {
+    /// <summary>
+    /// **No Dispatcher.RunJobs here, deliberately.** Pumping the dispatcher from
+    /// inside a test is re-entrant: every headless test in this assembly runs on
+    /// one UI thread, xunit schedules classes in parallel, and a pump lets
+    /// another test's body run in the middle of this one. ThemeApplierTests
+    /// asserts on Application.Current.RequestedThemeVariant — application-wide
+    /// state — so an interleaved test there reads a variant a different test
+    /// set. The suite failed twice that way, both times unreproducible
+    /// afterwards, which is what a race looks like from the outside.
+    ///
+    /// Measure and Arrange are enough: they are synchronous, and a container
+    /// only needs a laid-out parent to have a position worth clicking.
+    /// </summary>
     private static (Window Window, ListBox List) Build()
     {
         var list = new ListBox
@@ -37,7 +50,6 @@ public sealed class RightClickSelectionTests
         // Layout has to have run before an item has a position to click.
         window.Measure(new Size(300, 400));
         window.Arrange(new Rect(0, 0, 300, 400));
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         return (window, list);
     }
@@ -59,6 +71,8 @@ public sealed class RightClickSelectionTests
         window.MouseUp(point, MouseButton.Right);
 
         Assert.Equal("two", list.SelectedItem);
+
+        window.Close();
     }
 
     /// <summary>
@@ -74,5 +88,9 @@ public sealed class RightClickSelectionTests
         window.MouseUp(new Point(100, 280), MouseButton.Right);
 
         Assert.Null(list.SelectedItem);
+
+        // Closed rather than left standing: this application is shared with
+        // every other headless test in the assembly.
+        window.Close();
     }
 }

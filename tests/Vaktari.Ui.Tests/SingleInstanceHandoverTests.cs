@@ -34,12 +34,57 @@ public sealed class SingleInstanceHandoverTests : IDisposable
         SingleInstance.RuntimeDirectoryOverride = _runtime;
     }
 
+    /// <summary>
+    /// **Cleanup must never be able to fail a test.** This caught IOException
+    /// only, and Windows throws UnauthorizedAccessException from
+    /// Directory.Delete when something still holds a file in it — which is
+    /// exactly the state a just-closed socket is in for a moment. The suite
+    /// failed twice that way, both times on the first run after a build when
+    /// the file system is busiest, and each failure named a test whose subject
+    /// had already passed. This machine currently carries 175 leftover
+    /// vaktari-tests directories, so the delete failing is not rare here.
+    ///
+    /// Every other temp-directory cleanup in this repository already swallows
+    /// everything, with the same reasoning written on it: a temp directory is
+    /// not worth failing over.
+    ///
+    /// One retry after a short pause, because the usual cause is a handle being
+    /// released rather than anything permanent. Only ever under this class's own
+    /// GUID directory.
+    /// </summary>
     public void Dispose()
     {
         SingleInstance.RuntimeDirectoryOverride = null;
 
-        // Only what this test made, and only ever under its own GUID directory.
-        try { Directory.Delete(_runtime, recursive: true); } catch (IOException) { }
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                Directory.Delete(_runtime, recursive: true);
+                return;
+            }
+            catch
+            {
+                Thread.Sleep(50);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Waits briefly for the socket file rather than demanding it this
+    /// instant. Binding creates it, but "created" and "visible to a stat on a
+    /// machine with a virus scanner" are not the same moment, and a test that
+    /// fails on that gap would be reporting the weather rather than the code.
+    /// </summary>
+    private static bool SocketAppeared()
+    {
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            if (File.Exists(SingleInstance.SocketPath)) return true;
+            Thread.Sleep(25);
+        }
+
+        return false;
     }
 
     [Fact]
@@ -61,7 +106,7 @@ public sealed class SingleInstanceHandoverTests : IDisposable
     {
         using var running = new SingleInstance();
         Assert.True(running.TryAcquire());
-        Assert.True(File.Exists(SingleInstance.SocketPath), "the listener never bound");
+        Assert.True(SocketAppeared(), "the listener never bound");
 
         var launch = new SingleInstance();
         Assert.False(launch.TryAcquire());
@@ -134,7 +179,7 @@ public sealed class SingleInstanceHandoverTests : IDisposable
     {
         var running = new SingleInstance();
         Assert.True(running.TryAcquire());
-        Assert.True(File.Exists(SingleInstance.SocketPath));
+        Assert.True(SocketAppeared());
 
         running.Dispose();
 

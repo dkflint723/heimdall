@@ -4,6 +4,21 @@ using Avalonia.Themes.Fluent;
 
 [assembly: AvaloniaTestApplication(typeof(Vaktari.Ui.Tests.TestApp))]
 
+// **One application and one UI thread, so one test at a time.**
+//
+// xunit runs test CLASSES in parallel by default, and that was never sound
+// here: every headless test in this assembly shares a single Application, and
+// ThemeApplierTests reads back Application.Current.RequestedThemeVariant and
+// its resources — application-wide state another class can be writing at the
+// same moment. It survived only because nothing yielded the UI thread
+// mid-test; the first test that pumped the dispatcher turned it into a race
+// that failed twice and then would not reproduce, which is the worst kind of
+// test failure to be handed.
+//
+// The suite runs in about half a second, so serialising it costs nothing worth
+// weighing against that.
+[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+
 namespace Vaktari.Ui.Tests;
 
 /// <summary>
