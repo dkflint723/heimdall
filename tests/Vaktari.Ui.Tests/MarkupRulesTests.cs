@@ -134,6 +134,86 @@ public class MarkupRulesTests
             + string.Join("\n  ", offenders));
     }
 
+    /// <summary>
+    /// **A style applies to the control it is declared on, not only to that
+    /// control's descendants.**
+    ///
+    /// So `Selector="MenuItem &gt; MenuItem"`, written inside a MenuItem's own
+    /// Styles to reach its generated item containers, also matches THAT MenuITEM
+    /// whenever it happens to sit inside another one. It then takes a Command
+    /// expecting one of its own items, with a CommandParameter bound to
+    /// whatever its DataContext is — and Avalonia calls CanExecute on every
+    /// child the moment a submenu opens.
+    ///
+    /// **This crashed the application outright.** Consolidating the right-click
+    /// menu moved New file, New from template and Scripts underneath New and
+    /// More, and from then on clicking "New" terminated the process:
+    ///
+    ///   System.ArgumentException: Parameter "parameter" (object) cannot be of
+    ///   type PaneGroupViewModel, as the command type requires an argument of
+    ///   type NewFileKind
+    ///
+    /// It shipped in 0.7.0. Nothing caught it: the markup compiles, every
+    /// binding resolves, the suite passed, and the three menus that were NOT
+    /// moved go on working, so the menu looks fine until you open the one that
+    /// was. The rule is therefore about the selector rather than about nesting
+    /// — the nesting is what changed, and it can change again.
+    ///
+    /// Anchoring on the host's name is what fixes it: the host's parent is a
+    /// different element, so it cannot match its own rule, while the containers
+    /// it generates still do.
+    /// </summary>
+    [Fact]
+    public void No_menu_style_can_match_the_menu_item_it_is_declared_on()
+    {
+        var offenders = Markup()
+            .Descendants(Avalonia + "Style")
+            .Where(style => (string?)style.Attribute("Selector") is { } selector
+                            && selector.Replace(" ", "").Contains("MenuItem>MenuItem")
+                            && !selector.Contains('#'))
+            .Select(Where)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "A style reaches the control it is declared on, so an unanchored "
+            + "`MenuItem > MenuItem` selector gives its own host the item command "
+            + "and crashes when a parent submenu opens. Anchor it on the host's "
+            + "x:Name, as `MenuItem#TheHost > MenuItem`: "
+            + string.Join("; ", offenders));
+    }
+
+    /// <summary>
+    /// The other half: anchoring on a name that does not exist would match
+    /// nothing, which loses every command in the submenu silently — the menu
+    /// still opens, the entries still draw, and clicking one does nothing.
+    /// </summary>
+    [Fact]
+    public void Every_anchored_menu_style_names_a_menu_item_that_exists()
+    {
+        var doc = Markup();
+
+        var names = doc.Descendants(Avalonia + "MenuItem")
+            .Select(m => (string?)m.Attribute(X + "Name"))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        var dangling = doc.Descendants(Avalonia + "Style")
+            .Select(style => (Style: style, Selector: (string?)style.Attribute("Selector")))
+            .Where(x => x.Selector is not null && x.Selector.Contains("MenuItem#"))
+            .Select(x => (x.Style, Name: x.Selector!
+                .Split("MenuItem#")[1]
+                .TakeWhile(c => char.IsLetterOrDigit(c) || c == '_')
+                .Aggregate("", (a, c) => a + c)))
+            .Where(x => !names.Contains(x.Name))
+            .Select(x => $"{Where(x.Style)} names #{x.Name}")
+            .ToList();
+
+        Assert.True(dangling.Count == 0,
+            "These styles anchor on a MenuItem name that no MenuItem carries, so "
+            + "they match nothing and their entries lose their commands: "
+            + string.Join("; ", dangling));
+    }
+
     /// <summary>A guard on the guards: if the resource stops being embedded, or
     /// the file moves, every rule above would pass against nothing.</summary>
     [Fact]

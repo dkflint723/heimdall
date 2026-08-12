@@ -9,6 +9,19 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [0.7.1] — 2026-08-11
+
+### Fixed
+
+- **Clicking *New* in the right-click menu killed the application.** Also
+  *More ▸ Scripts*, if you had any scripts. Consolidating the menu moved those
+  entries underneath other entries, and a style written to give each item in a
+  submenu its command turned out to reach the submenu itself as well — so the
+  submenu ended up holding a command meant for one of its own items, which
+  Avalonia calls the moment the parent opens. Nothing caught it: the markup
+  compiles, the bindings resolve, and the submenus that were not moved go on
+  working.
+
 ## [0.7.0] — 2026-08-11
 
 ### Added
@@ -193,7 +206,8 @@ should not be trusted for compatibility yet.
 
 First tagged releases. Linux tarball and RPM.
 
-[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/dkflint723/vaktari/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dkflint723/vaktari/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/dkflint723/vaktari/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/dkflint723/vaktari/compare/v0.5.1...v0.6.0

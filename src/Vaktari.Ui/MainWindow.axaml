@@ -899,7 +899,23 @@
                                       Command="{Binding ActiveTab.OpenSelectedCommand}"
                                       InputGesture="Enter"
                                       IsVisible="{Binding ActiveTab.HasSelection}"/>
-              <MenuItem Header="Open with"
+              <!-- **Named, and the style anchored to that name, because a bare
+                   `MenuItem > MenuItem` selector matches the MenuItem it is
+                   DECLARED ON.** A style applies to its host as well as to the
+                   host's descendants, so as soon as one of these moved inside
+                   another MenuItem — which consolidating the menu did to New
+                   file, New from template and Scripts — the host matched its
+                   own rule and took a Command expecting one of its own items,
+                   with a CommandParameter that is the pane group. Avalonia
+                   calls CanExecute on every child when a submenu opens, so
+                   clicking "New" ended the process on an ArgumentException.
+
+                   Anchoring on the name excludes the host, whose parent is a
+                   different element, and still reaches the generated item
+                   containers. Done to all six rather than the three that were
+                   nested: the others are safe only because of where they
+                   happen to sit today, and where they sit is what changed. -->
+              <MenuItem x:Name="OpenWithMenu" Header="Open with"
                                       IsVisible="{Binding ActiveTab.HasSelection}"
                                       ItemsSource="{Binding ActiveTab.OpenWithOptions}">
                               <MenuItem.ItemTemplate>
@@ -908,7 +924,7 @@
                                 </DataTemplate>
                               </MenuItem.ItemTemplate>
                               <MenuItem.Styles>
-                                <Style Selector="MenuItem > MenuItem" x:DataType="fs:LaunchOption">
+                                <Style Selector="MenuItem#OpenWithMenu > MenuItem" x:DataType="fs:LaunchOption">
                                   <Setter Property="Command"
                                           Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.OpenWithAppCommand}"/>
                                   <Setter Property="CommandParameter" Value="{Binding}"/>
@@ -930,7 +946,7 @@
               <MenuItem Header="Paste" Command="{Binding ActiveTab.PasteCommand}"
                                       InputGesture="Ctrl+V"
                                       IsVisible="{Binding !ActiveTab.IsTrashListing}"/>
-              <MenuItem Header="Copy to"
+              <MenuItem x:Name="CopyToMenu" Header="Copy to"
                                       IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowCopyToInMenu}"
                                       ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
                               <MenuItem.ItemTemplate>
@@ -939,14 +955,14 @@
                                 </DataTemplate>
                               </MenuItem.ItemTemplate>
                               <MenuItem.Styles>
-                                <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
+                                <Style Selector="MenuItem#CopyToMenu > MenuItem" x:DataType="vm:PlaceItemViewModel">
                                   <Setter Property="Command"
                                           Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).CopySelectionToCommand}"/>
                                   <Setter Property="CommandParameter" Value="{Binding}"/>
                                 </Style>
                               </MenuItem.Styles>
                             </MenuItem>
-              <MenuItem Header="Move to"
+              <MenuItem x:Name="MoveToMenu" Header="Move to"
                                       IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ShowMoveToInMenu}"
                                       ItemsSource="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TransferTargets}">
                               <MenuItem.ItemTemplate>
@@ -955,7 +971,7 @@
                                 </DataTemplate>
                               </MenuItem.ItemTemplate>
                               <MenuItem.Styles>
-                                <Style Selector="MenuItem > MenuItem" x:DataType="vm:PlaceItemViewModel">
+                                <Style Selector="MenuItem#MoveToMenu > MenuItem" x:DataType="vm:PlaceItemViewModel">
                                   <Setter Property="Command"
                                           Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).MoveSelectionToCommand}"/>
                                   <Setter Property="CommandParameter" Value="{Binding}"/>
@@ -988,21 +1004,21 @@
                                       IsVisible="{Binding !ActiveTab.IsTrashListing}">
                 <MenuItem Header="New folder"          Command="{Binding ActiveTab.NewFolderCommand}"
                                         InputGesture="Ctrl+Shift+N"/>
-                <MenuItem Header="New file" ItemsSource="{Binding ActiveTab.NewFileKinds}">
+                <MenuItem x:Name="NewFileMenu" Header="New file" ItemsSource="{Binding ActiveTab.NewFileKinds}">
                                 <MenuItem.ItemTemplate>
                                   <DataTemplate x:DataType="fs:NewFileKind">
                                     <TextBlock Text="{Binding Label}"/>
                                   </DataTemplate>
                                 </MenuItem.ItemTemplate>
                                 <MenuItem.Styles>
-                                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:NewFileKind">
+                                  <Style Selector="MenuItem#NewFileMenu > MenuItem" x:DataType="fs:NewFileKind">
                                     <Setter Property="Command"
                                             Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFileCommand}"/>
                                     <Setter Property="CommandParameter" Value="{Binding}"/>
                                   </Style>
                                 </MenuItem.Styles>
                               </MenuItem>
-                <MenuItem Header="New from template"
+                <MenuItem x:Name="NewTemplateMenu" Header="New from template"
                                         ItemsSource="{Binding ActiveTab.Templates}"
                                         IsVisible="{Binding ActiveTab.HasTemplates}">
                                 <MenuItem.ItemTemplate>
@@ -1011,7 +1027,7 @@
                                   </DataTemplate>
                                 </MenuItem.ItemTemplate>
                                 <MenuItem.Styles>
-                                  <Style Selector="MenuItem > MenuItem" x:DataType="fs:FileTemplate">
+                                  <Style Selector="MenuItem#NewTemplateMenu > MenuItem" x:DataType="fs:FileTemplate">
                                     <Setter Property="Command"
                                             Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.NewFromTemplateCommand}"/>
                                     <Setter Property="CommandParameter" Value="{Binding}"/>
@@ -1096,7 +1112,7 @@
                                         InputGesture="Shift+F2"/>
                 <MenuItem Header="Open terminal here"  Command="{Binding ActiveTab.OpenTerminalHereCommand}"
                                         InputGesture="F4"/>
-                <MenuItem Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"
+                <MenuItem x:Name="ScriptsMenu" Header="Scripts" ItemsSource="{Binding ActiveTab.Scripts}"
                                         IsVisible="{Binding ActiveTab.HasScripts}">
                                 <MenuItem.ItemTemplate>
                                   <DataTemplate x:DataType="core:ScriptCommand">
@@ -1104,7 +1120,7 @@
                                   </DataTemplate>
                                 </MenuItem.ItemTemplate>
                                 <MenuItem.Styles>
-                                  <Style Selector="MenuItem > MenuItem" x:DataType="core:ScriptCommand">
+                                  <Style Selector="MenuItem#ScriptsMenu > MenuItem" x:DataType="core:ScriptCommand">
                                     <Setter Property="Command"
                                             Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.RunScriptCommand}"/>
                                     <Setter Property="CommandParameter" Value="{Binding}"/>
