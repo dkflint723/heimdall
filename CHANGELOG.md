@@ -9,7 +9,7 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
-## [Unreleased]
+## [0.7.0] — 2026-08-11
 
 ### Added
 
@@ -77,6 +77,8 @@ should not be trusted for compatibility yet.
   two renames ago.
 - The Arch package supersedes the old one and ships the symbolic icon the RPM
   already did.
+- The test suite ran two headless tests at once on a single UI thread, which
+  made it fail twice for reasons unrelated to what it was testing.
 
 ## [0.6.1] — 2026-08-09
 
@@ -191,7 +193,8 @@ should not be trusted for compatibility yet.
 
 First tagged releases. Linux tarball and RPM.
 
-[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/dkflint723/vaktari/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/dkflint723/vaktari/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/dkflint723/vaktari/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/dkflint723/vaktari/compare/v0.5.0...v0.5.1
