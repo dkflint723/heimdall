@@ -59,10 +59,11 @@ blown up into a blur.
 **Grouping** by name, size, type or date, from the right-click menu.
 
 **Details panel** (`F11`) — preview, full path, size, type, dates and permissions
-for whatever is selected. In split view each side gets its own, so the panel
-always describes the side you are looking at. If the window is too narrow to show
-it usefully, Vaktari can widen the window to make room and shrink it back when
-you close it.
+for whatever is selected. Drag the edge between it and the listing to resize it;
+each side of a split keeps its own width and its own panel, so the panel always
+describes the side you are looking at. If the window is too narrow to show it
+usefully, Vaktari can widen the window to make room and shrink it back when you
+close it.
 
 **Quick preview** (`Space`) — a larger look at the selected file without opening
 anything.
@@ -79,7 +80,9 @@ field folds back into its icon when you leave it empty.
 **Recent files** and **recent locations**, banded by day. Any entry can be
 forgotten individually, which removes the record and never the file.
 
-**Add a folder to places** with `Ctrl+D` to keep it in the sidebar.
+**Add a folder to places** with `Ctrl+D` to keep it in the sidebar, and
+right-click one to remove it again. Only the places you added offer that — Home,
+your drives and your network shares are the desktop's, not yours to drop.
 
 ## Selecting
 
@@ -100,9 +103,13 @@ expect. Beyond that:
 
 **Trash that can actually restore.** Deleted files go to your desktop's trash and
 appear in Vaktari's Trash view, each showing where it came from — so *Restore*
-puts it back where it belongs rather than guessing. Emptying always asks first.
-Vaktari can also sweep the trash after a number of days, or when it grows past a
-share of the disk.
+puts it back where it belongs rather than guessing. Emptying always asks first,
+and says what it removed, or why it could not. Vaktari can also sweep the trash
+after a number of days, or when it grows past a share of the disk.
+
+A row in that view names where the file *used to be*, so deleting or renaming one
+would act on whatever sits there now — possibly a new file of the same name.
+Vaktari refuses those and says so: *Restore* and *Empty* are what the bin is for.
 
 **Rename in bulk** (`Shift+F2`), with a live preview of every result before
 anything changes.
@@ -117,9 +124,15 @@ browse for an executable and remember the choice.
 
 **Open terminal here** (`F4`).
 
+**A right-click menu that shrinks to fit.** Entries that need a selection are not
+offered when there is none — right-clicking empty space shows what applies to the
+folder, and right-clicking a file selects it first. Keyboard shortcuts appear
+beside the entries that have them.
+
 **Opening a folder from elsewhere.** Vaktari can register as the program that
 opens folders and drives, from Settings — so double-clicking a folder anywhere
-opens it here. Pass it a file and it opens that file's folder, which is what
+opens it here, as a tab in the window you already have rather than a second copy
+of the application. Pass it a file and it opens that file's folder, which is what
 makes `vaktari ~/Downloads/thing.zip` useful from a script or a launcher.
 
 One thing it cannot do, and no file manager on Windows can without replacing
@@ -229,7 +242,8 @@ individually, if you would rather not set them again every time.
 ## Installing
 
 Both builds are on the
-[releases page](https://github.com/dkflint723/vaktari/releases).
+[releases page](https://github.com/dkflint723/vaktari/releases), and what changed
+in each one is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Linux
 
