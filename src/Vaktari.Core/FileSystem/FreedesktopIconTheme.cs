@@ -90,7 +90,25 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
 
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(parent)) return null;
 
-            return new FreedesktopIconTheme(name, [parent], naming);
+            var theme = new FreedesktopIconTheme(name, [parent], naming);
+
+            // **index.theme is not proof that a theme WORKS.**
+            //
+            // Papirus-Dark, downloaded and extracted on Windows, resolves
+            // nothing at all: nearly every category directory in it is a
+            // symbolic link back to Papirus, and a zip extracted by Windows
+            // turns each of those into a 29-byte text file holding the target
+            // path. The directories are then empty, the index finds no icons,
+            // and every file falls back to the drawn set — measured, not
+            // guessed: five of six probes returned nothing.
+            //
+            // It would pass any structural check, which is why this asks the
+            // theme to actually produce an icon instead. A theme that cannot
+            // name a plain file is not one worth accepting silently.
+            return theme.Resolve(["text-x-generic", "text-plain", "application-x-generic"], 48)
+                is null
+                ? null
+                : theme;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {

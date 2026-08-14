@@ -673,10 +673,20 @@ public partial class MainWindow : Window
             if (Vaktari.Core.FileSystem.FreedesktopIconTheme.FromFolder(path) is null)
             {
                 model.IconThemeFolder = "";
-                model.IconThemeProblem =
-                    $"'{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}' has no "
-                    + "index.theme in it. Choose the folder that came out of the archive — for "
-                    + "Papirus that is the one called Papirus, not the folder you put it in.";
+                var leaf = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
+
+                // Two causes, and they need different answers. Naming the
+                // symlink one explicitly because it is invisible otherwise:
+                // the folder looks complete in Explorer, and the theme simply
+                // produces nothing.
+                model.IconThemeProblem = File.Exists(Path.Combine(path, "index.theme"))
+                    ? $"'{leaf}' has an index.theme but no icons Vaktari can read. Some themes "
+                      + "keep their folders as links to another theme, and Windows turns those "
+                      + "into stray files when the archive is extracted — Papirus-Dark is one. "
+                      + "Try the main theme folder instead, such as Papirus."
+                    : $"'{leaf}' has no index.theme in it. Choose the folder that came out of "
+                      + "the archive — for Papirus that is the one called Papirus, not the "
+                      + "folder you extracted it into.";
                 return;
             }
 
