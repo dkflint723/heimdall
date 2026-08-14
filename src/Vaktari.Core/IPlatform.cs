@@ -62,6 +62,14 @@ public interface IPlatform
     /// <summary>Null where the platform has no service-discovery mechanism.</summary>
     INetworkDiscovery? Discovery { get; }
 
+    /// <summary>
+    /// The desktop's own context menu for a selection, or null where the
+    /// desktop has no such thing — which is every desktop but Windows today.
+    /// The freedesktop world has no equivalent to a shell extension, so the
+    /// menu offers no entry rather than an empty one.
+    /// </summary>
+    IShellMenuProvider? ShellMenu => null;
+
     /// <summary>Null where the desktop exposes no readable theme.</summary>
     IThemeProvider? Theme { get; }
 

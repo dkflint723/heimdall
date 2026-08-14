@@ -999,15 +999,20 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The split toggle lives on one side only: the right, when split, and the
-    /// only side otherwise.
+    /// The window's own controls live on one side only: the right, when split,
+    /// and the only side otherwise.
     ///
-    /// **It used to be "the window's own controls", plural, and that was the
-    /// defect.** The details-panel toggle was gated on this flag too — but the
-    /// panel is per split side, and its own tooltip says so, so the left half
-    /// ended up with a panel and no control that opened it. Splitting is
-    /// genuinely window-level state; a per-side control is not, and one flag
-    /// cannot mean both.
+    /// **Three controls, and the plural is deliberate**: the split toggle, the
+    /// details-panel toggle and the view-options menu. All three sit on one
+    /// side because that is what was asked for — "only show the settings, split
+    /// view, and detail panel buttons on the right most window when in split
+    /// mode. They are not needed on the left split at all."
+    ///
+    /// An audit once read the panel toggle's own tooltip — "for this side" —
+    /// and concluded the left half was being cut off from the feature, so the
+    /// gate came off. It was wrong: F11 toggles whichever side is active, so
+    /// the left half keeps the panel and simply does not carry a second copy of
+    /// the button. Restored 14 August 2026.
     ///
     /// Driven from here rather than computed in each group, because a group has
     /// no idea whether it is the left or the right of anything — that is the

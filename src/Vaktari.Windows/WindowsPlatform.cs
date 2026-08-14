@@ -138,6 +138,11 @@ public sealed class WindowsPlatform : IPlatform
     public IIconThemeProvider? Icons => null;
 
     /// <summary>
+    /// The shell's own menu — every extension the machine has installed.
+    /// </summary>
+    public IShellMenuProvider? ShellMenu { get; } = new WindowsShellMenuProvider();
+
+    /// <summary>
     /// **Was null on the grounds that the Recycle Bin needs COM, and that COM
     /// under NativeAOT would fail at runtime rather than at compile time.**
     /// The first half was true and the second was never tested: a

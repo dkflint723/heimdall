@@ -137,6 +137,11 @@ public partial class MainWindow : Window
         // IPlatform like the trash and the icon theme do.
         ViewModels.PaneViewModel.Vcs = new Vaktari.Core.Vcs.GitVersionControl();
 
+        // From the platform, unlike the one above: what a desktop puts on a
+        // context menu is entirely a platform fact, and on Linux the answer is
+        // that there is no such thing.
+        ViewModels.PaneViewModel.ShellMenu = platform.ShellMenu;
+
         // Logged at startup, not when the settings dialog opens. The count only
         // appeared on opening the dialog, which made "no line printed" mean two
         // different things and cost a diagnostic round trip. Compare with:
@@ -715,6 +720,32 @@ public partial class MainWindow : Window
         if (sender is Control { DataContext: PlaceItemViewModel { IsUserPinned: true } }) return;
 
         e.Cancel = true;
+    }
+
+    /// <summary>
+    /// Builds the desktop's own menu, at the moment its submenu opens.
+    ///
+    /// Not on a binding: building it gives every shell extension on the machine
+    /// a turn, and no ordinary right-click should pay for something behind one
+    /// more hover.
+    /// </summary>
+    private void OnShellMenuOpening(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: PaneGroupViewModel { ActiveTab: { } pane } })
+            _ = pane.OpenShellMenuAsync();
+    }
+
+    /// <summary>
+    /// Releases it when the menu closes.
+    ///
+    /// **The ids are offsets into one live menu**, so they are meaningless once
+    /// it is gone — and each menu owns an STA thread, so never releasing would
+    /// leak one per right-click.
+    /// </summary>
+    private void OnListingMenuClosed(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: PaneGroupViewModel { ActiveTab: { } pane } })
+            pane.CloseShellMenu();
     }
 
     /// <summary>Feeds the pane its own width so columns can drop out in

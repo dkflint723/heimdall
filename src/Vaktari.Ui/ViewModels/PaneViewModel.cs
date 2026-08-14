@@ -163,6 +163,140 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     public static Vaktari.Core.Vcs.IVersionControl? Vcs { get; set; }
 
     /// <summary>
+    /// The desktop's own context menu. Static like the other providers; null
+    /// where the desktop has no such thing, which is every desktop but Windows
+    /// today, and the menu then offers no entry rather than an empty one.
+    /// </summary>
+    public static Vaktari.Core.FileSystem.IShellMenuProvider? ShellMenu { get; set; }
+
+    /// <summary>Whether to offer the entry at all.</summary>
+    public bool HasShellMenu => ShellMenu is not null && !IsTrashListing && !IsRecentListing;
+
+    private Vaktari.Core.FileSystem.IShellMenu? _shellMenu;
+
+    /// <summary>
+    /// What the shell offered, ready to bind.
+    ///
+    /// **A mixed list, holding real Separator controls among the records.**
+    /// Avalonia uses a Control in an ItemsSource as its own container, which is
+    /// the only way a data-driven menu can draw a rule — and the shell's menu
+    /// leans on rules heavily enough that dropping them turns twenty entries
+    /// into an undifferentiated column.
+    /// </summary>
+    public ObservableCollection<object> ShellMenuItems { get; } = new() { Waiting() };
+
+    /// <summary>
+    /// The row that holds the submenu open before there is anything in it.
+    ///
+    /// **Avalonia will not open a submenu with no items, and draws no chevron
+    /// for one** — so an empty ItemsSource makes "More options" look like a
+    /// plain command and never fire SubmenuOpened, which is the event that
+    /// builds the thing. The placeholder is what makes lazy loading possible at
+    /// all, not decoration.
+    /// </summary>
+    private static Vaktari.Core.FileSystem.ShellMenuEntry Waiting() =>
+        new("Reading the shell…", -1, IsEnabled: false);
+
+    /// <summary>Bumped per open, so a build that lands late can tell that it is
+    /// no longer wanted.</summary>
+    private int _shellGeneration;
+
+    /// <summary>
+    /// Builds the shell menu when its submenu opens, and not before.
+    ///
+    /// **Off the UI thread, and this is not an optimisation.** Building gives
+    /// every shell extension on the machine a turn, any one of which can be
+    /// slow or hang outright; waiting for that here would freeze the window for
+    /// as long as it took, which is the exact failure this feature is shaped to
+    /// avoid. The entries arrive when they arrive and the menu fills in.
+    ///
+    /// Lazily for a second reason: no ordinary right-click should pay for
+    /// something that lives behind one more hover.
+    /// </summary>
+    public async Task OpenShellMenuAsync()
+    {
+        CloseShellMenu();
+
+        if (ShellMenu is not { } provider) return;
+
+        // The selection, or the folder when the click was on empty space — the
+        // same rule the rest of the menu follows.
+        var paths = SelectionPaths();
+        if (paths.Count == 0) paths = [CurrentPath];
+
+        var generation = _shellGeneration;
+
+        var menu = await Task.Run(() => provider.Build(paths)).ConfigureAwait(false);
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            // Closed, or reopened, while the shell was thinking. Releasing it
+            // here is what keeps a slow build from leaking the apartment thread
+            // it was running on.
+            if (generation != _shellGeneration)
+            {
+                menu?.Dispose();
+                return;
+            }
+
+            _shellMenu = menu;
+            ShellMenuItems.Clear();
+
+            foreach (var item in Flatten(menu?.Entries ?? [])) ShellMenuItems.Add(item);
+
+            // Never empty: an empty ItemsSource closes the submenu out from
+            // under the pointer, and "nothing" reads as a fault rather than as
+            // an answer.
+            if (ShellMenuItems.Count == 0)
+                ShellMenuItems.Add(new Vaktari.Core.FileSystem.ShellMenuEntry(
+                    "Nothing offered here", -1, IsEnabled: false));
+        });
+    }
+
+    private static IEnumerable<object> Flatten(
+        IReadOnlyList<Vaktari.Core.FileSystem.ShellMenuEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.IsSeparator) yield return new Avalonia.Controls.Separator();
+            else yield return entry;
+        }
+    }
+
+    /// <summary>
+    /// Releases it, which ends the thread holding the handlers.
+    ///
+    /// **The ids are offsets into one live menu.** Releasing while the user is
+    /// still looking would leave every row pointing at nothing; never releasing
+    /// leaks an apartment thread per right-click. So this is tied to the
+    /// context menu closing, and to opening the next one.
+    ///
+    /// Back to the placeholder rather than to empty, so the entry keeps its
+    /// chevron and can be opened again.
+    /// </summary>
+    public void CloseShellMenu()
+    {
+        _shellGeneration++;
+
+        ShellMenuItems.Clear();
+        ShellMenuItems.Add(Waiting());
+
+        _shellMenu?.Dispose();
+        _shellMenu = null;
+    }
+
+    /// <summary>Runs one of the shell's entries.</summary>
+    [RelayCommand]
+    public void InvokeShellEntry(Vaktari.Core.FileSystem.ShellMenuEntry? entry)
+    {
+        // A parent row exists to open its children; invoking it would ask the
+        // handler to run a command it never issued.
+        if (entry is null || entry.HasChildren || entry.IsSeparator) return;
+
+        _shellMenu?.Invoke(entry.Id);
+    }
+
+    /// <summary>
     /// Status per entry of the CURRENT folder, or empty. Rebuilt per load and
     /// never merged across folders — a stale entry here would decorate the
     /// wrong file, which is worse than decorating nothing.

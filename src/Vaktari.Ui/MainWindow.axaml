@@ -313,12 +313,19 @@
             <!-- The details panel is a different choice, so it sits outside the
                  chip rather than behind a rule.
 
-                 **Not gated on ShowsWindowControls**, unlike the split toggle
-                 below. That flag is true on one side only, and the panel is
-                 per split side — the tooltip says as much — so gating it left
-                 the left half with a panel and no control that opened it. The
-                 split is genuinely window-level; this is not. -->
+                 **Gated on ShowsWindowControls, and that was asked for
+                 directly**: "only show the settings, split view, and detail
+                 panel buttons on the right most window when in split mode. They
+                 are not needed on the left split at all."
+
+                 An audit later flagged the left half as having a panel with no
+                 control to open it and it was ungated to fix that — which was
+                 the audit reading the tooltip and not the request. F11 still
+                 toggles whichever side is active, so the left half is not cut
+                 off from the feature; it just does not carry a second copy of
+                 the button. Reverted 14 August 2026. -->
             <ToggleButton Classes="seg"
+                          IsVisible="{Binding ShowsWindowControls}"
                           IsChecked="{Binding IsInfoVisible}" IsEnabled="{Binding IsInfoToggleEnabled}"
                           AutomationProperties.Name="details panel for this side  (f11)"
                           ToolTip.Tip="details panel for this side  (f11)">
@@ -361,6 +368,7 @@
                     FontSize="{DynamicResource FontSizeLarge}" Padding="8,2"
                     Foreground="{DynamicResource ViewDimText}"
                     Background="Transparent" BorderThickness="0"
+                    IsVisible="{Binding ShowsWindowControls}"
                     AutomationProperties.Name="view options" ToolTip.Tip="view options">
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight">
@@ -876,7 +884,7 @@
                  right-click selects the row under the pointer first — the
                  entries are there whenever the click was on something.
             -->
-            <ContextMenu x:DataType="vm:PaneGroupViewModel">
+            <ContextMenu x:DataType="vm:PaneGroupViewModel" Closed="OnListingMenuClosed">
               <!-- **Every row here that has a key binding prints it.** Ten did
                    and none said so, which left the keyboard route discoverable
                    only by reading the source — and an entry nobody knows is
@@ -1217,6 +1225,47 @@
                    one — which is most of them, including every ordinary folder —
                    and Avalonia does not collapse the double rule that made with
                    the one below. -->
+              <!-- **The machine's own menu: 7-Zip, VLC, Send to, Restore
+                   previous versions.** Those are COM handlers registered by
+                   installed applications, not a list anybody can write down, so
+                   they can only be hosted.
+
+                   Behind one hover rather than merged inline, and not for
+                   tidiness: hosting runs OTHER PEOPLE'S code in this process. A
+                   slow or broken extension becomes our slow or broken menu, and
+                   confined here it can spoil this submenu instead of every
+                   right-click. Windows 11 draws the same line for the same
+                   reason.
+
+                   Built when opened, never before — SubmenuOpened rather than a
+                   binding — because building it gives every extension on the
+                   machine a turn, and no ordinary right-click should pay for
+                   that. Released when the menu closes: the ids are offsets into
+                   one live menu and mean nothing afterwards. -->
+              <MenuItem x:Name="ShellMenu" Header="More options"
+                                      IsVisible="{Binding ActiveTab.HasShellMenu}"
+                                      ItemsSource="{Binding ActiveTab.ShellMenuItems}"
+                                      SubmenuOpened="OnShellMenuOpening">
+                              <MenuItem.ItemTemplate>
+                                <DataTemplate x:DataType="fs:ShellMenuEntry">
+                                  <TextBlock Text="{Binding Label}"/>
+                                </DataTemplate>
+                              </MenuItem.ItemTemplate>
+                              <MenuItem.Styles>
+                                <!-- A DESCENDANT selector, not a child one: the
+                                     shell's menu nests, and 7-Zip's own commands
+                                     live a level down. Anchored on the name so it
+                                     cannot match its own host — the fault that
+                                     killed the New submenu. -->
+                                <Style Selector="MenuItem#ShellMenu MenuItem" x:DataType="fs:ShellMenuEntry">
+                                  <Setter Property="ItemsSource" Value="{Binding Items}"/>
+                                  <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
+                                  <Setter Property="Command"
+                                          Value="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ActiveTab.InvokeShellEntryCommand}"/>
+                                  <Setter Property="CommandParameter" Value="{Binding}"/>
+                                </Style>
+                              </MenuItem.Styles>
+                            </MenuItem>
               <Separator IsVisible="{Binding ActiveTab.IsRecentListing}"/>
               <MenuItem Header="Forget (keeps the file)"
                                       IsVisible="{Binding ActiveTab.IsRecentListing}"
