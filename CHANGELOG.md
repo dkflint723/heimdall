@@ -9,7 +9,7 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
-## [Unreleased]
+## [0.8.0] — 2026-08-14
 
 ### Added
 
@@ -70,6 +70,9 @@ should not be trusted for compatibility yet.
   printed with a dash and an empty status after it, permanently.
 - On Linux, `$TERMINAL` is no longer launched with Konsole's flags whatever it
   names — `TERMINAL=alacritty` produced a command alacritty rejects.
+- The Windows icon cache is bounded. Folders, shortcuts and executables are
+  cached per file, so walking a large drive used to hold a bitmap for every
+  folder seen, for the life of the session.
 - **The settings, split and details buttons are on the rightmost pane again.**
   They were moved there deliberately and an audit put them back on both sides,
   reading the panel toggle's "for this side" tooltip as meaning the left half
@@ -272,7 +275,8 @@ should not be trusted for compatibility yet.
 
 First tagged releases. Linux tarball and RPM.
 
-[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/dkflint723/vaktari/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/dkflint723/vaktari/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dkflint723/vaktari/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/dkflint723/vaktari/compare/v0.6.0...v0.6.1

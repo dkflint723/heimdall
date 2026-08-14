@@ -40,6 +40,14 @@ public sealed partial class WindowsFileIcons : IFileIconProvider
     private static readonly ConcurrentDictionary<string, IconPixels?> Cache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Distinct icons held before the cache is dropped. Comfortably
+    /// more than any one folder needs, and far below what a drive walk
+    /// accumulates.</summary>
+    private const int MaxCached = 3000;
+
+    /// <summary>How many are held, for the test that pins the bound.</summary>
+    internal static int Cached => Cache.Count;
+
     /// <summary>Types whose icon belongs to the individual file rather than to
     /// the file type.</summary>
     private static readonly HashSet<string> PerFile =
@@ -65,6 +73,18 @@ public sealed partial class WindowsFileIcons : IFileIconProvider
         var key = isDirectory || extension.Length == 0 || PerFile.Contains(extension)
             ? $"{path}|{bucket}"
             : $"{extension}|{bucket}";
+
+        // **Bounded, because the per-PATH half of the key has no ceiling.**
+        // Extensions are a small fixed set, but folders, shortcuts and
+        // executables are keyed individually — so browsing a drive with fifty
+        // thousand folders in it would hold fifty thousand bitmaps for the life
+        // of the process, at a megabyte each for the large sizes.
+        //
+        // Cleared wholesale rather than evicted one at a time: the working set
+        // is whatever folder is on screen, recomposing an icon is cheap next to
+        // the bookkeeping an LRU would need on the path that has to stay fast,
+        // and this only ever happens after several thousand distinct icons.
+        if (Cache.Count >= MaxCached) Cache.Clear();
 
         return Cache.GetOrAdd(key, _ => Compose(path, bucket));
     }

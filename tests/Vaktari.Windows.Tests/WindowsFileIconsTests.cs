@@ -58,6 +58,28 @@ public sealed class WindowsFileIconsTests : IDisposable
     /// icon — the provider treats that as opaque, and this is the assertion
     /// that would notice if it stopped.
     /// </summary>
+    /// <summary>
+    /// **The per-path half of the key has no natural ceiling.** Extensions are
+    /// a small fixed set, but folders, shortcuts and executables are cached
+    /// individually — so walking a drive would hold a bitmap per folder for the
+    /// life of the process.
+    /// </summary>
+    [Fact]
+    public void The_cache_does_not_grow_without_limit()
+    {
+        var icons = new WindowsFileIcons();
+
+        // Folders are the per-path case, so each of these is a distinct entry.
+        for (var i = 0; i < 3200; i++)
+        {
+            var dir = Path.Combine(_folder, "f" + i);
+            icons.IconFor(dir, isDirectory: true, size: 48);
+        }
+
+        Assert.True(WindowsFileIcons.Cached < 3200,
+            $"held {WindowsFileIcons.Cached} entries");
+    }
+
     [Fact]
     public void The_icon_is_not_entirely_transparent()
     {
