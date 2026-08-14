@@ -833,7 +833,32 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
 
     /// <summary>An empty listing used to look identical to one still loading.</summary>
-    public bool IsEmpty => IsLoaded && !IsLoading && Entries.Count == 0;
+    public bool IsEmpty => IsLoaded && !IsLoading && Entries.Count == 0 && !HasLoadError;
+
+    /// <summary>
+    /// Why this folder could not be listed, shown in the listing itself.
+    ///
+    /// **A failed load used to draw nothing at all.** The catch set Status and
+    /// stopped, and Status is a one-line message in the status bar that
+    /// describes the ACTIVE pane — so a tab whose folder had been deleted
+    /// showed column headings above an empty white space, indistinguishable
+    /// from an empty folder and from one still loading, and in the inactive
+    /// half of a split there was no message anywhere at all.
+    ///
+    /// Separate from IsEmpty rather than folded into it: "there is nothing
+    /// here" and "this could not be read" are different facts, and telling
+    /// somebody their folder is empty when it has been deleted is worse than
+    /// saying nothing.
+    /// </summary>
+    [ObservableProperty] private string _loadError = "";
+
+    public bool HasLoadError => LoadError.Length > 0;
+
+    partial void OnLoadErrorChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasLoadError));
+        OnPropertyChanged(nameof(IsEmpty));
+    }
 
     /// <summary>Stable left-hand status: what is here and what is picked.</summary>
     /// <summary>
@@ -1798,6 +1823,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         CurrentPath = path;
         PathText = path;
         IsLoading = true;
+        LoadError = "";
         _all.Clear();
         Entries.Reset();
         NotifyNavigationState();
@@ -1946,6 +1972,18 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 if (generation != _generation) return;
 
                 Status = $"{ex.GetType().Name}: {ex.Message}";
+
+                // Said in the listing as well as the status bar: the bar
+                // describes the active pane, so the other half of a split
+                // would otherwise report nothing whatsoever.
+                LoadError = ex switch
+                {
+                    DirectoryNotFoundException => "this folder is not there any more",
+                    UnauthorizedAccessException => "you do not have permission to open this folder",
+                    IOException io => io.Message,
+                    _ => ex.Message,
+                };
+
                 IsLoading = false;
             });
         }

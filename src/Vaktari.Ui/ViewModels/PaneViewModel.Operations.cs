@@ -299,6 +299,15 @@ public sealed partial class PaneViewModel
     [RelayCommand]
     public void DuplicateSelected()
     {
+        // **The one write in this file that had no guard**, missed when the
+        // menu consolidation moved it. Its destination is CurrentPath, which in
+        // the bin and in Recent is the literal string "vaktari:trash" — a legal
+        // relative directory name on Linux, so duplicating from Recent created
+        // a folder called vaktari:recent-files in the working directory and
+        // copied into it. In the bin the row names where a file USED to be, so
+        // the copy is of whatever occupies that path now.
+        if (RefusedInBin() || RefusedVirtualDestination(CurrentPath)) return;
+
         if (_ops is null) return;
 
         var paths = SelectionPaths();

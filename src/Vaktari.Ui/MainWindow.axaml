@@ -1769,6 +1769,18 @@
                          FontSize="{DynamicResource FontSizeBase}"
                          Foreground="{DynamicResource ViewDimText}"/>
 
+              <!-- And a listing that FAILED looked identical to both. A tab
+                   whose folder has been deleted drew column headings over
+                   nothing, with its only explanation in a status bar that
+                   describes whichever pane is active — so in the other half of
+                   a split there was no message at all. -->
+              <TextBlock Text="{Binding LoadError}"
+                         IsVisible="{Binding HasLoadError}" IsHitTestVisible="False"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         MaxWidth="320" TextWrapping="Wrap" TextAlignment="Center"
+                         FontSize="{DynamicResource FontSizeBase}"
+                         Foreground="{DynamicResource ViewDimText}"/>
+
               <!-- Drop target outline. Hit-testing is off so it never eats the
                    drag events it is drawn in response to. -->
               <Border IsVisible="{Binding IsDropTarget}" IsHitTestVisible="False"

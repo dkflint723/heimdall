@@ -107,6 +107,9 @@ public sealed class WindowsLauncher : IApplicationLauncher
     /// </summary>
     public void OpenTerminal(string directory)
     {
+        // One direction only. The reverse call — the named overload falling
+        // back to this one — is what used to recurse; it now walks the rest of
+        // the list itself.
         if (Terminals.FirstOrDefault() is { } preferred)
         {
             OpenTerminal(directory, preferred);
@@ -216,9 +219,36 @@ public sealed class WindowsLauncher : IApplicationLauncher
         // terminal takes one, and as the working directory where it does not.
         if (Start(terminal.Command, arguments, directory)) return;
 
-        // Uninstalled since the list was built, or refusing to start. Anything
-        // is better than a menu entry that does nothing.
-        OpenTerminal(directory);
+        // **Not OpenTerminal(directory), which is where this recursed.** That
+        // overload picks Terminals.FirstOrDefault() and calls straight back
+        // here; the list is cached for the life of the process, so a preferred
+        // terminal that refuses to start produced the same choice every time
+        // and the two methods called each other until the stack ran out. A
+        // failure to open a terminal took the whole application down with it.
+        //
+        // The remaining candidates, tried once each, then the chain that needs
+        // no detection at all.
+        foreach (var other in Terminals)
+        {
+            if (other.Id == terminal.Id) continue;
+
+            var theirs = other.Arguments
+                .Select(a => a.Replace("{dir}", directory, StringComparison.Ordinal))
+                .ToArray();
+
+            if (Start(other.Command, theirs, directory)) return;
+        }
+
+        foreach (var (program, fallback) in new (string, string[])[]
+        {
+            ("wt.exe", ["-d", directory]),
+            ("pwsh.exe", []),
+            ("powershell.exe", []),
+            ("cmd.exe", []),
+        })
+        {
+            if (Start(program, fallback, directory)) return;
+        }
     }
 
     private static bool Start(string program, IReadOnlyList<string> arguments, string directory)

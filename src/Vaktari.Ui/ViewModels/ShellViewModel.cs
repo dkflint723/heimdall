@@ -608,7 +608,13 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The other-pane transfers need both a second pane and something
     /// to send. They were gated on the split alone, so an empty-space right-click
     /// in a split window offered them and they returned on the empty selection.</summary>
-    public bool CanTransferToOtherPane => IsSplit && ActiveTab?.HasSelection == true;
+    /// <summary>
+    /// A second pane, and something real to send. **CanActOnSelection rather
+    /// than HasSelection**: a bin row names where a file USED to be, so copying
+    /// from one copies whatever occupies that path now — the same hazard the
+    /// delete and rename guards exist for, reached through the transfers.
+    /// </summary>
+    public bool CanTransferToOtherPane => IsSplit && ActiveTab?.CanActOnSelection == true;
 
     /// <summary>
     /// What this desktop calls the bin, for labels that name it.
@@ -692,9 +698,24 @@ public sealed partial class ShellViewModel : ObservableObject
     /// so a passing message never hides them.</summary>
     public string ActiveSummary => ActiveTab?.Summary ?? "";
 
-    public string ActiveStatus => ActiveTab is { } pane && IsSplit
-        ? $"{pane.Title} — {pane.Status}"
-        : ActiveTab?.Status ?? "";
+    /// <summary>
+    /// The status line, prefixed in split view with the side it belongs to.
+    ///
+    /// **Only when there IS a status.** Status is empty almost all the time —
+    /// it carries transient messages and is cleared the moment a listing
+    /// finishes — so the split branch printed the folder name, an em dash and
+    /// nothing after it, permanently, on every split window. The bar read
+    /// "8 items · qa —" and had done since split view was built.
+    /// </summary>
+    public string ActiveStatus
+    {
+        get
+        {
+            if (ActiveTab is not { } pane || pane.Status.Length == 0) return "";
+
+            return IsSplit ? $"{pane.Title} — {pane.Status}" : pane.Status;
+        }
+    }
 
     /// <summary>The other side, when split. Where "copy to other pane" sends things.</summary>
     public PaneGroupViewModel? OtherGroup
@@ -774,11 +795,18 @@ public sealed partial class ShellViewModel : ObservableObject
     // ShowAddToPlaces and ShowCopyLocation are deliberately NOT gated: their
     // commands retarget the current folder when nothing is selected, which is a
     // real answer rather than a silent no-op. See AddSelectionToPlaces below.
-    public bool ShowCopyToInMenu => Menu.ShowCopyTo && ActiveTab?.HasSelection == true;
-    public bool ShowMoveToInMenu => Menu.ShowMoveTo && ActiveTab?.HasSelection == true;
+    public bool ShowCopyToInMenu => Menu.ShowCopyTo && ActiveTab?.CanActOnSelection == true;
+    public bool ShowMoveToInMenu => Menu.ShowMoveTo && ActiveTab?.CanActOnSelection == true;
     public bool ShowSortByInMenu => Menu.ShowSortBy;
-    public bool ShowDuplicateInMenu => Menu.ShowDuplicate && ActiveTab?.HasSelection == true;
-    public bool ShowOpenInNewTabInMenu => Menu.ShowOpenInNewTab && ActiveTab?.HasSelection == true;
+    public bool ShowDuplicateInMenu => Menu.ShowDuplicate && ActiveTab?.CanActOnSelection == true;
+    /// <summary>
+    /// Only for a FOLDER. OpenInNewTab opens a directory and quietly does
+    /// nothing for anything else, so offering it on a text file was a row that
+    /// could only disappoint — and in the bin it named a path the folder no
+    /// longer occupies.
+    /// </summary>
+    public bool ShowOpenInNewTabInMenu =>
+        Menu.ShowOpenInNewTab && ActiveTab is { HasDirectorySelected: true, IsTrashListing: false };
     public bool ShowAddToPlacesInMenu => Menu.ShowAddToPlaces;
 
     /// <summary>

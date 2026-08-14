@@ -42,7 +42,18 @@ public sealed class LinuxLauncher : IApplicationLauncher
 
         if (Environment.GetEnvironmentVariable("TERMINAL") is { Length: > 0 } wanted
             && OnPath(wanted) is { } path)
-            found.Add(new TerminalOption("terminal-env", wanted, path, ["--workdir", "{dir}"]));
+        {
+            // **Its own flags if we recognise it, and none if we do not.** This
+            // handed every $TERMINAL Konsole's --workdir, so TERMINAL=alacritty
+            // produced "alacritty --workdir /path", which alacritty rejects —
+            // the one setting whose whole purpose is to honour the user's choice
+            // was the one that could not open their terminal. With no arguments
+            // the folder still arrives, as the directory the process starts in.
+            var known = Known.FirstOrDefault(k =>
+                path.EndsWith("/" + k.Exe, StringComparison.Ordinal));
+
+            found.Add(new TerminalOption("terminal-env", wanted, path, known.Args ?? []));
+        }
 
         foreach (var (id, name, exe, args) in Known)
         {

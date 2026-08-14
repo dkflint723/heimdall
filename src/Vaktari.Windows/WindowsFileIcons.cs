@@ -222,7 +222,14 @@ public sealed partial class WindowsFileIcons : IFileIconProvider
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool DeleteObject(IntPtr ho);
 
-        [LibraryImport("gdi32.dll")]
+        // **GetObjectW, named explicitly.** gdi32 exports GetObjectA and
+        // GetObjectW and no plain GetObject; LibraryImport binds the exact
+        // string it is given and does no A/W probing, so this threw
+        // EntryPointNotFoundException on the first call — swallowed by the
+        // catch around it, which turned "the icon feature does not work at
+        // all" into "every icon is null", which is indistinguishable from
+        // the setting being off.
+        [LibraryImport("gdi32.dll", EntryPoint = "GetObjectW")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool GetObject(IntPtr h, int c, out Bitmap pv);
 

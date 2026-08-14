@@ -163,6 +163,41 @@ public sealed class BinIsNotAFolderTests
     /// indistinguishable from one that is broken, and the reason this reads as
     /// a suggestion is that Restore and Empty are the actions that do work here.
     /// </summary>
+    /// <summary>
+    /// **Duplicate was the one write in the file with no guard**, missed when
+    /// the menu consolidation moved it. Its destination is CurrentPath, which
+    /// in these listings is the literal string "vaktari:trash" — so on Linux
+    /// duplicating from Recent created a folder of that name in the working
+    /// directory and copied into it, the exact failure the paste guard exists
+    /// to stop.
+    /// </summary>
+    [Fact]
+    public void Duplicating_a_binned_row_copies_nothing()
+    {
+        var (pane, ops) = InTheBin();
+
+        pane.DuplicateSelected();
+
+        Assert.Empty(ops.Calls);
+    }
+
+    [Fact]
+    public void Duplicating_from_recent_copies_nothing()
+    {
+        var ops = new RecordingOperations();
+        var pane = new PaneViewModel(new InertFileSystem(), ops)
+        {
+            CurrentPath = VirtualPaths.Files,
+            SelectedEntry = new FileEntry(
+                "notes.txt", Path.Combine(Path.GetTempPath(), "notes.txt"),
+                0, DateTimeOffset.Now, EntryFlags.None),
+        };
+
+        pane.DuplicateSelected();
+
+        Assert.Empty(ops.Calls);
+    }
+
     [Fact]
     public void The_refusal_names_what_to_do_instead()
     {

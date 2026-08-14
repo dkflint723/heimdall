@@ -48,6 +48,28 @@ should not be trusted for compatibility yet.
 
 ### Fixed
 
+- **Using your desktop's icons never actually worked** until now: the call that
+  reads an icon's pixels was bound to a function name Windows does not export,
+  so every icon came back empty and fell through to the drawn set — which looks
+  exactly like the setting being off.
+- **Duplicate could copy into a folder named after the listing.** In Recent on
+  Linux it created a directory called `vaktari:recent-files` and copied into it;
+  from the bin it copied whatever now occupies the row's old path. It was the
+  one file operation the bin guards had missed.
+- **Opening a terminal could crash the application.** If the chosen terminal
+  refused to start, the fallback picked the same one again and the two paths
+  called each other until the stack ran out.
+- Hovering a nested entry inside *More options* rebuilt the shell menu
+  underneath the pointer, because the submenu-opened event bubbles.
+- *More options*, the administrator entries, and Copy to / Move to / Open in new
+  tab no longer linger in the Recycle Bin, where the rows name paths the files
+  no longer occupy.
+- A folder that cannot be listed says so in the listing. A tab whose folder had
+  been deleted showed column headings over nothing.
+- The status bar no longer reads "qa —" in split view: the folder name was
+  printed with a dash and an empty status after it, permanently.
+- On Linux, `$TERMINAL` is no longer launched with Konsole's flags whatever it
+  names — `TERMINAL=alacritty` produced a command alacritty rejects.
 - **The settings, split and details buttons are on the rightmost pane again.**
   They were moved there deliberately and an audit put them back on both sides,
   reading the panel toggle's "for this side" tooltip as meaning the left half
