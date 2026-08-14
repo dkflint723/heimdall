@@ -106,6 +106,11 @@ public partial class MainWindow : Window
         Thumbnails.RowMetadata.Provider = platform.Metadata;
         Thumbnails.IconLoader.Provider = platform.Icons;
 
+        // The desktop's own per-file icons, used only if the setting asks for
+        // them. Installed regardless so the choice can be changed without a
+        // restart.
+        Thumbnails.IconLoader.Files = platform.FileIcons;
+
         if (platform.Icons is { } icons)
         {
             var probe = icons.Resolve(["inode-directory", "folder"], 32);

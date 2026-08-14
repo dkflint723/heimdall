@@ -236,6 +236,22 @@
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
+          <TextBlock Text="Icons"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="6">
+            <CheckBox Content="Use my desktop's icons"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsChecked="{Binding UseSystemIcons}"/>
+            <TextBlock Text="Off, files use the set drawn for Vaktari. On, they use the ones Windows draws — so a program shows its own icon, a shortcut carries its arrow, and a folder you gave a custom icon keeps it. Thumbnails are unaffected either way."
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
           <TextBlock Text="Terminal"
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"/>

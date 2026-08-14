@@ -25,6 +25,10 @@ should not be trusted for compatibility yet.
   machine offer. Behind one hover rather than merged in, because hosting them
   runs their code in Vaktari, and a slow or broken extension confined to that
   submenu spoils only it.
+- **Use your desktop's icons instead of the bundled set**, from Settings. A
+  program then shows its own icon, a shortcut carries its arrow, and a folder
+  you gave a custom icon keeps it. Thumbnails are unaffected — those stay
+  Vaktari's, with its own cache and size rules.
 - **Administrator actions on Shift+right-click**: *Run as administrator* for
   things Windows can actually start elevated, and *Open admin terminal here*.
   Vaktari never holds administrator rights itself — these ask the system, which

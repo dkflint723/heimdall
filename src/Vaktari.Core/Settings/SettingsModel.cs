@@ -65,6 +65,19 @@ public sealed record GeneralSettings
     public bool TabSwitchesSplitPanes { get; init; } = true;
 
     /// <summary>
+    /// Where a file's icon comes from.
+    ///
+    /// **The bundled set is not to everyone's taste, and that is fair.** It is
+    /// drawn for this application and it is consistent, which is exactly why
+    /// somebody who knows their own desktop's icons may prefer those — an
+    /// executable showing its real icon, a folder showing the one they gave it.
+    ///
+    /// False is the shipped behaviour and stays the default: the set drawn for
+    /// this application is the one it looks right in.
+    /// </summary>
+    public bool UseSystemIcons { get; init; }
+
+    /// <summary>
     /// Which terminal F4 opens, by id — "warp", "windows-terminal", "git-bash".
     ///
     /// Empty means "whichever is found first", which is what the application

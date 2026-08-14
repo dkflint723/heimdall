@@ -77,6 +77,32 @@ public static class RowIcon
                 image.IsVisible = true;
             }
 
+            var size = image.GetValue(SizeProperty);
+
+            // **The desktop's own icons, when asked for.** Checked before the
+            // theme provider because it answers a different question — per
+            // file rather than per icon name — so an executable shows its own
+            // icon and a shortcut carries its overlay, which is most of the
+            // reason somebody turns this on.
+            //
+            // The drawn glyph goes up first either way, so a row is never blank
+            // while the shell composes.
+            if (IconLoader.UseSystemIcons)
+            {
+                Paint(FileTypeIcon.For(value.Name, value.IsDirectory));
+
+                // Off-thread: composing an icon reads a resource out of some
+                // DLL, and this runs once per visible row.
+                var pixels = await Task.Run(
+                    () => IconLoader.SystemPixels(value.FullPath, value.IsDirectory, size), token)
+                    .ConfigureAwait(true);
+
+                if (pixels is not null && IconLoader.Draw(pixels) is { } drawn) Paint(drawn);
+
+                await ShowContentsIfAnyAsync(value, Paint, token).ConfigureAwait(true);
+                return;
+            }
+
             if (IconLoader.Provider is null)
             {
                 Paint(FileTypeIcon.For(value.Name, value.IsDirectory));
@@ -84,7 +110,6 @@ public static class RowIcon
                 return;
             }
 
-            var size = image.GetValue(SizeProperty);
 
             // Only the filesystem lookup goes off-thread. Building the drawable
             // creates Avalonia objects and reads application resources, so it

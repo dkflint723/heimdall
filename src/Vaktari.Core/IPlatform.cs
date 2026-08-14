@@ -73,6 +73,13 @@ public interface IPlatform
     /// <summary>Null where the desktop exposes no readable theme.</summary>
     IThemeProvider? Theme { get; }
 
+    /// <summary>
+    /// The desktop's own icon for one particular file, or null where the
+    /// desktop has no such notion. On freedesktop the icon THEME already is
+    /// that answer; Windows composes per file, so it needs its own seam.
+    /// </summary>
+    IFileIconProvider? FileIcons => null;
+
     /// <summary>Null where the desktop ships no icon theme we can read.</summary>
     IIconThemeProvider? Icons { get; }
 

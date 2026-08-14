@@ -79,6 +79,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _selectedFont = AvailableFonts.FirstOrDefault(o =>
             string.Equals(o.Name, views.CustomFontFamily, StringComparison.OrdinalIgnoreCase))
             ?? AvailableFonts[0];
+        _useSystemIcons = current.General.UseSystemIcons;
         _followDesktopColours = views.FollowDesktopColours;
         _themeModeIndex = views.ThemeMode switch
         {
@@ -243,6 +244,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         [new TerminalChoice("", "Whichever is found first")];
 
     [ObservableProperty] private TerminalChoice? _selectedTerminal;
+
+    /// <summary>
+    /// Whether files show the desktop's own icons instead of the bundled set.
+    /// Off by default: the drawn set is the one this application looks right in,
+    /// and somebody who prefers their desktop's is making a deliberate choice.
+    /// </summary>
+    [ObservableProperty] private bool _useSystemIcons;
 
     /// <summary>
     /// Handed the detected terminals once they are known.
@@ -589,6 +597,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ConfirmPermanentDelete = ConfirmPermanentDelete,
                 ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
                 PreferredTerminal = SelectedTerminal?.Id ?? "",
+                UseSystemIcons = UseSystemIcons,
             },
 
             // Also guarded: `with` on a null record throws, so saving would have

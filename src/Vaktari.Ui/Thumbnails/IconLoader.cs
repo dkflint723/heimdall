@@ -5,6 +5,7 @@ using System.Xml.Linq;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Vaktari.Core.FileSystem;
 
 namespace Vaktari.Ui.Thumbnails;
@@ -91,6 +92,105 @@ public static class IconLoader
         Drawn.Clear();
         Fallbacks.Clear();
         FileTypeIcon.Clear();
+    }
+
+    // ---- the desktop's own per-file icons ---------------------------------
+
+    /// <summary>
+    /// The platform's per-file icons, where it has such a thing. Separate from
+    /// <see cref="Provider"/>, which answers by icon NAME and gives every text
+    /// file the same picture; this answers per file, so an executable shows its
+    /// own icon and a shortcut carries its overlay.
+    /// </summary>
+    public static IFileIconProvider? Files { get; set; }
+
+    /// <summary>Whether to use them, which is the user's choice and off by
+    /// default — the bundled set is the one this application looks right in.</summary>
+    public static bool UseSystemIcons =>
+        Files is not null && Settings.AppSettings.Current.General.UseSystemIcons;
+
+    /// <summary>
+    /// The desktop's pixels for this file. **Off the UI thread** — composing an
+    /// icon reads a resource out of some DLL, and this is called once per
+    /// visible row. The provider does its own caching, so a folder of four
+    /// thousand text files asks the shell once.
+    /// </summary>
+    public static IconPixels? SystemPixels(string path, bool isDirectory, int size)
+    {
+        if (Files is not { } files) return null;
+
+        try
+        {
+            return files.IconFor(path, isDirectory, size);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[vaktari] system icon failed: {Path.GetFileName(path)} — {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Pixels into a drawable. **UI thread**, like everything else here that
+    /// builds one.
+    ///
+    /// **Keyed on the pixels themselves, through a weak table.** The provider
+    /// hands back the same IconPixels instance for every file that shares an
+    /// icon, so this builds one bitmap per distinct icon rather than one per
+    /// row — and because the table holds its keys weakly, an icon the provider
+    /// drops takes its bitmap with it instead of pinning it forever. Nothing
+    /// here has to know or copy the provider's keying rule.
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IconPixels, IImage>
+        SystemDrawn = new();
+
+    public static IImage? Draw(IconPixels pixels)
+    {
+        if (SystemDrawn.TryGetValue(pixels, out var cached)) return cached;
+
+        try
+        {
+            var image = ToBitmap(pixels);
+            SystemDrawn.AddOrUpdate(pixels, image);
+            return image;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[vaktari] system icon draw failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Raw BGRA into something Avalonia can draw.
+    ///
+    /// **Row by row, using the buffer's own stride.** A locked framebuffer is
+    /// padded to an alignment that is usually but not always width × 4, and a
+    /// single block copy against a padded buffer produces an image that shears
+    /// diagonally — which reads as a corrupt icon rather than as a stride bug.
+    /// </summary>
+    private static IImage ToBitmap(IconPixels pixels)
+    {
+        var bitmap = new WriteableBitmap(
+            new PixelSize(pixels.Width, pixels.Height),
+            new Vector(96, 96),
+            PixelFormat.Bgra8888,
+            AlphaFormat.Premul);
+
+        using var buffer = bitmap.Lock();
+
+        var stride = pixels.Width * 4;
+
+        for (var y = 0; y < pixels.Height; y++)
+        {
+            System.Runtime.InteropServices.Marshal.Copy(
+                pixels.Bgra,
+                y * stride,
+                buffer.Address + y * buffer.RowBytes,
+                stride);
+        }
+
+        return bitmap;
     }
 
     /// <summary>

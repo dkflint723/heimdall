@@ -138,6 +138,12 @@ public sealed class WindowsPlatform : IPlatform
     public IIconThemeProvider? Icons => null;
 
     /// <summary>
+    /// The shell's own per-file icons, for people who would rather see their
+    /// desktop's set than the one this application ships.
+    /// </summary>
+    public IFileIconProvider? FileIcons { get; } = new WindowsFileIcons();
+
+    /// <summary>
     /// The shell's own menu — every extension the machine has installed.
     /// </summary>
     public IShellMenuProvider? ShellMenu { get; } = new WindowsShellMenuProvider();
