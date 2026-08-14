@@ -285,6 +285,71 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _shellMenu = null;
     }
 
+    // ---- administrator ----------------------------------------------------
+
+    /// <summary>
+    /// Whether the right-click that opened this menu was held with Shift.
+    ///
+    /// **Behind a modifier because it is not an everyday action.** Elevating is
+    /// how a person gets past a permission deliberately set against them, so it
+    /// belongs where it is reachable and not where it is stumbled into —
+    /// Explorer puts it behind the same gesture.
+    ///
+    /// Set by the window, which is the only thing that sees the press: a
+    /// context menu opening carries no record of which keys were down.
+    /// </summary>
+    [ObservableProperty] private bool _adminRequested;
+
+    partial void OnAdminRequestedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowAdminEntries));
+        OnPropertyChanged(nameof(CanRunSelectionAsAdministrator));
+    }
+
+    /// <summary>Whether to show the section at all.</summary>
+    public bool ShowAdminEntries =>
+        AdminRequested && _launcher?.CanElevate == true && !IsTrashListing && !IsRecentListing;
+
+    /// <summary>
+    /// Whether "run as administrator" would mean anything for what is selected.
+    ///
+    /// **Only for things Windows can actually start elevated.** The runas verb
+    /// on a .txt does nothing at all — no error, no elevation, no editor — so
+    /// offering it for every file would be an entry that silently fails on most
+    /// of them. This is the set Explorer itself offers it for.
+    /// </summary>
+    public bool CanRunSelectionAsAdministrator =>
+        ShowAdminEntries
+        && SelectedEntry is { IsDirectory: false } entry
+        && Executable.Contains(Path.GetExtension(entry.FullPath));
+
+    private static readonly HashSet<string> Executable =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".msi", ".bat", ".cmd", ".ps1", ".com", ".lnk", ".msc", ".vbs", ".reg",
+        };
+
+    /// <summary>
+    /// Hands the selection to the system to start elevated. The consent dialog
+    /// is the system's, and Vaktari itself stays unelevated whatever is chosen.
+    /// </summary>
+    [RelayCommand]
+    public void RunAsAdministrator()
+    {
+        if (!CanRunSelectionAsAdministrator || SelectedEntry is not { } entry) return;
+
+        _launcher?.OpenElevated(entry.FullPath);
+    }
+
+    /// <summary>An elevated terminal in this folder, in the preferred terminal.</summary>
+    [RelayCommand]
+    public void OpenAdminTerminalHere()
+    {
+        if (!ShowAdminEntries) return;
+
+        _launcher?.OpenElevatedTerminal(CurrentPath, Terminals.FirstOrDefault());
+    }
+
     /// <summary>Runs one of the shell's entries.</summary>
     [RelayCommand]
     public void InvokeShellEntry(Vaktari.Core.FileSystem.ShellMenuEntry? entry)
@@ -439,6 +504,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(CanActOnSelection));
         OnPropertyChanged(nameof(HasDirectorySelected));
+        OnPropertyChanged(nameof(CanRunSelectionAsAdministrator));
     }
 
     /// <summary>The collection belonging to the layout currently on screen.</summary>
@@ -1261,6 +1327,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(CanActOnSelection));
         OnPropertyChanged(nameof(HasDirectorySelected));
+        OnPropertyChanged(nameof(CanRunSelectionAsAdministrator));
 
         if (IsPreviewVisible) _ = RefreshPreviewAsync();
 

@@ -77,6 +77,27 @@ public interface IApplicationLauncher
     void OpenTerminal(string directory, TerminalOption terminal) => OpenTerminal(directory);
 
     /// <summary>
+    /// Whether this desktop has a way to run something with administrator
+    /// rights that a file manager should be using.
+    ///
+    /// **False is the honest answer nearly everywhere.** Windows has a shell
+    /// verb for it and a consent dialog the system owns; the freedesktop world
+    /// has pkexec and sudo, which are a policy question rather than a menu
+    /// entry, and a file manager quietly deciding to elevate on a Linux desktop
+    /// is not a decision it should be making.
+    /// </summary>
+    bool CanElevate => false;
+
+    /// <summary>
+    /// Runs a file as administrator. The system asks for consent; this never
+    /// obtains rights of its own.
+    /// </summary>
+    void OpenElevated(string path) { }
+
+    /// <summary>Opens a terminal here, elevated.</summary>
+    void OpenElevatedTerminal(string directory, TerminalOption? terminal = null) { }
+
+    /// <summary>
     /// The terminals installed on this machine, preferred first. Empty where
     /// the platform cannot tell, which leaves the menu with a single entry and
     /// the old fall-through behaviour behind it.

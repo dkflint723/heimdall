@@ -20,12 +20,29 @@ should not be trusted for compatibility yet.
   follows. Before this it tried Windows Terminal, then PowerShell, then cmd, and
   opened whichever started first, with nowhere to say otherwise.
 
+- **The desktop's own menu, under *More options*.** 7-Zip, Send to, Restore
+  previous versions, Edit with Notepad++ — whatever the shell extensions on your
+  machine offer. Behind one hover rather than merged in, because hosting them
+  runs their code in Vaktari, and a slow or broken extension confined to that
+  submenu spoils only it.
+- **Administrator actions on Shift+right-click**: *Run as administrator* for
+  things Windows can actually start elevated, and *Open admin terminal here*.
+  Vaktari never holds administrator rights itself — these ask the system, which
+  shows its own consent dialog and decides.
+
 ### Changed
 
 - **The right-click menu is less thin.** *Copy as path* (on Windows' own
   `Ctrl+Shift+C`), *Duplicate*, *Rename in bulk* and *Open terminal here* are
   back at the top level. Consolidating the menu had pushed them behind *More*,
   which made it tidy and made the things people reach for a hover further away.
+
+### Fixed
+
+- **The settings, split and details buttons are on the rightmost pane again.**
+  They were moved there deliberately and an audit put them back on both sides,
+  reading the panel toggle's "for this side" tooltip as meaning the left half
+  had lost the feature. It had not: F11 toggles whichever side is active.
 
 ## [0.7.1] — 2026-08-11
 

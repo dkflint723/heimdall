@@ -1225,6 +1225,21 @@
                    one — which is most of them, including every ordinary folder —
                    and Avalonia does not collapse the double rule that made with
                    the one below. -->
+              <!-- **Shift+right-click, the same gesture Explorer uses.**
+                   Elevating is how somebody gets past a permission that was set
+                   against them deliberately, so it belongs where it can be
+                   reached and not where it can be stumbled into.
+
+                   Vaktari never holds administrator rights itself: these ask
+                   the SYSTEM to start a new process elevated, and the system
+                   shows its own consent dialog and makes the decision. -->
+              <Separator IsVisible="{Binding ActiveTab.ShowAdminEntries}"/>
+              <MenuItem Header="Run as administrator"
+                                      Command="{Binding ActiveTab.RunAsAdministratorCommand}"
+                                      IsVisible="{Binding ActiveTab.CanRunSelectionAsAdministrator}"/>
+              <MenuItem Header="Open admin terminal here"
+                                      Command="{Binding ActiveTab.OpenAdminTerminalHereCommand}"
+                                      IsVisible="{Binding ActiveTab.ShowAdminEntries}"/>
               <!-- **The machine's own menu: 7-Zip, VLC, Send to, Restore
                    previous versions.** Those are COM handlers registered by
                    installed applications, not a list anybody can write down, so

@@ -125,6 +125,86 @@ public sealed class WindowsLauncher : IApplicationLauncher
         }
     }
 
+    /// <summary>
+    /// Windows has the verb and owns the consent dialog, so this is a real
+    /// answer here.
+    /// </summary>
+    public bool CanElevate => true;
+
+    /// <summary>
+    /// Runs a file as administrator, through the shell's own "runas" verb.
+    ///
+    /// **Vaktari never acquires rights of its own.** The verb asks the SYSTEM
+    /// to start a new process elevated, and the system shows its consent dialog
+    /// and makes the decision. Nothing here can bypass that, and nothing here
+    /// should try — the file manager stays unelevated whatever the answer is.
+    ///
+    /// Declining raises ERROR_CANCELLED, which is a person saying no rather
+    /// than a fault, so it is swallowed like any other cancelled dialog.
+    /// </summary>
+    public void OpenElevated(string path)
+    {
+        try
+        {
+            using var started = Process.Start(new ProcessStartInfo(path)
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = Path.GetDirectoryName(path) ?? "",
+            });
+        }
+        catch (Exception ex)
+        {
+            // ERROR_CANCELLED among them: the consent dialog was declined, which
+            // is an answer and not an error.
+            Quiet.Swallowed("launcher", ex);
+        }
+    }
+
+    /// <summary>
+    /// A terminal here, elevated — the same consent dialog, and the same
+    /// refusal to hold rights of our own.
+    /// </summary>
+    public void OpenElevatedTerminal(string directory, TerminalOption? terminal = null)
+    {
+        var chosen = terminal ?? Terminals.FirstOrDefault();
+
+        if (chosen is null)
+        {
+            // Nothing detected is not the same as nothing installed, and cmd is
+            // on every Windows machine there has ever been.
+            Elevate("cmd.exe", [], directory);
+            return;
+        }
+
+        var arguments = chosen.Arguments
+            .Select(a => a.Replace("{dir}", directory, StringComparison.Ordinal))
+            .ToArray();
+
+        Elevate(chosen.Command, arguments, directory);
+    }
+
+    private static void Elevate(string program, IReadOnlyList<string> arguments, string directory)
+    {
+        try
+        {
+            var info = new ProcessStartInfo(program)
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = directory,
+            };
+
+            foreach (var argument in arguments) info.ArgumentList.Add(argument);
+
+            using var started = Process.Start(info);
+        }
+        catch (Exception ex)
+        {
+            Quiet.Swallowed("launcher", ex);
+        }
+    }
+
     /// <summary>One named terminal, from the menu.</summary>
     public void OpenTerminal(string directory, TerminalOption terminal)
     {

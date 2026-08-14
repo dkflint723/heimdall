@@ -459,6 +459,20 @@ public partial class MainWindow : Window
         // "which button raised this press".
         var properties = e.GetCurrentPoint(this).Properties;
 
+        // **Recorded here because nothing later can see it.** A ContextMenu
+        // opening carries no record of which keys were down, and by the time
+        // the menu is building, Shift has long been released. Explorer puts its
+        // administrator entries behind the same gesture.
+        //
+        // On the press of the RIGHT button specifically: Shift+left-click is
+        // range selection, and letting that arm the section would put elevation
+        // one stray right-click away from a perfectly ordinary selection.
+        if (properties.PointerUpdateKind is PointerUpdateKind.RightButtonPressed
+            && PaneAt(e.Source) is { } target)
+        {
+            target.AdminRequested = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        }
+
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control)
             && properties.PointerUpdateKind
                is Avalonia.Input.PointerUpdateKind.MiddleButtonPressed)
@@ -744,8 +758,14 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnListingMenuClosed(object? sender, RoutedEventArgs e)
     {
-        if (sender is Control { DataContext: PaneGroupViewModel { ActiveTab: { } pane } })
-            pane.CloseShellMenu();
+        if (sender is not Control { DataContext: PaneGroupViewModel { ActiveTab: { } pane } })
+            return;
+
+        pane.CloseShellMenu();
+
+        // Disarmed with the menu. Left set, the next ordinary right-click would
+        // still be offering elevation because of a Shift held a minute ago.
+        pane.AdminRequested = false;
     }
 
     /// <summary>Feeds the pane its own width so columns can drop out in
