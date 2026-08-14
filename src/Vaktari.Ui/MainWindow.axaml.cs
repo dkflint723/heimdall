@@ -28,6 +28,24 @@ namespace Vaktari.Ui;
 public partial class MainWindow : Window
 {
     private readonly ShellViewModel _shell;
+    private readonly Vaktari.Core.FileSystem.IApplicationLauncher? _launcher;
+    private readonly IPlatform _platform;
+
+    /// <summary>
+    /// Chooses which icon set the listings use.
+    ///
+    /// **An imported theme outranks the platform own set**: it is the most
+    /// deliberate of the three sources — somebody found a theme, downloaded it
+    /// and pointed at it. A folder that has since been moved or deleted is
+    /// ignored rather than honoured into a listing with no icons at all.
+    ///
+    /// Called after the settings are applied, and again when they are saved.
+    /// </summary>
+    private static void InstallIconTheme(IPlatform platform)
+        => Thumbnails.IconLoader.Provider =
+            Vaktari.Core.FileSystem.FreedesktopIconTheme.FromFolder(
+                AppSettings.Current.General.IconThemeFolder)
+            ?? platform.Icons;
     private readonly JsonSessionStore _store;
 
     // Preferences, as distinct from the session. Read before it, because the
@@ -104,12 +122,15 @@ public partial class MainWindow : Window
 
         Thumbnails.ThumbnailLoader.Provider = platform.Thumbnails;
         Thumbnails.RowMetadata.Provider = platform.Metadata;
-        Thumbnails.IconLoader.Provider = platform.Icons;
-
         // The desktop's own per-file icons, used only if the setting asks for
         // them. Installed regardless so the choice can be changed without a
         // restart.
         Thumbnails.IconLoader.Files = platform.FileIcons;
+
+        // Held for the settings dialog, which opens a browser at the icon
+        // catalogue. The launcher is how this application opens anything.
+        _launcher = platform.Launcher;
+        _platform = platform;
 
         if (platform.Icons is { } icons)
         {
@@ -128,6 +149,16 @@ public partial class MainWindow : Window
         _settingsStore.EnsureFileExists(_settings);
 
         AppSettings.Apply(_settings);
+
+        // **After Apply, and that ordering is the whole of it.** This was
+        // written thirty lines above, where AppSettings.Current is still the
+        // default record and the chosen folder is therefore always empty — so
+        // FromFolder returned null on every launch and the imported theme was
+        // never used by anybody, on either platform, while settings.json
+        // faithfully recorded the choice and the dialog showed it as set. The
+        // comment below about settings preceding the theme is about this exact
+        // hazard; the font setting was caught by it once already.
+        InstallIconTheme(platform);
 
         // Per-folder view overrides. A static for the same reason AppSettings is
         // one: panes are created by the shell, not injected here.
@@ -622,11 +653,50 @@ public partial class MainWindow : Window
 
         var window = new SettingsWindow(model);
 
+        // The dialogs belong to the window. A view model that opens a folder
+        // picker cannot be constructed in a test, and this one already is.
+        model.IconThemeBrowseRequested += async (_, _) =>
+        {
+            var picked = await window.StorageProvider.OpenFolderPickerAsync(
+                new Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = "Choose an icon theme folder",
+                    AllowMultiple = false,
+                });
+
+            if (picked.Count == 0 || picked[0].TryGetLocalPath() is not { } path) return;
+
+            // **Checked now, not when the icons fail to change.** The usual
+            // mistake is picking the folder the archive was extracted INTO
+            // rather than the theme inside it, and the difference is invisible
+            // until nothing happens.
+            if (Vaktari.Core.FileSystem.FreedesktopIconTheme.FromFolder(path) is null)
+            {
+                model.IconThemeFolder = "";
+                model.IconThemeProblem =
+                    $"'{Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar))}' has no "
+                    + "index.theme in it. Choose the folder that came out of the archive — for "
+                    + "Papirus that is the one called Papirus, not the folder you put it in.";
+                return;
+            }
+
+            model.IconThemeProblem = "";
+            model.IconThemeFolder = path;
+        };
+
+        model.OpenUrlRequested += (_, url) => _launcher?.Open(url);
+
         window.Closed += (_, _) =>
         {
             if (!model.Saved) return;
 
             AppSettings.Apply(model.Result);
+
+            // Rebuilt on save, or choosing a theme would need a restart — and
+            // the resolved-path cache has no theme in its key, so it has to be
+            // dropped or it keeps serving files from the theme just abandoned.
+            InstallIconTheme(_platform);
+            Thumbnails.IconLoader.Invalidate();
             _settingsStore.Save(model.Result);
 
             // The font lives in the theme resources, and ThemeApplier is the

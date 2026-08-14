@@ -78,6 +78,21 @@ public sealed record GeneralSettings
     public bool UseSystemIcons { get; init; }
 
     /// <summary>
+    /// A downloaded icon theme's folder — the one holding index.theme, which is
+    /// what you get when you extract Papirus or Tela.
+    ///
+    /// **Wins over both other sources when set**, because it is the most
+    /// deliberate of the three: somebody found a theme, downloaded it and
+    /// pointed at it. Empty is the normal state.
+    ///
+    /// A path rather than a name, because on Windows there is no registry of
+    /// installed themes to look a name up in — the folder is the whole of what
+    /// we know about it. A path naming a folder that has since gone is ignored
+    /// rather than honoured into a listing with no icons at all.
+    /// </summary>
+    public string IconThemeFolder { get; init; } = "";
+
+    /// <summary>
     /// Which terminal F4 opens, by id — "warp", "windows-terminal", "git-bash".
     ///
     /// Empty means "whichever is found first", which is what the application

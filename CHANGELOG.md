@@ -29,6 +29,11 @@ should not be trusted for compatibility yet.
   program then shows its own icon, a shortcut carries its arrow, and a folder
   you gave a custom icon keeps it. Thumbnails are unaffected — those stay
   Vaktari's, with its own cache and size rules.
+- **Import an icon theme you downloaded.** Point Settings at the folder holding
+  index.theme — Papirus, Tela, Numix and most Linux icon sets are published in
+  that format — and Vaktari uses it for every file. A link beside it opens a
+  catalogue of themes that work. An imported theme wins over both the bundled
+  set and your desktop own icons, being the most deliberate of the three.
 - **Administrator actions on Shift+right-click**: *Run as administrator* for
   things Windows can actually start elevated, and *Open admin terminal here*.
   Vaktari never holds administrator rights itself — these ask the system, which

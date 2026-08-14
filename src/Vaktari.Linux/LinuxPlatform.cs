@@ -18,7 +18,7 @@ public sealed class LinuxPlatform : IPlatform
     public LinuxPlatform(string stateDirectory)
     {
         Places = new LinuxPlacesProvider(stateDirectory);
-        Icons = new XdgIconTheme(Theme?.Read()?.IconTheme);
+        Icons = new FreedesktopIconTheme(Theme?.Read()?.IconTheme, naming: new XdgIconNaming());
     }
 
     public string Name => "linux";

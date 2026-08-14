@@ -106,8 +106,16 @@ public static class IconLoader
 
     /// <summary>Whether to use them, which is the user's choice and off by
     /// default — the bundled set is the one this application looks right in.</summary>
+    /// <summary>
+    /// **An imported theme wins over the desktop's own icons.** Both can be set
+    /// — a checkbox and a folder are independent controls — and the theme is
+    /// the more deliberate choice of the two, so it is the one honoured rather
+    /// than whichever happens to be checked last.
+    /// </summary>
     public static bool UseSystemIcons =>
-        Files is not null && Settings.AppSettings.Current.General.UseSystemIcons;
+        Files is not null
+        && Provider is null
+        && Settings.AppSettings.Current.General.UseSystemIcons;
 
     /// <summary>
     /// The desktop's pixels for this file. **Off the UI thread** — composing an

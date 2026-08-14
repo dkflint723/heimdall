@@ -80,6 +80,21 @@ public sealed partial class SettingsViewModel : ObservableObject
             string.Equals(o.Name, views.CustomFontFamily, StringComparison.OrdinalIgnoreCase))
             ?? AvailableFonts[0];
         _useSystemIcons = current.General.UseSystemIcons;
+        _iconThemeFolder = current.General.IconThemeFolder;
+
+        // **Checked on the way in, not only when it was chosen.** A theme
+        // folder that has since been moved, renamed or deleted would otherwise
+        // show as the chosen theme, with a Clear button and no complaint, while
+        // the listing quietly used the drawn set — which is the same invisible
+        // failure the browse-time check exists to prevent, reached by the other
+        // route.
+        if (_iconThemeFolder.Length > 0
+            && Core.FileSystem.FreedesktopIconTheme.FromFolder(_iconThemeFolder) is null)
+        {
+            _iconThemeProblem =
+                $"That folder is no longer an icon theme — it may have been moved or deleted. "
+                + "Choose it again, or clear it.";
+        }
         _followDesktopColours = views.FollowDesktopColours;
         _themeModeIndex = views.ThemeMode switch
         {
@@ -251,6 +266,69 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// and somebody who prefers their desktop's is making a deliberate choice.
     /// </summary>
     [ObservableProperty] private bool _useSystemIcons;
+
+    /// <summary>The chosen theme folder, or empty. Shown as its own name rather
+    /// than the whole path, which is long and mostly uninteresting.</summary>
+    [ObservableProperty] private string _iconThemeFolder = "";
+
+    public string IconThemeLabel => IconThemeFolder.Length == 0
+        ? "None chosen"
+        : Path.GetFileName(IconThemeFolder.TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+    public bool HasIconTheme => IconThemeFolder.Length > 0;
+
+    /// <summary>
+    /// Why a chosen folder was refused, shown under the row.
+    ///
+    /// **Said here rather than in a dialog.** The answer belongs beside the
+    /// control that asked the question, and a second modal on top of a modal to
+    /// report "that folder was not what I needed" is a lot of ceremony for a
+    /// sentence.
+    /// </summary>
+    [ObservableProperty] private string _iconThemeProblem = "";
+
+    public bool HasIconThemeProblem => IconThemeProblem.Length > 0;
+
+    partial void OnIconThemeProblemChanged(string value)
+        => OnPropertyChanged(nameof(HasIconThemeProblem));
+
+    partial void OnIconThemeFolderChanged(string value)
+    {
+        OnPropertyChanged(nameof(IconThemeLabel));
+        OnPropertyChanged(nameof(HasIconTheme));
+    }
+
+    /// <summary>Raised so the window can open a folder picker; a view model has
+    /// no business owning a dialog.</summary>
+    public event EventHandler? IconThemeBrowseRequested;
+
+    /// <summary>And so it can open a browser. Same reason.</summary>
+    public event EventHandler<string>? OpenUrlRequested;
+
+    [RelayCommand]
+    private void BrowseForIconTheme() => IconThemeBrowseRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void ClearIconTheme()
+    {
+        IconThemeFolder = "";
+        IconThemeProblem = "";
+    }
+
+    /// <summary>
+    /// Where compatible themes live.
+    ///
+    /// **The KDE Store, because the format is the thing that matters.** Vaktari
+    /// reads freedesktop icon themes, so what works is anything published as
+    /// one — which is that catalogue, plus the projects that host their own.
+    /// A generic search would send people to Windows .ico packs, none of which
+    /// this can read.
+    /// </summary>
+    public const string IconThemesUrl = "https://store.kde.org/browse?category=132&order=latest";
+
+    [RelayCommand]
+    private void GetMoreIcons() => OpenUrlRequested?.Invoke(this, IconThemesUrl);
 
     /// <summary>
     /// Handed the detected terminals once they are known.
@@ -598,6 +676,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
                 PreferredTerminal = SelectedTerminal?.Id ?? "",
                 UseSystemIcons = UseSystemIcons,
+                IconThemeFolder = IconThemeFolder,
             },
 
             // Also guarded: `with` on a null record throws, so saving would have

@@ -248,6 +248,46 @@
                        FontSize="{DynamicResource FontSizeTiny}"
                        Foreground="{DynamicResource ViewDimText}"
                        TextWrapping="Wrap"/>
+
+            <!-- An imported theme wins over both, because it is the most
+                 deliberate of the three: somebody found a theme, downloaded it
+                 and pointed at it. -->
+            <DockPanel Margin="0,4,0,0">
+              <Button DockPanel.Dock="Right" Content="Choose…"
+                      Margin="6,0,0,0" Padding="10,4"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      Command="{Binding BrowseForIconThemeCommand}"/>
+              <Button DockPanel.Dock="Right" Content="Clear"
+                      Padding="10,4"
+                      FontSize="{DynamicResource FontSizeSmall}"
+                      IsVisible="{Binding HasIconTheme}"
+                      Command="{Binding ClearIconThemeCommand}"/>
+              <TextBlock Text="{Binding IconThemeLabel}"
+                         VerticalAlignment="Center"
+                         FontSize="{DynamicResource FontSizeSmall}"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{Binding IconThemeFolder}"/>
+            </DockPanel>
+
+            <TextBlock Text="{Binding IconThemeProblem}"
+                       IsVisible="{Binding HasIconThemeProblem}"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource AccentColour}"
+                       TextWrapping="Wrap"/>
+
+            <TextBlock Text="Or point at an icon theme you downloaded — the folder holding index.theme. Vaktari reads the freedesktop format, which is what Papirus, Tela, Numix and most Linux icon sets are published as."
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap"/>
+
+            <Button Content="Find icon themes to download"
+                    Padding="0" Margin="0,2,0,0"
+                    Background="Transparent" BorderThickness="0"
+                    Foreground="{DynamicResource AccentColour}"
+                    FontSize="{DynamicResource FontSizeTiny}"
+                    HorizontalAlignment="Left"
+                    Command="{Binding GetMoreIconsCommand}"
+                    ToolTip.Tip="Opens store.kde.org in your browser"/>
           </StackPanel>
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
