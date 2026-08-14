@@ -9,6 +9,24 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [Unreleased]
+
+### Added
+
+- **Pick which terminal opens.** Vaktari now finds the terminals installed on
+  this machine — Windows Terminal, Warp, PowerShell, Command Prompt, WSL, Git
+  Bash, Alacritty, WezTerm and others — and offers them under *Open terminal
+  here* when there is more than one. Settings has a *Terminal* choice that F4
+  follows. Before this it tried Windows Terminal, then PowerShell, then cmd, and
+  opened whichever started first, with nowhere to say otherwise.
+
+### Changed
+
+- **The right-click menu is less thin.** *Copy as path* (on Windows' own
+  `Ctrl+Shift+C`), *Duplicate*, *Rename in bulk* and *Open terminal here* are
+  back at the top level. Consolidating the menu had pushed them behind *More*,
+  which made it tidy and made the things people reach for a hover further away.
+
 ## [0.7.1] — 2026-08-11
 
 ### Fixed

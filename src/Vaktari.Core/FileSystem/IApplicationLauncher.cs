@@ -15,6 +15,44 @@ public sealed record LaunchOption(string Name, string Id, string? Icon = null)
 }
 
 /// <summary>
+/// One terminal this machine can actually open, as offered in the menu.
+///
+/// **A record rather than a hardcoded chain**, because there was one: the
+/// launcher tried Windows Terminal, then PowerShell, then cmd, took the first
+/// that started, and gave the user no say. On a machine with Warp, or WSL, or
+/// a Git Bash the person actually lives in, "open a terminal here" opened the
+/// wrong one and there was nowhere to say so.
+///
+/// <param name="Id">Stable across launches — it is what the preference stores,
+/// so it must not be the display name, which is the sort of thing that gets
+/// tidied up later.</param>
+/// <param name="Name">What the menu shows: the terminal's own name, as its
+/// installer spells it.</param>
+/// <param name="Command">The executable to run.</param>
+/// <param name="Arguments">Its arguments, with <c>{dir}</c> where the folder
+/// goes. A terminal that takes the folder as its working directory instead
+/// leaves this empty — see <see cref="UsesWorkingDirectory"/>.</param>
+/// </summary>
+public sealed record TerminalOption(
+    string Id,
+    string Name,
+    string Command,
+    IReadOnlyList<string> Arguments)
+{
+    /// <summary>
+    /// True when the folder is passed by starting the process IN it rather
+    /// than as an argument. Both are needed: cmd and PowerShell have no
+    /// "start here" flag and inherit the working directory, while Windows
+    /// Terminal ignores the inherited one and needs `-d`.
+    /// </summary>
+    public bool UsesWorkingDirectory => Arguments.Count == 0;
+
+    /// <summary>The user's chosen default, marked so the menu can show which
+    /// one F4 will open.</summary>
+    public bool IsPreferred { get; init; }
+}
+
+/// <summary>
 /// Handing a file to whatever the desktop thinks should open it. Deliberately
 /// tiny and platform-agnostic: the desktop database and xdg-open on Linux,
 /// ShellExecute and the shell's own handler list on Windows.
@@ -24,8 +62,31 @@ public interface IApplicationLauncher
     /// <summary>Open with the user's default application for the type.</summary>
     void Open(string path);
 
-    /// <summary>Open a terminal with its working directory set to this folder.</summary>
+    /// <summary>Open the preferred terminal with its working directory set to
+    /// this folder. What F4 does.</summary>
     void OpenTerminal(string directory);
+
+    /// <summary>
+    /// Open one specific terminal here, from the menu.
+    ///
+    /// Default implementation so a platform that has not been taught to
+    /// enumerate terminals still honours the call rather than doing nothing:
+    /// with an empty <see cref="Terminals"/> the menu never offers a choice,
+    /// and this can only be reached with a stale one.
+    /// </summary>
+    void OpenTerminal(string directory, TerminalOption terminal) => OpenTerminal(directory);
+
+    /// <summary>
+    /// The terminals installed on this machine, preferred first. Empty where
+    /// the platform cannot tell, which leaves the menu with a single entry and
+    /// the old fall-through behaviour behind it.
+    ///
+    /// **Detected once and cached by the implementation.** This is read while
+    /// building a context menu, on the UI thread, and probing the disk for a
+    /// dozen executables there is exactly the sort of thing that makes a menu
+    /// feel slow to open.
+    /// </summary>
+    IReadOnlyList<TerminalOption> Terminals => [];
 
     /// <summary>
     /// Every application registered as able to open this file, default first.

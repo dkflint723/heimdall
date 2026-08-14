@@ -84,12 +84,35 @@ public sealed class WindowsLauncher : IApplicationLauncher
     }
 
     /// <summary>
-    /// Windows Terminal first, then PowerShell, then cmd. Terminal is the
-    /// default on Windows 11 but is a Store package that can be absent, and
-    /// falling back keeps F4 working on a machine that has had it removed.
+    /// What this machine has, in the order a Windows user most likely wants.
+    ///
+    /// **Detection only — the user's preference is applied above this.**
+    /// Settings live in the UI assembly, which references this one and not the
+    /// other way round; a launcher reaching for them would invert that.
+    ///
+    /// Read while a context menu is being built, so the detection behind it is
+    /// cached: a dozen file probes on the UI thread is what makes a menu feel
+    /// slow to open.
+    /// </summary>
+    public IReadOnlyList<TerminalOption> Terminals => InstalledTerminals.All();
+
+    /// <summary>
+    /// F4, and the plain menu entry: the chosen terminal, or the first one
+    /// found if that choice is gone or was never made.
+    ///
+    /// **Falls back to the old chain when detection finds nothing.** A machine
+    /// with a terminal somewhere none of the probes look must still get a
+    /// terminal, and "no entries were detected" is not the same fact as "there
+    /// is nothing installed".
     /// </summary>
     public void OpenTerminal(string directory)
     {
+        if (Terminals.FirstOrDefault() is { } preferred)
+        {
+            OpenTerminal(directory, preferred);
+            return;
+        }
+
         foreach (var (program, arguments) in new (string, string[])[]
         {
             ("wt.exe", ["-d", directory]),
@@ -98,28 +121,49 @@ public sealed class WindowsLauncher : IApplicationLauncher
             ("cmd.exe", []),
         })
         {
-            try
-            {
-                var info = new ProcessStartInfo(program)
-                {
-                    WorkingDirectory = directory,
-                    UseShellExecute = true,
-                };
+            if (Start(program, arguments, directory)) return;
+        }
+    }
 
-                foreach (var argument in arguments) info.ArgumentList.Add(argument);
+    /// <summary>One named terminal, from the menu.</summary>
+    public void OpenTerminal(string directory, TerminalOption terminal)
+    {
+        var arguments = terminal.Arguments
+            .Select(a => a.Replace("{dir}", directory, StringComparison.Ordinal))
+            .ToArray();
 
-                if (Process.Start(info) is { } started)
-                {
-                    started.Dispose();
-                    return;
-                }
-            }
-            catch (Exception ex)
+        // The folder reaches it one way or the other: as an argument where the
+        // terminal takes one, and as the working directory where it does not.
+        if (Start(terminal.Command, arguments, directory)) return;
+
+        // Uninstalled since the list was built, or refusing to start. Anything
+        // is better than a menu entry that does nothing.
+        OpenTerminal(directory);
+    }
+
+    private static bool Start(string program, IReadOnlyList<string> arguments, string directory)
+    {
+        try
+        {
+            var info = new ProcessStartInfo(program)
             {
-                // Win32Exception for "not found" is the expected case here, so
-                // it is not worth a diagnostic line per candidate.
-                Quiet.Swallowed("launcher", ex);
-            }
+                WorkingDirectory = directory,
+                UseShellExecute = true,
+            };
+
+            foreach (var argument in arguments) info.ArgumentList.Add(argument);
+
+            if (Process.Start(info) is not { } started) return false;
+
+            started.Dispose();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Win32Exception for "not found" is the expected case here, so it
+            // is not worth a diagnostic line per candidate.
+            Quiet.Swallowed("launcher", ex);
+            return false;
         }
     }
 

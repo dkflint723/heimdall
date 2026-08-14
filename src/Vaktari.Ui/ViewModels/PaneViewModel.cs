@@ -1180,8 +1180,61 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         _launcher?.OpenWith(entry.FullPath, option);
     }
 
+    /// <summary>
+    /// The terminals this machine has, the user's choice first and marked.
+    ///
+    /// **The preference is applied here rather than in the launcher**, because
+    /// settings live in this assembly and the launcher's does not reference it.
+    /// The platform reports what it found; which one is "the" terminal is a
+    /// question about the user, not about the machine.
+    ///
+    /// An id naming something not installed is ignored rather than honoured
+    /// into a failure — uninstalling Warp must not break F4.
+    /// </summary>
+    public IReadOnlyList<Vaktari.Core.FileSystem.TerminalOption> Terminals
+    {
+        get
+        {
+            var found = _launcher?.Terminals ?? [];
+            var wanted = Settings.AppSettings.Current.General.PreferredTerminal;
+
+            if (string.IsNullOrEmpty(wanted)) return found;
+            if (found.FirstOrDefault(t => t.Id == wanted) is not { } chosen) return found;
+
+            return [chosen with { IsPreferred = true }, .. found.Where(t => t.Id != wanted)];
+        }
+    }
+
+    /// <summary>
+    /// Whether to offer a choice at all. With one terminal installed — which is
+    /// most machines — a submenu holding a single entry is a hover for nothing,
+    /// so the menu shows the plain command instead.
+    /// </summary>
+    public bool HasSeveralTerminals => Terminals.Count > 1;
+
+    /// <summary>F4 and the plain entry: the chosen terminal.</summary>
     [RelayCommand]
-    public void OpenTerminalHere() => _launcher?.OpenTerminal(CurrentPath);
+    public void OpenTerminalHere()
+    {
+        if (Terminals.FirstOrDefault() is { } preferred)
+        {
+            _launcher?.OpenTerminal(CurrentPath, preferred);
+            return;
+        }
+
+        // Nothing was detected, which is not the same as nothing being
+        // installed: the launcher still has its own fall-through.
+        _launcher?.OpenTerminal(CurrentPath);
+    }
+
+    /// <summary>One named terminal, chosen from the submenu.</summary>
+    [RelayCommand]
+    public void OpenTerminalIn(Vaktari.Core.FileSystem.TerminalOption? terminal)
+    {
+        if (terminal is null) return;
+
+        _launcher?.OpenTerminal(CurrentPath, terminal);
+    }
 
 
 
@@ -1221,6 +1274,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             RebuildBreadcrumbs();
             OnPropertyChanged(nameof(IsRecentListing));
             OnPropertyChanged(nameof(IsTrashListing));
+            OnPropertyChanged(nameof(Terminals));
+            OnPropertyChanged(nameof(HasSeveralTerminals));
             OnPropertyChanged(nameof(CanActOnSelection));
             OnPropertyChanged(nameof(ShowParentPath));
             OnPropertyChanged(nameof(ShowMetadata));

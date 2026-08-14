@@ -65,6 +65,20 @@ public sealed record GeneralSettings
     public bool TabSwitchesSplitPanes { get; init; } = true;
 
     /// <summary>
+    /// Which terminal F4 opens, by id — "warp", "windows-terminal", "git-bash".
+    ///
+    /// Empty means "whichever is found first", which is what the application
+    /// always did and remains right for the many machines with exactly one.
+    ///
+    /// **An id rather than a path or a name.** A path breaks when the terminal
+    /// updates itself into a new versioned folder, and a display name is the
+    /// sort of thing that gets tidied up in a later release, silently resetting
+    /// everybody's choice. An id naming something not installed is ignored, so
+    /// uninstalling a terminal cannot break F4.
+    /// </summary>
+    public string PreferredTerminal { get; init; } = "";
+
+    /// <summary>
     /// Dolphin closes the inactive pane. Vaktari keeps it in
     /// RememberedRightPane so reopening the split returns to where it was, and
     /// that difference is deliberate — closing a split should not be a quiet

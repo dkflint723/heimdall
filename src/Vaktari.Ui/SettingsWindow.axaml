@@ -236,6 +236,34 @@
 
           <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 
+          <TextBlock Text="Terminal"
+                     FontSize="{DynamicResource FontSizeTiny}"
+                     Foreground="{DynamicResource ViewDimText}"/>
+
+          <StackPanel Spacing="6">
+            <!-- The chooser only earns its place on a machine with more than
+                 one, but it is shown regardless: a dropdown reading "Whichever
+                 is found first" is how somebody discovers the choice exists at
+                 all, and hiding it would make the feature depend on already
+                 knowing about it. -->
+            <ComboBox ItemsSource="{Binding AvailableTerminals}"
+                      SelectedItem="{Binding SelectedTerminal}"
+                      HorizontalAlignment="Stretch"
+                      FontSize="{DynamicResource FontSizeSmall}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TerminalChoice">
+                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="What F4 and “Open terminal here” open. Only the terminals found on this machine are listed; if you install another one, reopen Vaktari to see it."
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource ViewDimText}"
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+
+          <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
+
           <TextBlock Text="Status bar"
                      FontSize="{DynamicResource FontSizeTiny}"
                      Foreground="{DynamicResource ViewDimText}"/>

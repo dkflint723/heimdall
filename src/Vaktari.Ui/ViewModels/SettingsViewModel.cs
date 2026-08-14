@@ -30,6 +30,13 @@ namespace Vaktari.Ui.ViewModels;
 /// </summary>
 public sealed record FontOption(string Name, FontFamily Family, bool IsFollowDesktop);
 
+/// <summary>
+/// One row in the terminal chooser. <c>Id</c> empty is the "whichever is
+/// found first" row, which is what the application always did and stays right
+/// for the many machines with exactly one terminal.
+/// </summary>
+public sealed record TerminalChoice(string Id, string Name);
+
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsState _original;
@@ -222,6 +229,45 @@ public sealed partial class SettingsViewModel : ObservableObject
     private const string FollowDesktop = "Follow the desktop font";
 
     public IReadOnlyList<FontOption> AvailableFonts { get; }
+
+    /// <summary>
+    /// The terminals this machine has, for the chooser — with "whichever is
+    /// found first" at the top, since that is the behaviour anyone who has
+    /// never opened this dialog already has.
+    ///
+    /// Fed in by the window rather than probed here: this view model is
+    /// constructed on the UI thread when the dialog opens, and looking for a
+    /// dozen executables at that moment is a dialog that takes a beat to appear.
+    /// </summary>
+    public IReadOnlyList<TerminalChoice> AvailableTerminals { get; private set; } =
+        [new TerminalChoice("", "Whichever is found first")];
+
+    [ObservableProperty] private TerminalChoice? _selectedTerminal;
+
+    /// <summary>
+    /// Handed the detected terminals once they are known.
+    ///
+    /// **Matched by id, not by reference**: the stored preference comes from a
+    /// file and this list is built fresh, so comparing objects would silently
+    /// fall back to the first row and rewrite the user's choice the moment they
+    /// pressed Save. A preference naming something no longer installed keeps
+    /// the same treatment it gets everywhere else — ignored, not honoured into
+    /// a failure.
+    /// </summary>
+    public void UseTerminals(IEnumerable<Core.FileSystem.TerminalOption> terminals)
+    {
+        AvailableTerminals =
+        [
+            new TerminalChoice("", "Whichever is found first"),
+            .. terminals.Select(t => new TerminalChoice(t.Id, t.Name)),
+        ];
+
+        OnPropertyChanged(nameof(AvailableTerminals));
+
+        SelectedTerminal =
+            AvailableTerminals.FirstOrDefault(t => t.Id == _original.General.PreferredTerminal)
+            ?? AvailableTerminals[0];
+    }
 
     /// <summary>
     /// The running build, shown in the dialog's footer.
@@ -542,6 +588,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ConfirmMoveToTrash = ConfirmMoveToTrash,
                 ConfirmPermanentDelete = ConfirmPermanentDelete,
                 ConfirmClosingMultipleTabs = ConfirmClosingMultipleTabs,
+                PreferredTerminal = SelectedTerminal?.Id ?? "",
             },
 
             // Also guarded: `with` on a null record throws, so saving would have

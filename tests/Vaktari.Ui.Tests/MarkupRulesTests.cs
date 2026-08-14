@@ -214,6 +214,47 @@ public class MarkupRulesTests
             + string.Join("; ", dangling));
     }
 
+    /// <summary>
+    /// **A shortcut printed beside a menu row must actually do something.**
+    ///
+    /// The menu shows gestures now, and a gesture is a claim: press this and
+    /// the row happens. Nothing enforces it — InputGesture is display-only, so
+    /// a row can advertise Ctrl+Shift+C while no key binding exists, and the
+    /// only way anyone finds out is by pressing it and watching nothing occur.
+    /// Settings used to carry a sentence with the same problem, promising that
+    /// hidden entries kept working from the keyboard when most had no key.
+    ///
+    /// These four are handled in MainWindow.axaml.cs rather than declared in
+    /// markup, because they depend on what has focus: Enter and Alt+Enter act
+    /// on the row, Delete and Shift+Delete have to leave a rename box alone.
+    /// Named here so the rule can tell "deliberately elsewhere" from "not
+    /// bound at all".
+    /// </summary>
+    [Fact]
+    public void Every_shortcut_shown_in_the_menu_is_really_bound()
+    {
+        var doc = Markup();
+
+        var inCodeBehind = new[] { "Enter", "Delete", "Alt+Enter", "Shift+Delete" };
+
+        var bound = doc.Descendants(Avalonia + "KeyBinding")
+            .Select(k => (string?)k.Attribute("Gesture"))
+            .OfType<string>()
+            .Concat(inCodeBehind)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var lying = doc.Descendants(Avalonia + "MenuItem")
+            .Select(m => (Item: m, Gesture: (string?)m.Attribute("InputGesture")))
+            .Where(x => x.Gesture is not null && !bound.Contains(x.Gesture))
+            .Select(x => $"{Where(x.Item)} shows {x.Gesture}")
+            .ToList();
+
+        Assert.True(lying.Count == 0,
+            "These menu rows advertise a keyboard shortcut that no KeyBinding "
+            + "implements, so pressing it does nothing: "
+            + string.Join("; ", lying));
+    }
+
     /// <summary>A guard on the guards: if the resource stops being embedded, or
     /// the file moves, every rule above would pass against nothing.</summary>
     [Fact]

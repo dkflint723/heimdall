@@ -591,6 +591,11 @@ public partial class MainWindow : Window
     private void ShowSettings()
     {
         var model = new SettingsViewModel(AppSettings.Current, _defaultFileManager);
+
+        // The pane already holds the detected list, ordered and cached, so the
+        // dialog borrows it rather than probing the disk again as it opens.
+        if (_shell.ActiveTab is { } pane) model.UseTerminals(pane.Terminals);
+
         var window = new SettingsWindow(model);
 
         window.Closed += (_, _) =>
