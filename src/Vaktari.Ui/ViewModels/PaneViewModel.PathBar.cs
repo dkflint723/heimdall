@@ -119,7 +119,15 @@ public sealed partial class PaneViewModel
     public Task NavigateToPathText()
     {
         IsPathEditing = false;
-        return string.IsNullOrWhiteSpace(PathText) ? Task.CompletedTask : NavigateAsync(PathText.Trim());
+
+        if (string.IsNullOrWhiteSpace(PathText)) return Task.CompletedTask;
+
+        // **Expanded here and nowhere else.** This is the one place a path
+        // arrives as something a person typed, and %ProgramFiles% is how
+        // Windows names that folder everywhere else they will have met it.
+        // A path read from disk or from settings is used exactly as written,
+        // because a folder whose real name contains a percent sign is legal.
+        return NavigateAsync(PathVariables.Expand(PathText));
     }
 
     /// <summary>

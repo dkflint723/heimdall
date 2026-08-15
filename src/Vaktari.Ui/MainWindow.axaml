@@ -847,7 +847,7 @@
 
               <TextBox Text="{Binding ActiveTab.PathText}"
                        IsVisible="{Binding ActiveTab.IsPathEditing}"
-                       ToolTip.Tip="tab completes · enter goes · esc or click away cancels"
+                       ToolTip.Tip="tab completes · enter goes · esc or click away cancels&#10;%ProgramFiles%, %SystemDrive% and ~ are understood"
                        local:FocusBehavior.LostFocusCommand="{Binding ActiveTab.RevertPathTextCommand}"
                        local:FocusBehavior.FocusOnVisible="True"
                        FontFamily="monospace" FontSize="{DynamicResource FontSizeSmall}">
