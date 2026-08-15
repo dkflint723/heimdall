@@ -106,38 +106,27 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
 
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(parent)) return null;
 
-            // **index.theme is not proof that a theme WORKS.**
+            // **A variant is built on the theme beside it, and that belongs in
+            // the chain whether or not the variant can stand on its own.**
             //
-            // Papirus-Dark, downloaded and extracted on Windows, resolves not
-            // one of these: the icons for files and folders are not files in it
-            // at all, they are symbolic links into Papirus, and Windows creates
-            // no symbolic links without Developer Mode or an elevated
-            // extraction. 7-Zip reports each one it skipped, which is where the
-            // wall of "Dangerous link path was ignored" comes from.
+            // Papirus-Dark keeps its own recoloured artwork and links to Papirus
+            // for everything else, and Inherits= is no help — it names
+            // breeze-dark, which nobody here has. So the base goes behind it:
+            // the variant's own icons still win, and Papirus fills the gaps the
+            // links used to.
             //
-            // A structural check would pass this theme happily, which is why
-            // this asks it to produce an actual icon instead.
-            if (new FreedesktopIconTheme(name, [parent], naming) is { } theme
-                && theme.Resolve(Probe, 48) is not null)
-                return theme;
+            // Applied always rather than only as a rescue, because the holes are
+            // not all-or-nothing. Dark resolves plenty on its own and still had
+            // no folder icon at any size a listing asks for — its 48-pixel
+            // folder is a link to a link, and following one hop finds a file
+            // that is itself only another name. One line of chain covers every
+            // depth of that.
+            var theme = new FreedesktopIconTheme(name, [parent], naming, VariantBase(parent, name));
 
-            // Nothing — but that is usually the links, not the theme. A variant
-            // keeps its own recoloured artwork and links to its base for the
-            // rest, so what survives extraction is a real theme with holes
-            // exactly where the aliases were: Papirus-Dark arrives with 7,579
-            // icons of its own and not one mimetype or folder among them.
-            //
-            // **The base theme is sitting right beside it**, because they come
-            // out of the same archive, and putting it behind the variant in the
-            // chain is what those links meant in the first place. Vaktari used
-            // to refuse the folder outright and tell the user to pick a
-            // different one; it can just work instead.
-            if (VariantBase(parent, name) is { } based
-                && new FreedesktopIconTheme(name, [parent], naming, based) is { } repaired
-                && repaired.Resolve(Probe, 48) is not null)
-                return repaired;
-
-            return null;
+            // **index.theme is still not proof that a theme WORKS.** A
+            // structural check would pass a folder that resolves nothing at
+            // all, so this asks it to produce an actual icon instead.
+            return theme.Resolve(Probe, 48) is null ? null : theme;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -308,11 +297,101 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
                 // Unreadable theme directory: it contributes nothing.
             }
 
+            AddAliases(dir, map);
+
             return map;
         });
 
+    /// <summary>
+    /// Folds in what the theme's symbolic links meant.
+    ///
+    /// **Windows creates no symbolic links without Developer Mode**, so a theme
+    /// that was unpacked here has its links written down instead — see
+    /// <see cref="IconThemeArchive"/>. Papirus is roughly forty thousand of
+    /// them, and without this the theme arrives with holes precisely where
+    /// files and folders are.
+    ///
+    /// Absent for a theme somebody extracted themselves, in which case this does
+    /// nothing and the theme reads exactly as it did before.
+    /// </summary>
+    private static void AddAliases(string dir, Dictionary<string, List<string>> map)
+    {
+        var index = Path.Combine(dir, IconThemeArchive.AliasIndex);
+
+        if (!File.Exists(index)) return;
+
+        // A theme links whole folders as well as single icons, and the same
+        // folder many times over — Papirus-Dark points every size it has at
+        // Papirus. Expanded once each.
+        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            foreach (var line in File.ReadLines(index))
+            {
+                var tab = line.IndexOf('\t', StringComparison.Ordinal);
+                if (tab <= 0) continue;
+
+                var from = Path.GetFullPath(Path.Combine(dir, line[..tab]));
+                var to = Path.GetFullPath(Path.Combine(dir, line[(tab + 1)..]));
+
+                if (File.Exists(to))
+                {
+                    // The alias is another NAME for that file, which is the
+                    // whole of what an icon alias is.
+                    Add(map, Path.GetFileNameWithoutExtension(from), to);
+                }
+                else if (Directory.Exists(to) && folders.Add(to))
+                {
+                    // A linked folder makes every icon in it reachable here. The
+                    // real path is what gets recorded, so the size written in it
+                    // is still the size that gets scored.
+                    foreach (var file in Directory.EnumerateFiles(to, "*",
+                                 new EnumerationOptions
+                                 {
+                                     RecurseSubdirectories = true,
+                                     IgnoreInaccessible = true,
+                                 }))
+                    {
+                        if (Path.GetExtension(file) is not (".svg" or ".png")) continue;
+
+                        Add(map, Path.GetFileNameWithoutExtension(file), file);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // An unreadable index costs the aliases and nothing else.
+        }
+
+        static void Add(Dictionary<string, List<string>> map, string name, string path)
+        {
+            if (!map.TryGetValue(name, out var paths)) map[name] = paths = [];
+
+            paths.Add(path);
+        }
+    }
+
+    /// <summary>
+    /// The icon a theme chain offers for a name, at about a size.
+    ///
+    /// **A theme earlier in the chain wins, but not at any size.** This used to
+    /// take the first theme that had the name at all: Papirus-Dark keeps a real
+    /// 16-pixel folder and gets its larger ones by linking to Papirus, so a
+    /// 48-pixel row was drawn with 16-pixel artwork while a perfectly good
+    /// 48-pixel icon sat one theme further down the chain.
+    ///
+    /// So a theme is only allowed to answer if what it has is large enough to
+    /// use, and the closest icon anywhere is kept as the answer of last resort —
+    /// which is roughly what the specification describes, and the shape every
+    /// implementation of it ends up with.
+    /// </summary>
     private string? Search(string name, int size)
     {
+        string? nearestAnywhere = null;
+        var nearestScore = int.MaxValue;
+
         foreach (var theme in _searchOrder)
         {
             foreach (var root in _roots)
@@ -327,8 +406,16 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
 
                 foreach (var candidate in candidates)
                 {
-                    var score = SizeDistance(candidate, size);
-                    if (score >= bestScore) continue;
+                    var found = SizeOf(candidate);
+                    var score = Distance(found, size);
+
+                    if (score < nearestScore)
+                    {
+                        nearestScore = score;
+                        nearestAnywhere = candidate;
+                    }
+
+                    if (!Usable(found, size) || score >= bestScore) continue;
 
                     bestScore = score;
                     best = candidate;
@@ -338,34 +425,55 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
             }
         }
 
-        return null;
+        return nearestAnywhere;
     }
 
     /// <summary>
     /// The size a directory serves, read from its path — themes lay out as
     /// theme/context/22/icon.svg or theme/22x22/context/icon.png, and both
-    /// forms put the number in a path segment.
+    /// forms put the number in a path segment. Zero for scalable, and -1 where
+    /// the path says nothing.
     /// </summary>
-    private static int SizeDistance(string path, int wanted)
+    private static int SizeOf(string path)
     {
-        // **Both separators.** This split on '/' alone, which was correct while
-        // the reader was Linux-only and silently broke the moment a Windows
-        // path reached it: the whole path came back as ONE segment, no size
-        // ever parsed, every candidate scored the same, and the first file the
-        // enumeration happened to return won. For Papirus that is 16x16, so a
-        // 64-pixel tile was painted with 16-pixel artwork — and because every
-        // score tied, the scalable-beats-raster preference never fired either.
-        foreach (var segment in path.Split('/', '\\'))
-        {
-            if (segment.Equals("scalable", StringComparison.OrdinalIgnoreCase)) return 1;
+        // **Both separators, and from the leaf inwards.**
+        //
+        // Splitting on '/' alone was correct while this was Linux-only and
+        // silently broke the moment a Windows path reached it: the whole path
+        // came back as one segment and every candidate scored the same.
+        //
+        // Backwards because the segments before the theme are somebody's
+        // folders, not ours. Read forwards, a theme unpacked under a folder
+        // called 2024 gave every icon in it a size of 2024.
+        var segments = path.Split('/', '\\');
 
-            var digits = segment.Split('x')[0];
-            if (int.TryParse(digits, out var found) && found > 0)
-                return Math.Abs(found - wanted) * 2 + 2;
+        // Skipping the file name: an icon may perfectly well be called 24.png.
+        for (var i = segments.Length - 2; i >= 0; i--)
+        {
+            if (segments[i].Equals("scalable", StringComparison.OrdinalIgnoreCase)) return 0;
+
+            var digits = segments[i].Split('x')[0];
+            if (int.TryParse(digits, out var found) && found > 0) return found;
         }
 
-        return int.MaxValue - 1;
+        return -1;
     }
+
+    /// <summary>Scalable beats every raster, because an SVG renders correctly at
+    /// any size where a fixed one does not.</summary>
+    private static int Distance(int found, int wanted) => found switch
+    {
+        0 => 1,
+        < 0 => int.MaxValue - 1,
+        _ => Math.Abs(found - wanted) * 2 + 2,
+    };
+
+    /// <summary>
+    /// Whether an icon is big enough to be worth using, rather than blown up to
+    /// fill a row. Larger is always fine — scaling down is what every icon set
+    /// is designed for — and a quarter under is close enough not to show.
+    /// </summary>
+    private static bool Usable(int found, int wanted) => found == 0 || found * 4 >= wanted * 3;
 
     /// <summary>
     /// Special folders get their own icon names, which is why Dolphin shows a

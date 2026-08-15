@@ -330,6 +330,111 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void GetMoreIcons() => OpenUrlRequested?.Invoke(this, IconThemesUrl);
 
+    // ---- fetching one ------------------------------------------------------
+
+    /// <summary>The themes Vaktari can fetch itself.</summary>
+    public IReadOnlyList<Core.FileSystem.IconThemeSource> AvailableThemes =>
+        Core.FileSystem.IconThemeCatalogue.All;
+
+    /// <summary>
+    /// How the fetching is done, so a test can exercise this without a network.
+    /// The real one downloads a hundred megabytes.
+    /// </summary>
+    public static Func<
+        Core.FileSystem.IconThemeSource,
+        IProgress<double>?,
+        CancellationToken,
+        Task<Core.FileSystem.IconThemeArchive.Installed>> Installer { get; set; } =
+        Vaktari.Ui.Settings.IconThemeInstaller.InstallAsync;
+
+    [ObservableProperty] private bool _isFetchingIconTheme;
+    [ObservableProperty] private double _iconThemeProgress;
+    [ObservableProperty] private string _iconThemeStatus = "";
+
+    public bool HasIconThemeStatus => IconThemeStatus.Length > 0;
+
+    partial void OnIconThemeStatusChanged(string value)
+        => OnPropertyChanged(nameof(HasIconThemeStatus));
+
+    partial void OnIsFetchingIconThemeChanged(bool value)
+        => FetchIconThemeCommand.NotifyCanExecuteChanged();
+
+    private bool CanFetchIconTheme() => !IsFetchingIconTheme;
+
+    /// <summary>
+    /// Downloads a theme and puts it to use, with no further asking.
+    ///
+    /// **The whole point is that nothing else is required of the user.** Doing
+    /// this by hand means finding the project, downloading an archive,
+    /// extracting it past a wall of "cannot create symbolic link" errors, and
+    /// then knowing that the folder to point at is the one holding index.theme
+    /// rather than the one the archive made. None of those steps is
+    /// interesting and one of them cannot be completed at all on a machine
+    /// without Developer Mode.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanFetchIconTheme))]
+    private async Task FetchIconTheme(Core.FileSystem.IconThemeSource? source)
+    {
+        if (source is null || IsFetchingIconTheme) return;
+
+        IsFetchingIconTheme = true;
+        IconThemeProgress = 0;
+        IconThemeProblem = "";
+        IconThemeStatus = $"Fetching {source.Name}…";
+
+        try
+        {
+            var progress = new Progress<double>(p =>
+            {
+                IconThemeProgress = p;
+                IconThemeStatus = $"Fetching {source.Name}… {p:P0}";
+            });
+
+            var installed = await Installer(source, progress, CancellationToken.None);
+
+            // The archive holds several themes — Papirus brings its light and
+            // dark variants — so the one named is the one selected, and the
+            // rest are there for the folder picker.
+            var chosen = installed.Themes.FirstOrDefault(t =>
+                    string.Equals(Path.GetFileName(t), source.Name, StringComparison.OrdinalIgnoreCase))
+                ?? installed.Themes.FirstOrDefault();
+
+            if (chosen is null)
+            {
+                IconThemeStatus = "";
+                IconThemeProblem =
+                    $"{source.Name} downloaded, but there was no icon theme inside it. "
+                    + "That usually means the project has moved its files around; "
+                    + "choosing a folder by hand still works.";
+                return;
+            }
+
+            IconThemeFolder = chosen;
+
+            var others = installed.Themes.Count - 1;
+
+            IconThemeStatus = others > 0
+                ? $"{Path.GetFileName(chosen)} is now in use. {others} more "
+                  + (others == 1 ? "variant is" : "variants are") + " available under Choose."
+                : $"{Path.GetFileName(chosen)} is now in use.";
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            IconThemeStatus = "";
+            IconThemeProblem = $"{source.Name} could not be downloaded. {e.Message}";
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            IconThemeStatus = "";
+            IconThemeProblem = $"{source.Name} could not be unpacked. {e.Message}";
+        }
+        finally
+        {
+            IsFetchingIconTheme = false;
+            IconThemeProgress = 0;
+        }
+    }
+
     /// <summary>
     /// Handed the detected terminals once they are known.
     ///

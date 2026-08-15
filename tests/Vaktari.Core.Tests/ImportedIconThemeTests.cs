@@ -286,6 +286,66 @@ public sealed class ImportedIconThemeTests : IDisposable
     }
 
     /// <summary>
+    /// **A theme earlier in the chain wins, but not at any size.**
+    ///
+    /// Papirus-Dark keeps a real 16-pixel folder icon and gets its larger ones
+    /// by linking to Papirus. Taking the first theme that had the name at all
+    /// therefore drew a 48-pixel row with 16-pixel artwork while a perfectly
+    /// good 48-pixel icon sat one theme further down — visible immediately on
+    /// the real download, and invisible to every test here, because a theme
+    /// built by hand has whatever sizes the test gave it in every theme.
+    /// </summary>
+    [Fact]
+    public void A_theme_too_small_to_use_yields_to_the_one_behind_it()
+    {
+        var dark = BuildDarkVariant();
+
+        // Its own, and far too small for the row being asked about.
+        Directory.CreateDirectory(Path.Combine(dark, "16x16", "places"));
+        File.WriteAllBytes(Path.Combine(dark, "16x16", "places", "folder.png"), [0]);
+
+        var theme = FreedesktopIconTheme.FromFolder(dark)!;
+
+        var resolved = theme.Resolve(["folder"], 48);
+
+        Assert.NotNull(resolved);
+        Assert.Contains($"48x48{Path.DirectorySeparatorChar}", resolved!, StringComparison.Ordinal);
+
+        // ...and at a size it can actually serve, its own is still preferred.
+        Assert.Contains("Papirus-Dark", theme.Resolve(["folder"], 16)!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **The size is the theme's, not the path's.** Read from the front, a
+    /// theme unpacked under a folder that happens to be called 2024 gave every
+    /// icon in it a size of 2024 — and since that beat nothing, the icon chosen
+    /// was whichever the enumeration returned first.
+    ///
+    /// Not hypothetical: the fetched themes land under a folder named for the
+    /// pack, and a temporary directory named with random hex is all digits
+    /// often enough to have made this suite flaky rather than red.
+    /// </summary>
+    [Fact]
+    public void A_number_in_the_folders_above_the_theme_is_not_a_size()
+    {
+        var awkward = Path.Combine(_root, "2024", "Papirus");
+
+        foreach (var size in new[] { 16, 48 })
+        {
+            Directory.CreateDirectory(Path.Combine(awkward, $"{size}x{size}", "mimetypes"));
+            File.WriteAllBytes(
+                Path.Combine(awkward, $"{size}x{size}", "mimetypes", "text-x-generic.png"), [0]);
+        }
+
+        File.WriteAllText(Path.Combine(awkward, "index.theme"), "[Icon Theme]\nName=Papirus\n");
+
+        var theme = FreedesktopIconTheme.FromFolder(awkward)!;
+
+        Assert.Contains("16x16", theme.Resolve(["text-x-generic"], 16)!, StringComparison.Ordinal);
+        Assert.Contains("48x48", theme.Resolve(["text-x-generic"], 48)!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The fallback is for a variant of a theme that is present, not a licence
     /// to borrow from any folder that happens to be nearby. A name must extend
     /// the base at a separator, so an unrelated theme is never quietly used.

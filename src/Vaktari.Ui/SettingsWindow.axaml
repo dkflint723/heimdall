@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Vaktari.Ui.ViewModels"
+        xmlns:fs="clr-namespace:Vaktari.Core.FileSystem;assembly=Vaktari.Core"
         x:Class="Vaktari.Ui.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="Vaktari settings"
@@ -280,7 +281,62 @@
                        Foreground="{DynamicResource ViewDimText}"
                        TextWrapping="Wrap"/>
 
-            <Button Content="Find icon themes to download"
+            <!-- **Or let Vaktari fetch one.** Doing it by hand means finding the
+                 project, downloading an archive and extracting it past forty
+                 thousand "cannot create symbolic link" errors, because Windows
+                 will not make the links a theme is built out of. Unpacked here
+                 those links are read rather than made, so there is nothing to
+                 get past. -->
+            <ItemsControl ItemsSource="{Binding AvailableThemes}" Margin="0,6,0,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="fs:IconThemeSource">
+                  <Border Padding="10,8" Margin="0,0,0,4"
+                          CornerRadius="4"
+                          Background="{DynamicResource ViewAlternateRow}">
+                    <DockPanel>
+                      <Button DockPanel.Dock="Right" Content="Get"
+                              Margin="8,0,0,0" Padding="12,4"
+                              VerticalAlignment="Center"
+                              FontSize="{DynamicResource FontSizeSmall}"
+                              Command="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).FetchIconThemeCommand}"
+                              CommandParameter="{Binding}"/>
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Name}"
+                                   FontSize="{DynamicResource FontSizeSmall}"/>
+                        <TextBlock Text="{Binding Summary}"
+                                   FontSize="{DynamicResource FontSizeTiny}"
+                                   Foreground="{DynamicResource ViewDimText}"
+                                   TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+                          <TextBlock FontSize="{DynamicResource FontSizeTiny}"
+                                     Foreground="{DynamicResource ViewDimText}"
+                                     Text="{Binding Megabytes, StringFormat='About {0} MB'}"/>
+                          <TextBlock Text="·"
+                                     FontSize="{DynamicResource FontSizeTiny}"
+                                     Foreground="{DynamicResource ViewDimText}"/>
+                          <TextBlock Text="{Binding Licence}"
+                                     FontSize="{DynamicResource FontSizeTiny}"
+                                     Foreground="{DynamicResource ViewDimText}"/>
+                        </StackPanel>
+                      </StackPanel>
+                    </DockPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ProgressBar IsVisible="{Binding IsFetchingIconTheme}"
+                         Minimum="0" Maximum="1"
+                         Height="3"
+                         Value="{Binding IconThemeProgress}"/>
+
+            <TextBlock Text="{Binding IconThemeStatus}"
+                       IsVisible="{Binding HasIconThemeStatus}"
+                       FontSize="{DynamicResource FontSizeTiny}"
+                       Foreground="{DynamicResource AccentColour}"
+                       TextWrapping="Wrap"/>
+
+            <Button Content="Find more icon themes"
                     Padding="0" Margin="0,2,0,0"
                     Background="Transparent" BorderThickness="0"
                     Foreground="{DynamicResource AccentColour}"

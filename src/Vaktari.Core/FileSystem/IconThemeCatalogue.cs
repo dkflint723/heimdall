@@ -1,0 +1,63 @@
+namespace Vaktari.Core.FileSystem;
+
+/// <summary>
+/// A theme Vaktari can fetch and unpack on somebody's behalf.
+/// </summary>
+/// <param name="Name">What it is called, and the folder it lands in.</param>
+/// <param name="Summary">One line, for the row in Settings.</param>
+/// <param name="Url">A .tar.gz. Not a .zip: the tar format records symbolic
+/// links, and for these themes the links are most of the theme.</param>
+/// <param name="Megabytes">Roughly, so nobody starts a hundred-megabyte
+/// download without being told it is one.</param>
+/// <param name="Licence">Theirs, not ours, and worth saying out loud.</param>
+public sealed record IconThemeSource(
+    string Name,
+    string Summary,
+    string Url,
+    int Megabytes,
+    string Licence);
+
+/// <summary>
+/// The themes offered in Settings, and where they are put.
+///
+/// **Short on purpose.** Anything published as a freedesktop icon theme works,
+/// and the folder picker beside this takes any of them; what a built-in list
+/// adds is that one of them can be had without leaving the window, hitting the
+/// symbolic-link wall Windows puts in the way, or knowing that the folder to
+/// point at is the one holding index.theme. A long list of entries nobody has
+/// checked would add nothing but the chance of one being wrong.
+/// </summary>
+public static class IconThemeCatalogue
+{
+    public static IReadOnlyList<IconThemeSource> All { get; } =
+    [
+        new IconThemeSource(
+            "Papirus",
+            "Flat, colourful, and the most complete free icon set there is. "
+            + "Installs the light and dark variants too.",
+            "https://github.com/PapirusDevelopmentTeam/papirus-icon-theme/archive/refs/heads/master.tar.gz",
+            110,
+            "GPL-3.0"),
+    ];
+
+    /// <summary>
+    /// Where fetched themes are kept: per user, beside everything else this
+    /// application stores, and needing no elevation to write.
+    /// </summary>
+    public static string InstallRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Vaktari",
+        "Icons");
+
+    /// <summary>
+    /// One folder per pack, holding the themes that came out of it.
+    ///
+    /// **Grouped rather than flattened**, for two reasons. One download is
+    /// commonly several themes — Papirus brings its light and dark variants —
+    /// and two packs that happen to share a theme name would otherwise
+    /// overwrite each other. And the themes in a pack link to one another by
+    /// relative path, so they have to stay siblings to keep working.
+    /// </summary>
+    public static string FolderFor(IconThemeSource source) =>
+        Path.Combine(InstallRoot, source.Name);
+}
