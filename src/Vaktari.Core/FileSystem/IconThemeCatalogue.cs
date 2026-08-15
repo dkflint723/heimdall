@@ -60,4 +60,57 @@ public static class IconThemeCatalogue
     /// </summary>
     public static string FolderFor(IconThemeSource source) =>
         Path.Combine(InstallRoot, source.Name);
+
+    /// <summary>
+    /// The themes already on this machine, for the list in Settings.
+    ///
+    /// **Found rather than remembered.** Nothing records what was installed:
+    /// one download produces several themes and cannot say in advance how many
+    /// or what they are called, and a folder somebody deleted by hand would
+    /// leave a remembered list offering a theme that is not there. A directory
+    /// with an index.theme in it is a theme, which is the same rule the reader
+    /// itself uses.
+    /// </summary>
+    public static IReadOnlyList<InstalledIconTheme> Installed()
+    {
+        var root = InstallRoot;
+
+        if (!Directory.Exists(root)) return [];
+
+        var found = new List<InstalledIconTheme>();
+
+        try
+        {
+            foreach (var pack in Directory.EnumerateDirectories(root))
+            {
+                // A pack folder holding themes, which is what fetching one
+                // produces...
+                foreach (var theme in Directory.EnumerateDirectories(pack))
+                    if (File.Exists(Path.Combine(theme, "index.theme")))
+                        found.Add(new InstalledIconTheme(
+                            Path.GetFileName(theme), Path.GetFileName(pack), theme));
+
+                // ...or a theme sitting directly here, which is what somebody
+                // unpacking one into this folder themselves would produce.
+                if (File.Exists(Path.Combine(pack, "index.theme")))
+                    found.Add(new InstalledIconTheme(
+                        Path.GetFileName(pack), Path.GetFileName(pack), pack));
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // An unreadable folder offers no themes, which is not worth failing
+            // the whole settings window over.
+        }
+
+        found.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+
+        return found;
+    }
 }
+
+/// <param name="Name">The theme's own name, which is its folder's name.</param>
+/// <param name="Pack">The download it came from, for telling two themes of the
+/// same name apart.</param>
+/// <param name="Folder">What to hand the reader.</param>
+public sealed record InstalledIconTheme(string Name, string Pack, string Folder);

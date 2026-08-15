@@ -85,6 +85,110 @@ public static class IconThemeArchive
         }
     }
 
+    /// <summary>
+    /// One entry, whichever kind of archive it came out of.
+    /// </summary>
+    /// <param name="Name">Its path inside the archive, unverified.</param>
+    /// <param name="Kind">What it is.</param>
+    /// <param name="Length">What it claims to unpack to, or -1 if it does not say.</param>
+    /// <param name="Link">Where a link points, relative to the folder it sits in.</param>
+    /// <param name="CopyInto">Writes its content, called only for a file being
+    /// kept. An action rather than a stream to dispose, because the two formats
+    /// disagree: a zip entry's stream must be closed and a tar entry's belongs
+    /// to the reader and must not be.</param>
+    private sealed record Entry(
+        string Name, EntryKind Kind, long Length, string? Link, Action<Stream> CopyInto);
+
+    private enum EntryKind { File, Folder, Link, Other }
+
+    /// <summary>
+    /// **Read from the file's first bytes, not its name.** Somebody who
+    /// downloaded a theme themselves may hand over anything, and a .zip renamed
+    /// to .tar.gz is a confusing error rather than an obvious one.
+    /// </summary>
+    private static IEnumerable<Entry> Read(Stream archive, CancellationToken token)
+    {
+        Span<byte> magic = stackalloc byte[4];
+
+        var buffered = new BufferedStream(archive, 8192);
+        var read = buffered.ReadAtLeast(magic, 4, throwOnEndOfStream: false);
+
+        var gzip = read >= 2 && magic[0] == 0x1f && magic[1] == 0x8b;
+        var zip = read >= 4 && magic[0] == 'P' && magic[1] == 'K' && magic[2] == 3 && magic[3] == 4;
+
+        if (!gzip && !zip)
+            throw new InvalidDataException(
+                "that is not a .tar.gz or a .zip. An icon theme is usually published as one of those.");
+
+        // The magic has been consumed and neither reader can seek back for it,
+        // so it is put in front again.
+        var whole = new ConcatStream(magic[..read].ToArray(), buffered);
+
+        return gzip ? FromTar(whole, token) : FromZip(whole, token);
+    }
+
+    private static IEnumerable<Entry> FromTar(Stream archive, CancellationToken token)
+    {
+        using var gzip = new GZipStream(archive, CompressionMode.Decompress);
+        using var tar = new TarReader(gzip);
+
+        while (tar.GetNextEntry() is { } entry)
+        {
+            token.ThrowIfCancellationRequested();
+
+            var kind = entry.EntryType switch
+            {
+                TarEntryType.Directory => EntryKind.Folder,
+                TarEntryType.SymbolicLink or TarEntryType.HardLink => EntryKind.Link,
+                TarEntryType.RegularFile or TarEntryType.V7RegularFile => EntryKind.File,
+                _ => EntryKind.Other,
+            };
+
+            var current = entry;
+
+            yield return new Entry(
+                entry.Name, kind, entry.Length, entry.LinkName,
+                to =>
+                {
+                    if (current.DataStream is { } from) Copy(from, to, current.Name);
+                });
+        }
+    }
+
+    /// <summary>
+    /// **A zip carries no links**, so a theme from one arrives with whatever
+    /// its publisher chose to duplicate and nothing else. That is not a reason
+    /// to refuse it: the reader falls back to the theme a variant is named
+    /// after, which covers the case a zip loses.
+    /// </summary>
+    private static IEnumerable<Entry> FromZip(Stream archive, CancellationToken token)
+    {
+        using var zip = new ZipArchive(archive, ZipArchiveMode.Read);
+
+        foreach (var entry in zip.Entries)
+        {
+            token.ThrowIfCancellationRequested();
+
+            // A directory is an entry whose name ends in a separator and which
+            // has nothing in it; every other directory is implied by its files.
+            var folder = entry.Name.Length == 0;
+
+            var current = entry;
+
+            yield return new Entry(
+                entry.FullName,
+                folder ? EntryKind.Folder : EntryKind.File,
+                entry.Length,
+                null,
+                to =>
+                {
+                    using var from = current.Open();
+
+                    Copy(from, to, current.FullName);
+                });
+        }
+    }
+
     private static (int Icons, long Bytes, List<(string Alias, string Target)> Aliases) Unpack(
         Stream archive, string staging, CancellationToken token)
     {
@@ -95,10 +199,7 @@ public static class IconThemeArchive
         var bytes = 0L;
         var entries = 0;
 
-        using var gzip = new GZipStream(archive, CompressionMode.Decompress);
-        using var tar = new TarReader(gzip);
-
-        while (tar.GetNextEntry() is { } entry)
+        foreach (var entry in Read(archive, token))
         {
             token.ThrowIfCancellationRequested();
 
@@ -107,20 +208,20 @@ public static class IconThemeArchive
 
             if (Contained(staging, entry.Name) is not { } path) continue;
 
-            switch (entry.EntryType)
+            switch (entry.Kind)
             {
-                case TarEntryType.Directory:
+                case EntryKind.Folder:
                     Directory.CreateDirectory(path);
                     break;
 
-                case TarEntryType.SymbolicLink or TarEntryType.HardLink:
+                case EntryKind.Link:
                     // **Recorded, never created.** The link is what Windows
                     // refuses; the meaning of the link is all Vaktari needs,
                     // and a line of text carries it.
-                    if (entry.LinkName is { Length: > 0 } target) aliases.Add((entry.Name, target));
+                    if (entry.Link is { Length: > 0 } target) aliases.Add((entry.Name, target));
                     break;
 
-                case TarEntryType.RegularFile or TarEntryType.V7RegularFile:
+                case EntryKind.File:
                     if (!IsThemeContent(path)) break;
                     if (entry.Length > MaxEntryBytes)
                         throw new InvalidDataException($"'{entry.Name}' is far too large to be an icon.");
@@ -129,7 +230,7 @@ public static class IconThemeArchive
 
                     using (var file = File.Create(path))
                     {
-                        entry.DataStream?.CopyTo(file);
+                        entry.CopyInto(file);
                         bytes += file.Length;
                     }
 
@@ -296,6 +397,73 @@ public static class IconThemeArchive
 
         return extension.Equals(".svg", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".png", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A few bytes already read, and then the rest of the stream.
+    ///
+    /// The format is decided by looking at the start of the file, and neither
+    /// the tar reader nor the zip reader can be asked to rewind — a download
+    /// arrives as a network stream, which cannot seek at all.
+    /// </summary>
+    private sealed class ConcatStream(byte[] head, Stream rest) : Stream
+    {
+        private int _at;
+
+        public override int Read(byte[] buffer, int offset, int count)
+            => Read(buffer.AsSpan(offset, count));
+
+        public override int Read(Span<byte> buffer)
+        {
+            if (_at >= head.Length) return rest.Read(buffer);
+
+            var take = Math.Min(buffer.Length, head.Length - _at);
+
+            head.AsSpan(_at, take).CopyTo(buffer);
+            _at += take;
+
+            return take;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => _at; set => throw new NotSupportedException(); }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) rest.Dispose();
+
+            base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>
+    /// **Stopped as it is written, not afterwards.** An archive is free to
+    /// declare one byte in its header and then supply a gigabyte, so the header
+    /// is a first filter and this is the one that holds.
+    /// </summary>
+    private static void Copy(Stream from, Stream to, string name)
+    {
+        var buffer = new byte[81920];
+        var total = 0L;
+        int read;
+
+        while ((read = from.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            total += read;
+
+            if (total > MaxEntryBytes)
+                throw new InvalidDataException($"'{name}' is far too large to be an icon.");
+
+            to.Write(buffer, 0, read);
+        }
     }
 
     private static void Delete(string folder)

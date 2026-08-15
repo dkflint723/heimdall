@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -93,8 +94,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             _iconThemeProblem =
                 $"That folder is no longer an icon theme — it may have been moved or deleted. "
-                + "Choose it again, or clear it.";
+                + "Pick another from the list, or Vaktari's own icons.";
         }
+
+        // Built from the disk once the chosen folder is known, so the list
+        // opens already showing what is in use. The field was assigned above
+        // rather than the property, so nothing has rebuilt it yet.
+        RefreshIconThemes();
         _followDesktopColours = views.FollowDesktopColours;
         _themeModeIndex = views.ThemeMode switch
         {
@@ -297,23 +303,114 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IconThemeLabel));
         OnPropertyChanged(nameof(HasIconTheme));
+
+        // Set from somewhere other than the list — browsing, or a theme that
+        // has just been installed — so the list is rebuilt around it.
+        if (!_syncingIconThemes) RefreshIconThemes();
+    }
+
+    // ---- the list of themes to pick from -----------------------------------
+
+    /// <summary>One row in the list: what it is called, and what to hand the
+    /// reader.</summary>
+    public sealed record IconThemeChoice(string Label, string Folder);
+
+    public ObservableCollection<IconThemeChoice> IconThemeChoices { get; } = [];
+
+    [ObservableProperty] private IconThemeChoice? _selectedIconTheme;
+
+    /// <summary>
+    /// Guards the two directions against each other: choosing from the list
+    /// sets the folder, and setting the folder rebuilds the list and selects in
+    /// it. Without this the two would take turns forever.
+    /// </summary>
+    private bool _syncingIconThemes;
+
+    /// <summary>
+    /// Rebuilds the list from what is actually on disk.
+    ///
+    /// **Read rather than remembered.** One download produces several themes
+    /// and cannot say in advance how many; a folder deleted by hand would leave
+    /// a remembered list offering something that is not there. Anything chosen
+    /// by browsing is added on the end, so a theme kept somewhere else is still
+    /// a row in the list rather than a reason for the list to disagree with the
+    /// setting.
+    /// </summary>
+    public void RefreshIconThemes()
+    {
+        _syncingIconThemes = true;
+
+        try
+        {
+            IconThemeChoices.Clear();
+            IconThemeChoices.Add(new IconThemeChoice("Vaktari's own icons", ""));
+
+            foreach (var installed in Core.FileSystem.IconThemeCatalogue.Installed())
+                IconThemeChoices.Add(new IconThemeChoice(installed.Name, installed.Folder));
+
+            if (IconThemeFolder.Length > 0 && !IconThemeChoices.Any(Chosen))
+                IconThemeChoices.Add(new IconThemeChoice(IconThemeLabel + "  (chosen folder)", IconThemeFolder));
+
+            SelectedIconTheme = IconThemeChoices.FirstOrDefault(Chosen) ?? IconThemeChoices[0];
+        }
+        finally
+        {
+            _syncingIconThemes = false;
+        }
+
+        bool Chosen(IconThemeChoice choice) => Core.FileSystem.PathRules.Same(choice.Folder, IconThemeFolder);
+    }
+
+    partial void OnSelectedIconThemeChanged(IconThemeChoice? value)
+    {
+        if (_syncingIconThemes || value is null) return;
+
+        _syncingIconThemes = true;
+
+        try
+        {
+            IconThemeFolder = value.Folder;
+            IconThemeProblem = "";
+            IconThemeStatus = "";
+        }
+        finally
+        {
+            _syncingIconThemes = false;
+        }
     }
 
     /// <summary>Raised so the window can open a folder picker; a view model has
     /// no business owning a dialog.</summary>
     public event EventHandler? IconThemeBrowseRequested;
 
-    /// <summary>And so it can open a browser. Same reason.</summary>
+    /// <summary>And a file picker, for an archive somebody downloaded.</summary>
+    public event EventHandler? IconThemeArchiveRequested;
+
+    /// <summary>And a browser, or a folder in whatever shows folders.</summary>
     public event EventHandler<string>? OpenUrlRequested;
 
     [RelayCommand]
     private void BrowseForIconTheme() => IconThemeBrowseRequested?.Invoke(this, EventArgs.Empty);
 
+    [RelayCommand(CanExecute = nameof(CanFetchIconTheme))]
+    private void PickIconThemeArchive() => IconThemeArchiveRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Opens the folder the fetched themes are kept in.
+    ///
+    /// Created first: a folder that has never been written to does not exist,
+    /// and "open" doing nothing at all reads as a broken button rather than as
+    /// an empty shelf.
+    /// </summary>
     [RelayCommand]
-    private void ClearIconTheme()
+    private void OpenIconFolder()
     {
-        IconThemeFolder = "";
-        IconThemeProblem = "";
+        var root = Core.FileSystem.IconThemeCatalogue.InstallRoot;
+
+        try { Directory.CreateDirectory(root); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
+
+        OpenUrlRequested?.Invoke(this, root);
     }
 
     /// <summary>
@@ -357,7 +454,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         => OnPropertyChanged(nameof(HasIconThemeStatus));
 
     partial void OnIsFetchingIconThemeChanged(bool value)
-        => FetchIconThemeCommand.NotifyCanExecuteChanged();
+    {
+        FetchIconThemeCommand.NotifyCanExecuteChanged();
+        PickIconThemeArchiveCommand.NotifyCanExecuteChanged();
+    }
 
     private bool CanFetchIconTheme() => !IsFetchingIconTheme;
 
@@ -373,39 +473,66 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// without Developer Mode.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanFetchIconTheme))]
-    private async Task FetchIconTheme(Core.FileSystem.IconThemeSource? source)
+    private Task FetchIconTheme(Core.FileSystem.IconThemeSource? source) =>
+        source is null
+            ? Task.CompletedTask
+            : InstallAsync(source.Name, "Fetching", p => Installer(source, p, CancellationToken.None));
+
+    /// <summary>
+    /// Installs an archive somebody already has.
+    ///
+    /// **The same unpacking as a fetched one**, which is the point: a theme
+    /// downloaded from anywhere hits the same symbolic-link wall, and going
+    /// through here is what gets past it. Called by the window once a file has
+    /// been chosen.
+    /// </summary>
+    public Task InstallIconThemeFromAsync(string file) =>
+        InstallAsync(
+            Path.GetFileName(file), "Unpacking",
+            _ => FileInstaller(file, CancellationToken.None));
+
+    /// <summary>
+    /// How a file already on disk is unpacked. A seam, like
+    /// <see cref="Installer"/>, so a test need not produce a real archive.
+    /// </summary>
+    public static Func<string, CancellationToken, Task<Core.FileSystem.IconThemeArchive.Installed>>
+        FileInstaller { get; set; } = Vaktari.Ui.Settings.IconThemeInstaller.InstallFromFileAsync;
+
+    private async Task InstallAsync(
+        string name,
+        string verb,
+        Func<IProgress<double>?, Task<Core.FileSystem.IconThemeArchive.Installed>> run)
     {
-        if (source is null || IsFetchingIconTheme) return;
+        if (IsFetchingIconTheme) return;
 
         IsFetchingIconTheme = true;
         IconThemeProgress = 0;
         IconThemeProblem = "";
-        IconThemeStatus = $"Fetching {source.Name}…";
+        IconThemeStatus = $"{verb} {name}…";
 
         try
         {
             var progress = new Progress<double>(p =>
             {
                 IconThemeProgress = p;
-                IconThemeStatus = $"Fetching {source.Name}… {p:P0}";
+                IconThemeStatus = $"{verb} {name}… {p:P0}";
             });
 
-            var installed = await Installer(source, progress, CancellationToken.None);
+            var installed = await run(progress);
 
             // The archive holds several themes — Papirus brings its light and
-            // dark variants — so the one named is the one selected, and the
-            // rest are there for the folder picker.
+            // dark variants — so the one whose name matches is the one selected,
+            // and the rest join the list.
             var chosen = installed.Themes.FirstOrDefault(t =>
-                    string.Equals(Path.GetFileName(t), source.Name, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(Path.GetFileName(t), name, StringComparison.OrdinalIgnoreCase))
                 ?? installed.Themes.FirstOrDefault();
 
             if (chosen is null)
             {
                 IconThemeStatus = "";
                 IconThemeProblem =
-                    $"{source.Name} downloaded, but there was no icon theme inside it. "
-                    + "That usually means the project has moved its files around; "
-                    + "choosing a folder by hand still works.";
+                    $"{name} unpacked, but there was no icon theme inside it — nothing with an "
+                    + "index.theme. Choosing a folder by hand still works.";
                 return;
             }
 
@@ -415,18 +542,18 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             IconThemeStatus = others > 0
                 ? $"{Path.GetFileName(chosen)} is now in use. {others} more "
-                  + (others == 1 ? "variant is" : "variants are") + " available under Choose."
+                  + (others == 1 ? "variant is" : "variants are") + " in the list."
                 : $"{Path.GetFileName(chosen)} is now in use.";
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             IconThemeStatus = "";
-            IconThemeProblem = $"{source.Name} could not be downloaded. {e.Message}";
+            IconThemeProblem = $"{name} could not be downloaded. {e.Message}";
         }
         catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             IconThemeStatus = "";
-            IconThemeProblem = $"{source.Name} could not be unpacked. {e.Message}";
+            IconThemeProblem = $"{name} could not be unpacked. {e.Message}";
         }
         finally
         {

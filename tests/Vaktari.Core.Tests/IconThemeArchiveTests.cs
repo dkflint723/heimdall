@@ -312,6 +312,95 @@ public sealed class IconThemeArchiveTests : IDisposable
         Assert.Empty(Directory.EnumerateDirectories(_destination));
     }
 
+    // ---- an archive somebody downloaded themselves ------------------------
+
+    private static Stream Zip(params Item[] items)
+    {
+        var raw = new MemoryStream();
+
+        using (var zip = new ZipArchive(raw, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var item in items)
+            {
+                // A zip has no notion of a link at all, which is the whole
+                // reason the tar form is preferred.
+                if (item.Type is not TarEntryType.RegularFile) continue;
+
+                using var writing = zip.CreateEntry(item.Name).Open();
+                using var text = new StreamWriter(writing);
+
+                text.Write(item.Content);
+            }
+        }
+
+        raw.Position = 0;
+        return raw;
+    }
+
+    /// <summary>
+    /// **A .zip works too, minus what a .zip cannot carry.** Somebody who found
+    /// a theme elsewhere may well have one, and refusing it because the format
+    /// records no symbolic links would be refusing a theme that is mostly fine.
+    /// </summary>
+    [Fact]
+    public void A_zip_installs_what_it_can()
+    {
+        var installed = IconThemeArchive.Install(Zip(
+            File_("pack/Odin/index.theme", "[Icon Theme]\nName=Odin\n"),
+            File_("pack/Odin/48x48/mimetypes/text-x-generic.svg"),
+            File_("pack/Odin/48x48/places/folder.svg"),
+            File_("pack/Odin/install.sh", "#!/bin/sh\n")), _destination);
+
+        Assert.Single(installed.Themes);
+
+        var theme = FreedesktopIconTheme.FromFolder(Path.Combine(_destination, "Odin"));
+
+        Assert.NotNull(theme);
+        Assert.NotNull(theme!.Resolve(["folder"], 48));
+
+        // The same whitelist: a zip is not a reason to relax it.
+        Assert.False(File.Exists(Path.Combine(_destination, "Odin", "install.sh")));
+    }
+
+    /// <summary>
+    /// **The format is read from the file, not from its name.** A person
+    /// choosing a file they downloaded may hand over anything at all, and
+    /// guessing from the extension turns a plain mistake into a strange error
+    /// from deep inside a decompressor.
+    /// </summary>
+    [Fact]
+    public void Something_that_is_not_an_archive_says_so_plainly()
+    {
+        var nonsense = new MemoryStream("I am a text file, not a theme."u8.ToArray());
+
+        var thrown = Assert.Throws<InvalidDataException>(
+            () => IconThemeArchive.Install(nonsense, _destination));
+
+        Assert.Contains(".tar.gz", thrown.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_destination));
+    }
+
+    /// <summary>
+    /// **A header may lie.** An entry is free to declare one byte and then
+    /// supply as many as it likes, so the limit has to hold while the bytes are
+    /// being written rather than being checked against what was claimed.
+    /// </summary>
+    [Fact]
+    public void An_icon_far_too_large_to_be_one_stops_the_unpacking()
+    {
+        var enormous = new string('x', 40 * 1024 * 1024);
+
+        var thrown = Assert.Throws<InvalidDataException>(() => IconThemeArchive.Install(TarGz(
+            Dir("pack"),
+            File_("pack/Odin/index.theme", "[Icon Theme]\nName=Odin\n"),
+            File_("pack/Odin/48x48/mimetypes/text-x-generic.svg", enormous)), _destination));
+
+        Assert.Contains("too large", thrown.Message, StringComparison.Ordinal);
+
+        // And nothing of it survives: the staging folder goes with the failure.
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_destination));
+    }
+
     /// <summary>Unpacking the same theme again replaces it rather than merging
     /// into it, or a smaller update would leave the previous version's icons
     /// lying underneath.</summary>

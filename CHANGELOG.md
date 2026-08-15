@@ -9,6 +9,35 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [0.9.1] — 2026-08-14
+
+### Added
+
+- **Pick an installed theme from a list.** Fetching Papirus brings three themes,
+  and reaching the other two meant remembering where they went and browsing to
+  them. Settings now lists what is actually on disk — found each time it opens,
+  so a folder you deleted by hand stops being offered and one you browsed to
+  joins the list rather than disagreeing with it. Choosing *Vaktari's own icons*
+  is how you go back.
+
+- **Install a theme you downloaded yourself**, from *Install from a file…* — a
+  `.tar.gz` or a `.zip`, through exactly the same unpacking a fetched one gets.
+  That is the point of offering it: a theme from anywhere meets the same
+  symbolic-link wall on Windows, and this is what gets past it. The format is
+  read from the file's first bytes rather than its name, so a mis-named archive
+  still works and something that is not an archive at all says so plainly.
+
+  A `.zip` cannot carry symbolic links, so a theme from one arrives with
+  whatever its publisher chose to duplicate. Variants still work: they fall back
+  to the theme they are named after.
+
+- ***Open the icon folder***, for looking at what is installed.
+
+### Fixed
+
+- An entry claiming to be small and then supplying a great deal more is now
+  stopped as it is written rather than after.
+
 ## [0.9.0] — 2026-08-14
 
 ### Added

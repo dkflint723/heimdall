@@ -20,8 +20,11 @@ public sealed class IconThemeFetchTests : IDisposable
     private static readonly IconThemeSource Source =
         new("Papirus", "…", "https://example.invalid/papirus.tar.gz", 110, "GPL-3.0");
 
-    public void Dispose() =>
+    public void Dispose()
+    {
         SettingsViewModel.Installer = Vaktari.Ui.Settings.IconThemeInstaller.InstallAsync;
+        SettingsViewModel.FileInstaller = Vaktari.Ui.Settings.IconThemeInstaller.InstallFromFileAsync;
+    }
 
     private static SettingsViewModel Model() => new(new Vaktari.Core.Settings.SettingsState());
 
@@ -90,6 +93,112 @@ public sealed class IconThemeFetchTests : IDisposable
 
         Assert.Empty(model.IconThemeFolder);
         Assert.Contains("no icon theme inside it", model.IconThemeProblem, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **The list and the setting have to agree in both directions**, and a
+    /// pair of properties that set each other is exactly the shape that either
+    /// loops forever or silently stops updating. A theme that arrives from
+    /// anywhere but the list — installed, or browsed to — must still end up
+    /// selected in it.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task An_installed_theme_becomes_the_selected_row()
+    {
+        SettingsViewModel.Installer = (_, _, _) => Task.FromResult(
+            new IconThemeArchive.Installed([@"C:\icons\Papirus"], 1, 0, 1));
+
+        var model = Model();
+
+        // Before: only Vaktari's own icons, and that is what is selected.
+        Assert.Equal("", model.SelectedIconTheme!.Folder);
+
+        await model.FetchIconThemeCommand.ExecuteAsync(Source);
+
+        Assert.Equal(@"C:\icons\Papirus", model.IconThemeFolder);
+        Assert.Equal(@"C:\icons\Papirus", model.SelectedIconTheme!.Folder);
+        Assert.Contains(model.IconThemeChoices, c => c.Folder == @"C:\icons\Papirus");
+    }
+
+    /// <summary>
+    /// Choosing from the list is the other direction, and choosing Vaktari's
+    /// own icons is how the setting is cleared now that there is no Clear
+    /// button.
+    /// </summary>
+    [AvaloniaFact]
+    public void Choosing_from_the_list_sets_the_folder()
+    {
+        var model = Model();
+
+        model.IconThemeFolder = @"C:\somewhere\Tela";
+
+        // Browsed to, so it joins the list rather than leaving it disagreeing
+        // with the setting.
+        var browsed = Assert.Single(model.IconThemeChoices, c => c.Folder == @"C:\somewhere\Tela");
+
+        Assert.Same(browsed, model.SelectedIconTheme);
+        Assert.Contains("chosen folder", browsed.Label, StringComparison.Ordinal);
+
+        model.SelectedIconTheme = model.IconThemeChoices[0];
+
+        Assert.Equal("", model.IconThemeFolder);
+        Assert.False(model.HasIconTheme);
+    }
+
+    /// <summary>
+    /// An archive somebody downloaded themselves goes through the same
+    /// unpacking, and lands in the same list.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_file_can_be_installed_instead_of_fetched()
+    {
+        string? asked = null;
+
+        SettingsViewModel.FileInstaller = (file, _) =>
+        {
+            asked = file;
+
+            return Task.FromResult(new IconThemeArchive.Installed([@"C:\icons\Tela\Tela"], 9, 0, 1));
+        };
+
+        var model = Model();
+
+        await model.InstallIconThemeFromAsync(@"D:\downloads\Tela.tar.gz");
+
+        Assert.Equal(@"D:\downloads\Tela.tar.gz", asked);
+        Assert.Equal(@"C:\icons\Tela\Tela", model.IconThemeFolder);
+        Assert.Equal(@"C:\icons\Tela\Tela", model.SelectedIconTheme!.Folder);
+    }
+
+    /// <summary>
+    /// A file that is not an archive at all, which is what a file picker will
+    /// eventually be pointed at.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_file_that_is_not_an_archive_says_so()
+    {
+        SettingsViewModel.FileInstaller = (_, _) =>
+            throw new InvalidDataException("that is not a .tar.gz or a .zip.");
+
+        var model = Model();
+
+        await model.InstallIconThemeFromAsync(@"D:\downloads\notes.txt");
+
+        Assert.Empty(model.IconThemeFolder);
+        Assert.Contains("could not be unpacked", model.IconThemeProblem, StringComparison.Ordinal);
+        Assert.False(model.IsFetchingIconTheme);
+    }
+
+    /// <summary>The folder a pack lands in comes from the file's name, and the
+    /// double extension is the one that catches people out.</summary>
+    [Theory]
+    [InlineData("papirus-icon-theme-master.tar.gz", "papirus-icon-theme-master")]
+    [InlineData("Tela.tgz", "Tela")]
+    [InlineData("numix.zip", "numix")]
+    [InlineData("odd", "odd")]
+    public void The_pack_folder_is_named_after_the_file(string file, string expected)
+    {
+        Assert.Equal(expected, Vaktari.Ui.Settings.IconThemeInstaller.PackName(file));
     }
 
     /// <summary>Two fetches at once would race for the same folder, and the

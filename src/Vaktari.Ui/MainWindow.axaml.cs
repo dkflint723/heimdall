@@ -655,13 +655,61 @@ public partial class MainWindow : Window
 
         // The dialogs belong to the window. A view model that opens a folder
         // picker cannot be constructed in a test, and this one already is.
+        /// <summary>A folder for a picker to open at, or null where there is
+        /// nothing there yet and the picker should choose for itself.</summary>
+        static async Task<Avalonia.Platform.Storage.IStorageFolder?> Suggested(
+            Window window, string path)
+        {
+            try
+            {
+                return Directory.Exists(path)
+                    ? await window.StorageProvider.TryGetFolderFromPathAsync(path)
+                    : null;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        // A file somebody downloaded themselves, unpacked exactly as a fetched
+        // one is — same containment, same whitelist, same size caps.
+        model.IconThemeArchiveRequested += async (_, _) =>
+        {
+            var picked = await window.StorageProvider.OpenFilePickerAsync(
+                new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "Choose an icon theme archive",
+                    AllowMultiple = false,
+                    FileTypeFilter =
+                    [
+                        new Avalonia.Platform.Storage.FilePickerFileType("Icon theme archive")
+                        {
+                            // The format is read from the file's first bytes, so
+                            // these only decide what the dialog shows.
+                            Patterns = ["*.tar.gz", "*.tgz", "*.zip"],
+                        },
+                    ],
+                });
+
+            if (picked.Count == 0 || picked[0].TryGetLocalPath() is not { } archive) return;
+
+            await model.InstallIconThemeFromAsync(archive);
+        };
+
         model.IconThemeBrowseRequested += async (_, _) =>
         {
+            // Starting where the fetched themes are, since that is where most
+            // of them will be. Null when nothing has been installed, which
+            // leaves the picker wherever it would otherwise open.
+            var start = await Suggested(window, Vaktari.Core.FileSystem.IconThemeCatalogue.InstallRoot);
+
             var picked = await window.StorageProvider.OpenFolderPickerAsync(
                 new Avalonia.Platform.Storage.FolderPickerOpenOptions
                 {
                     Title = "Choose an icon theme folder",
                     AllowMultiple = false,
+                    SuggestedStartLocation = start,
                 });
 
             if (picked.Count == 0 || picked[0].TryGetLocalPath() is not { } path) return;
@@ -699,6 +747,8 @@ public partial class MainWindow : Window
             model.IconThemeFolder = path;
         };
 
+        // A web address or a folder: Open takes both, and the desktop decides
+        // which of its own applications answers.
         model.OpenUrlRequested += (_, url) => _launcher?.Open(url);
 
         window.Closed += (_, _) =>

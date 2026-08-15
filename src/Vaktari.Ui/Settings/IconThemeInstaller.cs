@@ -64,6 +64,52 @@ public static class IconThemeInstaller
     }
 
     /// <summary>
+    /// Installs an archive already on disk — one downloaded from somewhere this
+    /// list does not carry.
+    ///
+    /// **Through exactly the same unpacking**, which is the whole reason to
+    /// offer it: a theme from anywhere hits the same symbolic-link wall, and
+    /// the containment, whitelist and size rules apply to a chosen file no less
+    /// than to a fetched one. The format is read from the file's first bytes,
+    /// so a .tar.gz and a .zip both work whatever they happen to be called.
+    ///
+    /// Its own folder, named after the file, so two downloads cannot overwrite
+    /// each other's themes.
+    /// </summary>
+    public static async Task<IconThemeArchive.Installed> InstallFromFileAsync(
+        string file, CancellationToken token = default)
+    {
+        await using var stream = File.OpenRead(file);
+
+        var destination = Path.Combine(IconThemeCatalogue.InstallRoot, PackName(file));
+
+        return await Task
+            .Run(() => IconThemeArchive.Install(stream, destination, token), token)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The file's name without the archive extensions — including the double
+    /// one, so papirus.tar.gz becomes papirus rather than papirus.tar.
+    /// </summary>
+    internal static string PackName(string file)
+    {
+        var name = Path.GetFileName(file);
+
+        foreach (var suffix in new[] { ".tar.gz", ".tgz", ".tar", ".zip", ".gz" })
+        {
+            if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
+
+            name = name[..^suffix.Length];
+            break;
+        }
+
+        // A name of nothing would put the themes in the root of the install
+        // folder, mixed in with the packs.
+        return name.Length > 0 ? name : "icons";
+    }
+
+    /// <summary>
     /// Counts what passes through, so the window can show how far along a
     /// download is. Read-only and forward-only, which is all the archive reader
     /// asks for.
