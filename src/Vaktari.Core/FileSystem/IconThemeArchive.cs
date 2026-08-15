@@ -108,29 +108,47 @@ public static class IconThemeArchive
     /// </summary>
     private static IEnumerable<Entry> Read(Stream archive, CancellationToken token)
     {
-        Span<byte> magic = stackalloc byte[4];
+        // Six, because xz's signature is the longest of the three.
+        Span<byte> magic = stackalloc byte[6];
 
         var buffered = new BufferedStream(archive, 8192);
-        var read = buffered.ReadAtLeast(magic, 4, throwOnEndOfStream: false);
+        var read = buffered.ReadAtLeast(magic, magic.Length, throwOnEndOfStream: false);
 
         var gzip = read >= 2 && magic[0] == 0x1f && magic[1] == 0x8b;
+
         var zip = read >= 4 && magic[0] == 'P' && magic[1] == 'K' && magic[2] == 3 && magic[3] == 4;
 
-        if (!gzip && !zip)
-            throw new InvalidDataException(
-                "that is not a .tar.gz or a .zip. An icon theme is usually published as one of those.");
+        var xz = read >= 6 && magic[0] == 0xfd && magic[1] == '7' && magic[2] == 'z'
+            && magic[3] == 'X' && magic[4] == 'Z' && magic[5] == 0x00;
 
-        // The magic has been consumed and neither reader can seek back for it,
-        // so it is put in front again.
+        if (!gzip && !zip && !xz)
+            throw new InvalidDataException(
+                "that is not a .tar.gz, .tar.xz or .zip. "
+                + "An icon theme is usually published as one of those.");
+
+        // The magic has been consumed and none of the readers can seek back for
+        // it, so it is put in front again.
         var whole = new ConcatStream(magic[..read].ToArray(), buffered);
 
-        return gzip ? FromTar(whole, token) : FromZip(whole, token);
+        if (zip) return FromZip(whole, token);
+
+        // A factory rather than a stream, so the decompressor is created when
+        // the entries are actually walked and disposed with them.
+        return FromTar(
+            gzip
+                ? () => new GZipStream(whole, CompressionMode.Decompress)
+                : () => new SharpCompress.Compressors.Xz.XZStream(whole),
+            token);
     }
 
-    private static IEnumerable<Entry> FromTar(Stream archive, CancellationToken token)
+    /// <summary>
+    /// A plain tar, however it was compressed. Both wrappers produce one, and
+    /// tar is the format that records the symbolic links a theme is built from.
+    /// </summary>
+    private static IEnumerable<Entry> FromTar(Func<Stream> open, CancellationToken token)
     {
-        using var gzip = new GZipStream(archive, CompressionMode.Decompress);
-        using var tar = new TarReader(gzip);
+        using var decompressed = open();
+        using var tar = new TarReader(decompressed);
 
         while (tar.GetNextEntry() is { } entry)
         {
@@ -406,30 +424,73 @@ public static class IconThemeArchive
     /// the tar reader nor the zip reader can be asked to rewind — a download
     /// arrives as a network stream, which cannot seek at all.
     /// </summary>
-    private sealed class ConcatStream(byte[] head, Stream rest) : Stream
+    internal sealed class ConcatStream(byte[] head, Stream rest) : Stream
     {
         private int _at;
+        private long _given;
 
         public override int Read(byte[] buffer, int offset, int count)
             => Read(buffer.AsSpan(offset, count));
 
+        /// <summary>
+        /// **Fills the buffer, rather than returning what came easily.**
+        ///
+        /// A Stream is allowed to return fewer bytes than asked for and a
+        /// correct reader loops; the xz decoder does not. Handing it the six
+        /// sniffed bytes and nothing else made it read a real 5 MB theme as
+        /// "Block check corrupt" — a checksum failure, which reads as a damaged
+        /// download and is nothing of the sort. Gzip and zip tolerate short
+        /// reads, so this only ever showed on the format added last.
+        ///
+        /// Filling here covers everything underneath as well: the buffering,
+        /// and a network stream that returns whatever a packet happened to
+        /// carry.
+        /// </summary>
         public override int Read(Span<byte> buffer)
         {
-            if (_at >= head.Length) return rest.Read(buffer);
+            var total = 0;
 
-            var take = Math.Min(buffer.Length, head.Length - _at);
+            if (_at < head.Length)
+            {
+                total = Math.Min(buffer.Length, head.Length - _at);
 
-            head.AsSpan(_at, take).CopyTo(buffer);
-            _at += take;
+                head.AsSpan(_at, total).CopyTo(buffer);
+                _at += total;
+            }
 
-            return take;
+            while (total < buffer.Length)
+            {
+                var read = rest.Read(buffer[total..]);
+
+                if (read <= 0) break;
+
+                total += read;
+            }
+
+            _given += total;
+
+            return total;
         }
 
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException();
-        public override long Position { get => _at; set => throw new NotSupportedException(); }
+
+        /// <summary>
+        /// **How many bytes have actually been handed out**, which is not the
+        /// same as how far through the sniffed header we are — and this
+        /// returned the latter.
+        ///
+        /// An xz file is a series of blocks each padded to a four-byte
+        /// boundary, and the decoder works out that padding from where the
+        /// stream says it is. Reporting a position frozen at six made it look
+        /// for each block's checksum in the wrong place, and report "Block
+        /// check corrupt" on a theme that was perfectly intact. Gzip and zip
+        /// never ask, which is why this only appeared once xz was added, and
+        /// only on a file large enough to have a block boundary at all.
+        /// </summary>
+        public override long Position { get => _given; set => throw new NotSupportedException(); }
 
         public override void Flush() { }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();

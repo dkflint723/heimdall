@@ -363,6 +363,109 @@ public sealed class IconThemeArchiveTests : IDisposable
     }
 
     /// <summary>
+    /// A .tar.xz holding a theme, a script that should not be written, and a
+    /// symbolic link.
+    ///
+    /// **Checked in as bytes because nothing in .NET can produce one.** There
+    /// is no xz encoder in the framework and the library used to read them does
+    /// not write them, so the alternative to a literal is no test at all. Built
+    /// with Python's lzma module over a GNU tar:
+    ///
+    ///     pack/Odin/index.theme
+    ///     pack/Odin/48x48/mimetypes/text-x-generic.svg
+    ///     pack/Odin/48x48/places/folder.svg
+    ///     pack/Odin/install.sh
+    ///     pack/Odin/48x48/mimetypes/text-plain.svg -> text-x-generic.svg
+    /// </summary>
+    private const string ThemeTarXz =
+        "/Td6WFoAAATm1rRGAgAhARwAAAAQz1jM4Cf/APxdADgYSJnKtl/lT/UgnRg18y+0ai9pGl8h/8mmEGuHHLvQxLU1"
+        + "lUyEtIufEE2k7bodhm9sHEHVhRV6lmFo6wIioduZNxgjfsHN5yyxbyonAgGP3LJrKJTj4m4OAahbz3DqlsNv/hnd"
+        + "pF6+gReP3p1UOqoX/rY3QugLHlbhNy1jZYE9okcIZXVFsgQn+UeB3laOb31kc3W41X6COxUNSIObW1pN/cDAjRcy"
+        + "U1U6J9PTPpoD3ytHk8HvBkjsoo0vHJZzHAUn9O36OKVAmm+a0iAVH6nxe/KmAR/+RgpebWvKqenhqXf1QE2vCx/p"
+        + "NoMGog133WlWAWzsIFNw6lobAADSbxckqtxjtAABmAKAUAAAGItFybHEZ/sCAAAAAARZWg==";
+
+    /// <summary>
+    /// **.xz is what the KDE Store mostly serves**, and .NET has no decoder for
+    /// it at all — gzip and zip are in the framework and xz is not. Without
+    /// this, half the themes somebody finds have to be recompressed before
+    /// Vaktari will look at them.
+    ///
+    /// The links matter as much as the decompression: xz wraps a tar, and tar
+    /// is the format that records them, so a theme from one arrives complete
+    /// where a zip's would not.
+    /// </summary>
+    [Fact]
+    public void A_tar_xz_installs_with_its_links_intact()
+    {
+        var installed = IconThemeArchive.Install(
+            new MemoryStream(Convert.FromBase64String(ThemeTarXz)), _destination);
+
+        Assert.Single(installed.Themes);
+        Assert.Equal(1, installed.Aliases);
+
+        var theme = FreedesktopIconTheme.FromFolder(Path.Combine(_destination, "Odin"))!;
+
+        Assert.NotNull(theme.Resolve(["folder"], 48));
+
+        // The alias resolves to the file it names, and is not a second copy.
+        var resolved = theme.Resolve(["text-plain"], 48);
+
+        Assert.NotNull(resolved);
+        Assert.EndsWith("text-x-generic.svg", resolved!, StringComparison.Ordinal);
+
+        // And the same whitelist applies: xz is not a way in for anything else.
+        Assert.False(File.Exists(Path.Combine(_destination, "Odin", "install.sh")));
+    }
+
+    /// <summary>Hands back a few bytes at a time, which every Stream is
+    /// entitled to do and a network one does constantly.</summary>
+    private sealed class Trickle(Stream inner) : Stream
+    {
+        public override int Read(byte[] b, int o, int c) => inner.Read(b, o, Math.Min(c, 7));
+        public override int Read(Span<byte> b) => inner.Read(b[..Math.Min(b.Length, 7)]);
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+
+        public override void Flush() { }
+        public override long Seek(long o, SeekOrigin s) => throw new NotSupportedException();
+        public override void SetLength(long v) => throw new NotSupportedException();
+        public override void Write(byte[] b, int o, int c) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// **A stream is allowed to return less than it was asked for, and the xz
+    /// decoder does not cope.**
+    ///
+    /// Reading an archive off a network is nothing but short reads, and
+    /// sniffing the format puts a handful of bytes in front of the rest — so
+    /// the very first read this makes is a short one. The result was not a
+    /// clean failure but "Block check corrupt" on a perfectly good 5 MB theme,
+    /// which reads as a damaged download and sends anybody looking in the wrong
+    /// place entirely.
+    ///
+    /// Gzip and zip loop properly, so nothing showed until xz was added, and
+    /// nothing in this file caught it because a MemoryStream always returns
+    /// everything asked of it. Found by unpacking a real download.
+    /// </summary>
+    [Fact]
+    public void An_archive_arriving_a_few_bytes_at_a_time_still_unpacks()
+    {
+        var installed = IconThemeArchive.Install(
+            new Trickle(new MemoryStream(Convert.FromBase64String(ThemeTarXz))), _destination);
+
+        Assert.Single(installed.Themes);
+        Assert.Equal(1, installed.Aliases);
+
+        var theme = FreedesktopIconTheme.FromFolder(Path.Combine(_destination, "Odin"))!;
+
+        Assert.NotNull(theme.Resolve(["folder"], 48));
+    }
+
+    /// <summary>
     /// **The format is read from the file, not from its name.** A person
     /// choosing a file they downloaded may hand over anything at all, and
     /// guessing from the extension turns a plain mistake into a strange error
@@ -377,6 +480,7 @@ public sealed class IconThemeArchiveTests : IDisposable
             () => IconThemeArchive.Install(nonsense, _destination));
 
         Assert.Contains(".tar.gz", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(".tar.xz", thrown.Message, StringComparison.Ordinal);
         Assert.Empty(Directory.EnumerateFileSystemEntries(_destination));
     }
 

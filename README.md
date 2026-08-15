@@ -198,7 +198,8 @@ instead: the bundled set, the icons Windows itself draws, or a freedesktop theme
 Vaktari can fetch one for you — Papirus, with its light and dark variants — which
 is worth doing rather than downloading it yourself, because those themes are
 built out of tens of thousands of symbolic links and Windows will not create one
-without Developer Mode. Unpacked inside Vaktari the links are read rather than
+without Developer Mode. An archive you found elsewhere can be installed the same
+way, from a `.tar.gz`, `.tar.xz` or `.zip`. Unpacked inside Vaktari the links are read rather than
 made, so nothing fails and nothing is duplicated on disk.
 
 Colour and typeface are the exception, and a deliberate one: the bundled scheme

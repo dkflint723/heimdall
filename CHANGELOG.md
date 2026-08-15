@@ -9,6 +9,24 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [0.9.2] — 2026-08-14
+
+### Added
+
+- **`.tar.xz` archives**, which is what most themes on the KDE Store are
+  published as. .NET has no xz decoder at all — gzip and zip are in the
+  framework and xz is not — so without this, half the themes anybody finds had
+  to be recompressed before Vaktari would look at them.
+
+### Fixed
+
+- **An archive read a few bytes at a time was rejected as corrupt.** Two
+  separate faults in the plumbing that puts a sniffed file header back in front
+  of the archive, both invisible to gzip and zip and both fatal to xz: it
+  returned less than it was asked for, and it misreported how far through the
+  file it was. The second made a perfectly intact 5 MB theme fail with "Block
+  check corrupt", which reads as a damaged download and is nothing of the sort.
+
 ## [0.9.1] — 2026-08-14
 
 ### Added

@@ -8,4 +8,30 @@
     <RootNamespace>Vaktari.Core</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- So the archive reader's stream plumbing can be tested directly. Two of
+         its properties are invisible from outside — that reads fill their
+         buffer, and that the position it reports is truthful — and both were
+         wrong in ways no archive fixture caught. -->
+    <InternalsVisibleTo Include="Vaktari.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- **The first package Core has ever referenced, and only because .NET has
+         no xz decoder at all.** Gzip and zip are in the framework; xz is not,
+         and it is the format most themes on the KDE Store are published in, so
+         the alternative is telling people to recompress an archive before
+         Vaktari will read it.
+
+         Chosen over the native liblzma bindings: this is pure managed, so it
+         adds nothing to the installer payload and nothing per-platform. It
+         brings no transitive dependencies of its own, it is MIT licensed, and
+         its decoder was checked against a NativeAOT publish with TrimMode=full
+         before being adopted — the exe really does decompress an xz, which is
+         not something a build succeeding would have told us.
+
+         Still no platform package, which is the rule this file exists to state. -->
+    <PackageReference Include="SharpCompress" Version="0.50.4" />
+  </ItemGroup>
+
 </Project>

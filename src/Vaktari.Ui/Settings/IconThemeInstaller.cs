@@ -71,7 +71,7 @@ public static class IconThemeInstaller
     /// offer it: a theme from anywhere hits the same symbolic-link wall, and
     /// the containment, whitelist and size rules apply to a chosen file no less
     /// than to a fetched one. The format is read from the file's first bytes,
-    /// so a .tar.gz and a .zip both work whatever they happen to be called.
+    /// so .tar.gz, .tar.xz and .zip all work whatever they happen to be called.
     ///
     /// Its own folder, named after the file, so two downloads cannot overwrite
     /// each other's themes.
@@ -96,7 +96,8 @@ public static class IconThemeInstaller
     {
         var name = Path.GetFileName(file);
 
-        foreach (var suffix in new[] { ".tar.gz", ".tgz", ".tar", ".zip", ".gz" })
+        foreach (var suffix in new[]
+                 { ".tar.gz", ".tar.xz", ".tgz", ".txz", ".tar", ".zip", ".gz", ".xz" })
         {
             if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
 

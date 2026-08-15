@@ -687,7 +687,7 @@ public partial class MainWindow : Window
                         {
                             // The format is read from the file's first bytes, so
                             // these only decide what the dialog shows.
-                            Patterns = ["*.tar.gz", "*.tgz", "*.zip"],
+                            Patterns = ["*.tar.gz", "*.tar.xz", "*.tgz", "*.txz", "*.zip"],
                         },
                     ],
                 });

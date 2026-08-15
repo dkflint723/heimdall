@@ -352,7 +352,7 @@
                       Foreground="{DynamicResource AccentColour}"
                       FontSize="{DynamicResource FontSizeTiny}"
                       Command="{Binding PickIconThemeArchiveCommand}"
-                      ToolTip.Tip="A .tar.gz or .zip you downloaded yourself"/>
+                      ToolTip.Tip="A .tar.gz, .tar.xz or .zip you downloaded yourself"/>
 
               <Button Content="Open the icon folder"
                       Padding="0"
