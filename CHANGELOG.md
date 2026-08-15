@@ -9,6 +9,15 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [Unreleased]
+
+### Added
+
+- **The mouse's side buttons go back and forward.** The two under the thumb, as
+  they do in Explorer and every browser. In a split they move whichever half the
+  pointer is over, the same rule `Ctrl`+wheel already follows, and they leave the
+  active pane alone — a navigation button is not a click.
+
 ## [0.9.2] — 2026-08-14
 
 ### Added

@@ -509,6 +509,40 @@ public partial class MainWindow : Window
             target.AdminRequested = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         }
 
+        // **The mouse's own back and forward buttons.** Explorer navigates on
+        // these, every browser navigates on these, and the convention is old
+        // enough that the buttons are usually unlabelled — so an application
+        // that ignores them reads as broken rather than as opinionated.
+        //
+        // The pane UNDER THE POINTER, which is the rule Ctrl+wheel already
+        // follows: in a split, pointing at a half and pressing back should move
+        // that half. Activation is deliberately left alone — a navigation
+        // button is not a click, and stealing the active pane would change what
+        // the next keystroke does.
+        //
+        // Claimed on the tunnel, before the listing sees the press. Some
+        // controls treat any pointer press as a selection gesture, and a
+        // side button would then move the selection as well as the folder.
+        if (Input.SideButtons.For(properties.PointerUpdateKind) is var side
+            && side is not Input.SideButtonAction.None)
+        {
+            var pane = PaneAt(e.Source) ?? _shell.ActiveTab;
+
+            if (pane is not null)
+            {
+                _ = side is Input.SideButtonAction.Back
+                    ? pane.GoBackAsync()
+                    : pane.GoForwardAsync();
+            }
+
+            // Handled whether or not there was anywhere to go: at the end of the
+            // history the button does nothing, and letting the press fall
+            // through to the listing would turn "nothing to go back to" into an
+            // accidental change of selection.
+            e.Handled = true;
+            return;
+        }
+
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control)
             && properties.PointerUpdateKind
                is Avalonia.Input.PointerUpdateKind.MiddleButtonPressed)
