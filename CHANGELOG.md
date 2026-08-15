@@ -9,6 +9,61 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [0.9.0] — 2026-08-14
+
+### Added
+
+- **Fetch an icon theme from Settings**, instead of finding one, downloading it
+  and extracting it yourself. Papirus is offered; one click brings its light and
+  dark variants too, and all three go to
+  `%LOCALAPPDATA%\Vaktari\Icons\<pack>`. About 110 MB and twenty seconds.
+
+  This exists because doing it by hand barely works on Windows. Papirus is built
+  out of some fifty thousand symbolic links, and Windows creates none of them
+  without Developer Mode — so an ordinary extraction fails fifty thousand times,
+  says so at length, and leaves a theme with holes exactly where the file and
+  folder icons should be. Unpacking it inside Vaktari means those links are read
+  rather than made: no privilege needed, nothing duplicated on disk.
+
+  Only `index.theme`, `.svg` and `.png` are ever written, so the makefiles and
+  shell scripts a source repository carries never land at all. Every path in the
+  archive must resolve inside the folder it is unpacked into, and the work is
+  published only once it has finished.
+
+- **`%ProgramFiles%`, `%SystemDrive%`, `~` and the rest, in the path bar.**
+  Explorer takes them and Windows names its own folders that way everywhere
+  else, so typing one here answering "no such directory" made Vaktari the odd
+  one out. `$HOME` and `${HOME}` work too, and so do `%Documents%`,
+  `%Pictures%` and `%Music%` — which read exactly like environment variables and
+  are nothing of the sort.
+
+  A name that means nothing is left as you typed it. Expanding it away would
+  turn `%ProgramFilez%\Vaktari` into `\Vaktari`, which is the root of your
+  drive.
+
+### Fixed
+
+- **Submenus under *More options* blinked and never opened.** 7-Zip's, Send
+  to's, and every other extension that cascades: hovering one rebuilt the whole
+  menu, which threw away the popup that had just appeared.
+
+- **An icon theme you had already extracted yourself now works far better.** A
+  dark variant is mostly links to the theme it is based on, so on Windows it
+  arrived with no file or folder icons at all and Vaktari refused it outright.
+  It now uses the theme sitting beside it, which is what those links meant.
+
+- **Folders with something in them ignored *use my desktop's icons*.** Empty
+  folders obeyed the setting and full ones did not, so a listing came out in two
+  icon sets at once.
+
+- **Icons could be drawn far too small.** A theme that had, say, only a
+  16-pixel version of an icon was allowed to answer for a 48-pixel row while a
+  perfectly good large one sat in the theme behind it.
+
+- A row in the desktop's menu whose submenu could not be read is now shown
+  greyed rather than looking as though it can be clicked. Choosing one asked the
+  shell to run a command belonging to a different extension.
+
 ## [0.8.1] — 2026-08-14
 
 ### Fixed

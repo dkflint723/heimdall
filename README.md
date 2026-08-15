@@ -30,7 +30,8 @@ Copy or move between them from the right-click menu.
 
 **A path bar that works both ways.** Click any part of the breadcrumb to jump to
 that folder, or press `Ctrl+L` to type a path. Typing offers completions as you
-go, and `Tab` cycles through them.
+go, and `Tab` cycles through them. `%ProgramFiles%`, `%SystemDrive%`, `~` and
+`$HOME` are understood, along with `%Documents%` and its neighbours.
 
 **Type to jump.** Start typing in any listing and the selection moves to the first
 matching name — no dialog, no search box.
@@ -191,6 +192,14 @@ Vaktari reads your desktop's configuration rather than keeping its own copy:
 | **File types** | your system's own file-type database |
 
 Change your icon theme and Vaktari changes with it. Nothing needs restarting.
+
+On Windows there is no icon theme to follow, so Settings offers three choices
+instead: the bundled set, the icons Windows itself draws, or a freedesktop theme.
+Vaktari can fetch one for you — Papirus, with its light and dark variants — which
+is worth doing rather than downloading it yourself, because those themes are
+built out of tens of thousands of symbolic links and Windows will not create one
+without Developer Mode. Unpacked inside Vaktari the links are read rather than
+made, so nothing fails and nothing is duplicated on disk.
 
 Colour and typeface are the exception, and a deliberate one: the bundled scheme
 is the default, because a file manager that repaints itself to match your desktop
