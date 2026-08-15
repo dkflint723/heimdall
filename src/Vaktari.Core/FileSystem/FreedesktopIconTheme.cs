@@ -26,6 +26,7 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
 
     private readonly Dictionary<string, string[]> _specialFolders;
     private readonly IIconNaming? _naming;
+    private readonly string? _alsoInherits;
 
     /// <param name="roots">Where themes live. Null asks for the freedesktop
     /// defaults, which is what a Linux desktop wants; Windows passes the one
@@ -33,13 +34,19 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
     /// <param name="naming">How this platform names icons for its files, or
     /// null to go by extension. A freedesktop desktop has a mime database that
     /// knows far more than any table of extensions; Windows does not.</param>
+    /// <param name="alsoInherits">A theme to fall back on that index.theme does
+    /// not name, sitting directly behind this one in the chain. See
+    /// <see cref="VariantBase"/> — this exists for variants whose inheritance is
+    /// expressed as symbolic links rather than as an Inherits= line.</param>
     public FreedesktopIconTheme(
         string? themeName,
         IReadOnlyList<string>? roots = null,
-        IIconNaming? naming = null)
+        IIconNaming? naming = null,
+        string? alsoInherits = null)
     {
         _roots = roots is { Count: > 0 } ? [.. roots] : DefaultRoots();
         _naming = naming;
+        _alsoInherits = alsoInherits;
 
         _specialFolders = BuildSpecialFolders();
 
@@ -99,30 +106,81 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
 
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(parent)) return null;
 
-            var theme = new FreedesktopIconTheme(name, [parent], naming);
-
             // **index.theme is not proof that a theme WORKS.**
             //
-            // Papirus-Dark, downloaded and extracted on Windows, resolves
-            // nothing at all: nearly every category directory in it is a
-            // symbolic link back to Papirus, and a zip extracted by Windows
-            // turns each of those into a 29-byte text file holding the target
-            // path. The directories are then empty, the index finds no icons,
-            // and every file falls back to the drawn set — measured, not
-            // guessed: five of six probes returned nothing.
+            // Papirus-Dark, downloaded and extracted on Windows, resolves not
+            // one of these: the icons for files and folders are not files in it
+            // at all, they are symbolic links into Papirus, and Windows creates
+            // no symbolic links without Developer Mode or an elevated
+            // extraction. 7-Zip reports each one it skipped, which is where the
+            // wall of "Dangerous link path was ignored" comes from.
             //
-            // It would pass any structural check, which is why this asks the
-            // theme to actually produce an icon instead. A theme that cannot
-            // name a plain file is not one worth accepting silently.
-            return theme.Resolve(["text-x-generic", "text-plain", "application-x-generic"], 48)
-                is null
-                ? null
-                : theme;
+            // A structural check would pass this theme happily, which is why
+            // this asks it to produce an actual icon instead.
+            if (new FreedesktopIconTheme(name, [parent], naming) is { } theme
+                && theme.Resolve(Probe, 48) is not null)
+                return theme;
+
+            // Nothing — but that is usually the links, not the theme. A variant
+            // keeps its own recoloured artwork and links to its base for the
+            // rest, so what survives extraction is a real theme with holes
+            // exactly where the aliases were: Papirus-Dark arrives with 7,579
+            // icons of its own and not one mimetype or folder among them.
+            //
+            // **The base theme is sitting right beside it**, because they come
+            // out of the same archive, and putting it behind the variant in the
+            // chain is what those links meant in the first place. Vaktari used
+            // to refuse the folder outright and tell the user to pick a
+            // different one; it can just work instead.
+            if (VariantBase(parent, name) is { } based
+                && new FreedesktopIconTheme(name, [parent], naming, based) is { } repaired
+                && repaired.Resolve(Probe, 48) is not null)
+                return repaired;
+
+            return null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Names every theme ships for a plain file. A theme that can produce none
+    /// of them cannot usefully draw a listing.
+    /// </summary>
+    private static readonly string[] Probe =
+        ["text-x-generic", "text-plain", "application-x-generic"];
+
+    /// <summary>
+    /// The theme a variant is built on, found beside it — Papirus-Dark's
+    /// Papirus, Tela-dark's Tela.
+    ///
+    /// By name, which is a convention rather than a rule, but it is the
+    /// convention every variant follows and the alternative is asking the user
+    /// to know why their theme is empty. Deliberately narrow: the base must be
+    /// a real theme in the same folder, and the variant's name must extend it
+    /// at a separator, so Papirus-Dark finds Papirus while Papirus never
+    /// matches some unrelated Pap.
+    /// </summary>
+    private static string? VariantBase(string parent, string name)
+    {
+        string? best = null;
+
+        foreach (var candidate in Directory.EnumerateDirectories(parent))
+        {
+            var leaf = Path.GetFileName(candidate);
+
+            if (leaf.Length == 0 || leaf.Length >= name.Length) continue;
+            if (!name.StartsWith(leaf, StringComparison.OrdinalIgnoreCase)) continue;
+            if (name[leaf.Length] is not ('-' or '_' or '.')) continue;
+            if (!File.Exists(Path.Combine(candidate, "index.theme"))) continue;
+
+            // Longest wins, so Foo-Dark-Compact prefers Foo-Dark over Foo.
+            if (best is null || leaf.Length > best.Length) best = leaf;
+        }
+
+        return best;
     }
 
     public void Reload(string? themeName)
@@ -134,6 +192,11 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
         _indexes.Clear();
 
         BuildSearchOrder(ThemeName, depth: 0);
+
+        // Directly behind the theme itself, ahead of anything index.theme
+        // names: it is the theme this one is made of, not a distant relative.
+        if (_alsoInherits is { Length: > 0 } && !_searchOrder.Contains(_alsoInherits))
+            _searchOrder.Insert(Math.Min(1, _searchOrder.Count), _alsoInherits);
 
         // hicolor is the specified last resort and must always be present in
         // the chain, whether or not a theme names it.

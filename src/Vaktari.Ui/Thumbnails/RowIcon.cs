@@ -97,8 +97,25 @@ public static class RowIcon
                     () => IconLoader.SystemPixels(value.FullPath, value.IsDirectory, size), token)
                     .ConfigureAwait(true);
 
-                if (pixels is not null && IconLoader.Draw(pixels) is { } drawn) Paint(drawn);
+                if (pixels is not null && IconLoader.Draw(pixels) is { } drawn)
+                {
+                    // **No contents probe after this.** The papers-in-the-folder
+                    // affordance repaints the DRAWN folder, so running it here
+                    // put Vaktari's icon back over the shell's for every folder
+                    // that had anything in it — leaving empty folders showing
+                    // Windows' icon and full ones showing ours, which is the
+                    // opposite of a setting called "use my desktop's icons".
+                    //
+                    // Nothing is lost: the shell draws its own distinction
+                    // between an ordinary folder and one it has an opinion
+                    // about, and borrowing that is the whole point of the
+                    // setting.
+                    Paint(drawn);
+                    return;
+                }
 
+                // Only where the shell gave us nothing: then the drawn set is
+                // what is on screen, and its own folder affordance applies.
                 await ShowContentsIfAnyAsync(value, Paint, token).ConfigureAwait(true);
                 return;
             }

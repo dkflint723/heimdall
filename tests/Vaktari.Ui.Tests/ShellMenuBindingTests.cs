@@ -157,20 +157,56 @@ public sealed class ShellMenuBindingTests : IDisposable
     }
 
     /// <summary>
-    /// Opening twice must not strand the first one: each menu owns an apartment
-    /// thread, so a leak here is a thread per right-click.
+    /// Opening for a different selection must not strand the one before: each
+    /// menu owns an apartment thread, so a leak here is a thread per
+    /// right-click.
     /// </summary>
     [AvaloniaFact]
-    public async Task Opening_again_releases_the_one_before()
+    public async Task Opening_for_a_new_selection_releases_the_one_before()
     {
         var pane = Pane();
         await pane.OpenShellMenuAsync();
         var first = _provider.Last!;
 
+        pane.CurrentPath = Path.Combine(Path.GetTempPath(), "elsewhere");
         await pane.OpenShellMenuAsync();
 
+        Assert.Equal(2, _provider.Builds);
         Assert.True(first.Disposed);
         Assert.False(_provider.Last!.Disposed);
+    }
+
+    /// <summary>
+    /// **The submenu that blinked and never appeared.**
+    ///
+    /// SubmenuOpened bubbles, and the shell's menu nests — so opening 7-Zip's
+    /// own submenu raised the event again on the way up, and handling it called
+    /// straight back in here. The first thing a rebuild does is clear the
+    /// collection the menu is drawn from, which destroyed the container of the
+    /// popup that had just opened: it appeared and vanished in the same
+    /// instant, for every extension that cascades.
+    ///
+    /// **Deliberately not awaited.** The damage was done by the synchronous
+    /// half, before the shell was ever asked again; awaiting would let the
+    /// rebuild finish and refill the list, and the assertion would pass against
+    /// the bug. What has to hold is that the rows never go away at all.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Opening_it_again_does_not_empty_the_menu_underneath_itself()
+    {
+        var pane = Pane();
+        await pane.OpenShellMenuAsync();
+
+        var reopened = pane.OpenShellMenuAsync();
+
+        Assert.Contains(pane.ShellMenuItems, i => i is ShellMenuEntry { Label: "7-Zip" });
+
+        await reopened;
+
+        // And the live menu is the one still on screen, not a replacement.
+        Assert.Equal(1, _provider.Builds);
+        Assert.False(_provider.Last!.Disposed);
+        Assert.Contains(pane.ShellMenuItems, i => i is ShellMenuEntry { Label: "7-Zip" });
     }
 
     [AvaloniaFact]

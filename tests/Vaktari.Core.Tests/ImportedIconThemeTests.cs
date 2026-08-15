@@ -211,4 +211,97 @@ public sealed class ImportedIconThemeTests : IDisposable
         Assert.NotNull(theme);
         Assert.Equal("Papirus", theme!.ThemeName);
     }
+
+    /// <summary>
+    /// Builds the variant beside Papirus exactly as one arrives on Windows: its
+    /// own recoloured artwork intact, and nothing where the aliases into the
+    /// base theme used to be.
+    ///
+    /// This is not a contrived shape. Papirus-Dark expresses its relationship to
+    /// Papirus in about forty thousand symbolic links, and Windows creates no
+    /// symbolic links without Developer Mode or an elevated extraction — so
+    /// 7-Zip skips every one and says so, which is the wall of "Dangerous link
+    /// path was ignored" people see. What lands on disk is a real theme with
+    /// holes precisely where files and folders are: measured on the actual
+    /// download, 7,579 icons of its own and not one mimetype among them.
+    /// </summary>
+    private string BuildDarkVariant()
+    {
+        var dark = Path.Combine(_root, "Papirus-Dark");
+
+        // Its own artwork survives, because those are real files.
+        Directory.CreateDirectory(Path.Combine(dark, "48x48", "panel"));
+        File.WriteAllBytes(Path.Combine(dark, "48x48", "panel", "battery.png"), [0]);
+
+        // The mimetype and places directories were links. They are simply absent.
+        File.WriteAllText(Path.Combine(dark, "index.theme"), """
+            [Icon Theme]
+            Name=Papirus-Dark
+            Inherits=breeze-dark,hicolor
+            Directories=48x48/panel
+
+            [48x48/panel]
+            Size=48
+            Context=Panel
+            Type=Fixed
+            """);
+
+        return dark;
+    }
+
+    /// <summary>
+    /// **Inherits= does not name the theme it is actually built from.**
+    /// Papirus-Dark inherits breeze-dark and hicolor, neither of which a Windows
+    /// user has; its real dependency on Papirus is carried entirely by the links
+    /// that did not survive. So the chain is followed faithfully, finds nothing,
+    /// and the theme resolves no icon at all.
+    ///
+    /// The base is sitting in the same folder, out of the same archive. Putting
+    /// it behind the variant is what those links meant.
+    /// </summary>
+    [Fact]
+    public void A_variant_whose_links_did_not_survive_falls_back_to_its_base()
+    {
+        var dark = BuildDarkVariant();
+
+        var theme = FreedesktopIconTheme.FromFolder(dark);
+
+        Assert.NotNull(theme);
+        Assert.Equal("Papirus-Dark", theme!.ThemeName);
+
+        // The icons it lost now come from Papirus...
+        var names = theme.NamesFor(Path.Combine(_root, "notes.txt"), isDirectory: false);
+        var resolved = theme.Resolve(names, 48);
+
+        Assert.NotNull(resolved);
+        Assert.Contains("Papirus" + Path.DirectorySeparatorChar, resolved!);
+
+        Assert.NotNull(theme.Resolve(theme.NamesFor(_root, isDirectory: true), 48));
+
+        // ...while its own still win where it has them.
+        var own = theme.Resolve(["battery"], 48);
+
+        Assert.NotNull(own);
+        Assert.Contains("Papirus-Dark", own!);
+    }
+
+    /// <summary>
+    /// The fallback is for a variant of a theme that is present, not a licence
+    /// to borrow from any folder that happens to be nearby. A name must extend
+    /// the base at a separator, so an unrelated theme is never quietly used.
+    /// </summary>
+    [Fact]
+    public void An_empty_theme_with_no_base_beside_it_is_still_refused()
+    {
+        var orphan = Path.Combine(_root, "Something-Dark");
+
+        Directory.CreateDirectory(orphan);
+        File.WriteAllText(Path.Combine(orphan, "index.theme"), """
+            [Icon Theme]
+            Name=Something-Dark
+            Inherits=hicolor
+            """);
+
+        Assert.Null(FreedesktopIconTheme.FromFolder(orphan));
+    }
 }

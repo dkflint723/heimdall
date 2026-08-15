@@ -288,15 +288,28 @@ internal sealed partial class ShellContextMenu : IShellMenu
             var label = new string(text, 0, (int)info.cch).Replace("&", "", StringComparison.Ordinal);
             if (label.Length == 0) continue;
 
-            var children = info.hSubMenu != IntPtr.Zero
-                ? Read(info.hSubMenu, depth + 1)
-                : [];
+            var opensSubmenu = info.hSubMenu != IntPtr.Zero;
+            var children = opensSubmenu ? Read(info.hSubMenu, depth + 1) : [];
+
+            // **A row that opens a submenu has no command of its own.** Windows
+            // puts the submenu's identity in wID for a popup, not a command id,
+            // so a row whose children we could not read must not be left
+            // looking clickable — invoking it would hand the shell a number
+            // that belongs to some other extension entirely.
+            //
+            // These exist. An extension may fill its submenu only when Windows
+            // sends WM_INITMENUPOPUP, which never arrives here because this menu
+            // is read rather than shown, and one past the depth limit is empty
+            // for our own reasons. Either way the row is shown and greyed: it
+            // says the entry is there without pretending it can be used.
+            var enabled = (info.fState & (MfsDisabled | MfsGrayed)) == 0
+                && (!opensSubmenu || children.Count > 0);
 
             entries.Add(new ShellMenuEntry(
                 label,
                 (int)(info.wID - FirstId),
                 IsSeparator: false,
-                IsEnabled: (info.fState & (MfsDisabled | MfsGrayed)) == 0,
+                IsEnabled: enabled,
                 children.Count > 0 ? children : null));
         }
 

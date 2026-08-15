@@ -675,15 +675,20 @@ public partial class MainWindow : Window
                 model.IconThemeFolder = "";
                 var leaf = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
 
-                // Two causes, and they need different answers. Naming the
-                // symlink one explicitly because it is invisible otherwise:
-                // the folder looks complete in Explorer, and the theme simply
-                // produces nothing.
+                // Two causes, and they need different answers.
+                //
+                // The first names the symlink case, which is invisible
+                // otherwise: the folder looks complete in a listing and simply
+                // produces nothing. A variant extracted beside the theme it is
+                // built from now falls back to it and never reaches here, so
+                // what is left is a variant extracted on its own — and the
+                // answer to that is the missing half, not a different theme.
                 model.IconThemeProblem = File.Exists(Path.Combine(path, "index.theme"))
-                    ? $"'{leaf}' has an index.theme but no icons Vaktari can read. Some themes "
-                      + "keep their folders as links to another theme, and Windows turns those "
-                      + "into stray files when the archive is extracted — Papirus-Dark is one. "
-                      + "Try the main theme folder instead, such as Papirus."
+                    ? $"'{leaf}' has an index.theme but no icons Vaktari can read. Themes like "
+                      + "this one keep most of their icons as links to the theme they are based "
+                      + "on, and Windows drops those links when the archive is extracted. "
+                      + "Extract the whole archive so the theme it is based on sits beside it, "
+                      + "and Vaktari will use both."
                     : $"'{leaf}' has no index.theme in it. Choose the folder that came out of "
                       + "the archive — for Papirus that is the one called Papirus, not the "
                       + "folder you extracted it into.";
@@ -830,6 +835,16 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnShellMenuOpening(object? sender, RoutedEventArgs e)
     {
+        // **SubmenuOpened BUBBLES, and the shell's menu nests.** Hovering
+        // 7-Zip's own submenu raised this event again on the way up, and
+        // handling it rebuilt the whole menu — whose first act is to clear the
+        // collection the open popup was being drawn from. The submenu appeared
+        // and vanished in the same instant, every time, for every extension
+        // that cascades: Send to, VLC, Restore previous versions.
+        //
+        // Only this item's own opening counts.
+        if (!ReferenceEquals(e.Source, sender)) return;
+
         if (sender is Control { DataContext: PaneGroupViewModel { ActiveTab: { } pane } })
             _ = pane.OpenShellMenuAsync();
     }

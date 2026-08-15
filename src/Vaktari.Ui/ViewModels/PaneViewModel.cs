@@ -174,6 +174,12 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
     private Vaktari.Core.FileSystem.IShellMenu? _shellMenu;
 
+    /// <summary>What the live menu was built for, so an open one is reused
+    /// rather than rebuilt and a stale one is still replaced.</summary>
+    private IReadOnlyList<string>? _shellPaths;
+
+    private bool _shellBuilding;
+
     /// <summary>
     /// What the shell offered, ready to bind.
     ///
@@ -215,8 +221,6 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     /// </summary>
     public async Task OpenShellMenuAsync()
     {
-        CloseShellMenu();
-
         if (ShellMenu is not { } provider) return;
 
         // The selection, or the folder when the click was on empty space — the
@@ -224,12 +228,30 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         var paths = SelectionPaths();
         if (paths.Count == 0) paths = [CurrentPath];
 
+        // **Built once for a given selection, and never rebuilt underneath
+        // itself.** The caller guards its own event, but this is the property
+        // that has to hold: rebuilding starts by clearing the collection the
+        // menu is drawn from, so a second call while one is on screen makes the
+        // open submenu disappear. Keyed on the paths rather than on a flag so
+        // that a menu left behind by a close event that never arrived is still
+        // replaced when the selection moves on.
+        if (_shellPaths is { } built && built.SequenceEqual(paths, StringComparer.Ordinal)
+            && (_shellMenu is not null || _shellBuilding))
+            return;
+
+        CloseShellMenu();
+
+        _shellPaths = paths;
+        _shellBuilding = true;
+
         var generation = _shellGeneration;
 
         var menu = await Task.Run(() => provider.Build(paths)).ConfigureAwait(false);
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
+            _shellBuilding = false;
+
             // Closed, or reopened, while the shell was thinking. Releasing it
             // here is what keeps a slow build from leaking the apartment thread
             // it was running on.
@@ -283,6 +305,8 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
 
         _shellMenu?.Dispose();
         _shellMenu = null;
+        _shellPaths = null;
+        _shellBuilding = false;
     }
 
     // ---- administrator ----------------------------------------------------
@@ -1366,8 +1390,7 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
             var options = _launcher.GetOpenWithOptions(path);
             Dispatcher.UIThread.Post(() =>
             {
-                OpenWithOptions.Clear();
-                foreach (var option in options) OpenWithOptions.Add(option);
+                var wanted = new List<LaunchOption>(options);
 
                 // Last, and only where the desktop has a chooser to show. The
                 // installed applications are the answer most of the time; this
@@ -1375,9 +1398,23 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 // bottom of the list it escapes from.
                 if (_launcher.CanChooseApplication)
                 {
-                    OpenWithOptions.Add(
+                    wanted.Add(
                         new LaunchOption("Choose another app…", "", null) { IsChooser = true });
                 }
+
+                // **Only when it actually differs.** Clearing an
+                // ObservableCollection destroys the containers built from it, so
+                // a refill that lands while this submenu is open would close it
+                // under the pointer — which is exactly how the shell menu's
+                // submenus blinked and never appeared. This arrives after the
+                // selection changed, which is before the menu is even drawn,
+                // but on a desktop where the answer comes from shelling out to
+                // xdg-mime the two can overlap. Almost every time it carries
+                // what is already there.
+                if (OpenWithOptions.SequenceEqual(wanted)) return;
+
+                OpenWithOptions.Clear();
+                foreach (var option in wanted) OpenWithOptions.Add(option);
             });
         });
     }
