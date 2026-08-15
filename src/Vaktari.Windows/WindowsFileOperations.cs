@@ -30,12 +30,12 @@ public sealed class WindowsFileOperations : IFileOperations
 
     public IOperationHandle Copy(
         IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict)
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict)
         => Run(sources, destination, onConflict, move: false);
 
     public IOperationHandle Move(
         IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict)
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict)
         => Run(sources, destination, onConflict, move: true);
 
     /// <summary>
@@ -301,7 +301,7 @@ public sealed class WindowsFileOperations : IFileOperations
 
     private IOperationHandle Run(
         IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict, bool move)
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict, bool move)
     {
         var handle = new OperationHandle();
 
@@ -338,7 +338,7 @@ public sealed class WindowsFileOperations : IFileOperations
 
                     if (File.Exists(target) || Directory.Exists(target))
                     {
-                        switch (await onConflict(target).ConfigureAwait(false))
+                        switch (await onConflict(new FileConflict(item.Source, target)).ConfigureAwait(false))
                         {
                             case ConflictResolution.Skip:
                                 skipped.Add((item.Source, target));

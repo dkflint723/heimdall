@@ -169,9 +169,11 @@ public sealed partial class PaneViewModel
 
         if (_ops is null || paths.Count == 0) return;
 
+        var conflicts = Conflicts();
+
         var handle = move
-            ? _ops.Move(paths, destination, _ => ValueTask.FromResult(ConflictResolution.KeepBoth))
-            : _ops.Copy(paths, destination, _ => ValueTask.FromResult(ConflictResolution.KeepBoth));
+            ? _ops.Move(paths, destination, conflicts)
+            : _ops.Copy(paths, destination, conflicts);
 
         Track(handle);
     }
@@ -182,9 +184,11 @@ public sealed partial class PaneViewModel
         if (_ops is null || paths.Count == 0) return;
         if (RefusedVirtualDestination(CurrentPath)) return;
 
+        var conflicts = Conflicts();
+
         var handle = move
-            ? _ops.Move(paths, CurrentPath, _ => ValueTask.FromResult(ConflictResolution.KeepBoth))
-            : _ops.Copy(paths, CurrentPath, _ => ValueTask.FromResult(ConflictResolution.KeepBoth));
+            ? _ops.Move(paths, CurrentPath, conflicts)
+            : _ops.Copy(paths, CurrentPath, conflicts);
 
         Track(handle);
     }
@@ -313,7 +317,52 @@ public sealed partial class PaneViewModel
         var paths = SelectionPaths();
         if (paths.Count == 0) { Status = "select something to duplicate"; return; }
 
+        // **KeepBoth without asking, and this is the one place that is right.**
+        // Duplicate exists to make a second copy beside the first; prompting
+        // "there is already a file called that" would be asking about the thing
+        // that was just requested.
         Track(_ops.Copy(paths, CurrentPath,
             _ => ValueTask.FromResult(ConflictResolution.KeepBoth)));
     }
+
+    /// <summary>
+    /// How a clash is settled: by asking, once per operation unless told to
+    /// stop.
+    ///
+    /// **Every call site used to pass KeepBoth outright**, so dropping a newer
+    /// copy of a file over an older one silently produced "name (1)" and there
+    /// was no way to say otherwise. The engine has understood Overwrite, Skip
+    /// and Cancel the whole time.
+    ///
+    /// A fresh closure per operation, so "do the same for the rest" means this
+    /// copy and not every copy from now on — and no answer at all outlives the
+    /// operation it was given for.
+    /// </summary>
+    private static Func<FileConflict, ValueTask<ConflictResolution>> Conflicts()
+    {
+        ConflictResolution? remembered = null;
+
+        return async conflict =>
+        {
+            if (remembered is { } answer) return answer;
+
+            // Nothing to ask with — a headless run, or a test. Behaving as the
+            // application did before there was a prompt is the safe default:
+            // it never destroys anything.
+            if (AskConflict is not { } ask) return ConflictResolution.KeepBoth;
+
+            var (resolution, applyToRest) = await ask(conflict).ConfigureAwait(false);
+
+            if (applyToRest) remembered = resolution;
+
+            return resolution;
+        };
+    }
+
+    /// <summary>
+    /// Asks somebody what to do about a clash. Set by the window, because a
+    /// view model has no business owning a dialog — the same seam the shell
+    /// menu and the theme installer use.
+    /// </summary>
+    public static Func<FileConflict, ValueTask<ConflictAnswer>>? AskConflict { get; set; }
 }

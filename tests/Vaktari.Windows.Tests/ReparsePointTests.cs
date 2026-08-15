@@ -25,7 +25,7 @@ namespace Vaktari.Windows.Tests;
 [SupportedOSPlatform("windows")]
 public class ReparsePointTests
 {
-    private static Func<string, ValueTask<ConflictResolution>> Overwrite
+    private static Func<FileConflict, ValueTask<ConflictResolution>> Overwrite
         => _ => ValueTask.FromResult(ConflictResolution.Overwrite);
 
     private static async Task<IOperationHandle> Finished(IOperationHandle handle)

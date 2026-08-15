@@ -2,6 +2,18 @@ namespace Vaktari.Core.FileSystem;
 
 public enum ConflictResolution { Overwrite, Skip, KeepBoth, Cancel }
 
+/// <summary>
+/// Something already occupies the place an item is being copied or moved to.
+///
+/// **Both paths, not just the destination.** Deciding whether to overwrite is a
+/// comparison — which is newer, which is larger, are they the same file at all —
+/// and a prompt handed only the target can show none of that. It can only ask
+/// "replace?" and leave the answer to memory.
+/// </summary>
+/// <param name="Source">What is arriving.</param>
+/// <param name="Target">What is already there.</param>
+public readonly record struct FileConflict(string Source, string Target);
+
 public enum OperationState { Queued, Running, Paused, Completed, Failed, Cancelled }
 
 public readonly record struct OperationProgress(
@@ -54,10 +66,10 @@ public interface IOperationHandle
 public interface IFileOperations
 {
     IOperationHandle Copy(IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict);
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict);
 
     IOperationHandle Move(IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict);
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict);
 
     /// <summary>Moves to recycle bin / XDG trash. Recoverable by the user.</summary>
     IOperationHandle Trash(IReadOnlyList<string> paths);

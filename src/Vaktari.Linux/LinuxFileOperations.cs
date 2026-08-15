@@ -20,12 +20,12 @@ public sealed class LinuxFileOperations : IFileOperations
 
     public IOperationHandle Copy(
         IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict)
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict)
         => Run(sources, destination, onConflict, move: false);
 
     public IOperationHandle Move(
         IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict)
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict)
         => Run(sources, destination, onConflict, move: true);
 
     public IOperationHandle Trash(IReadOnlyList<string> paths)
@@ -127,7 +127,7 @@ public sealed class LinuxFileOperations : IFileOperations
 
     private IOperationHandle Run(
         IReadOnlyList<string> sources, string destination,
-        Func<string, ValueTask<ConflictResolution>> onConflict, bool move)
+        Func<FileConflict, ValueTask<ConflictResolution>> onConflict, bool move)
     {
         var handle = new OperationHandle();
 
@@ -151,7 +151,7 @@ public sealed class LinuxFileOperations : IFileOperations
 
                     if (File.Exists(target) || Directory.Exists(target))
                     {
-                        switch (await onConflict(target).ConfigureAwait(false))
+                        switch (await onConflict(new FileConflict(item.Source, target)).ConfigureAwait(false))
                         {
                             case ConflictResolution.Skip:
                                 handle.ItemFinished();

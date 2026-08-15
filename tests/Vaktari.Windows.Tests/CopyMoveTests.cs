@@ -22,7 +22,7 @@ namespace Vaktari.Windows.Tests;
 [SupportedOSPlatform("windows")]
 public class CopyMoveTests
 {
-    private static Func<string, ValueTask<ConflictResolution>> Always(ConflictResolution r)
+    private static Func<FileConflict, ValueTask<ConflictResolution>> Always(ConflictResolution r)
         => _ => ValueTask.FromResult(r);
 
     private static async Task<IOperationHandle> Finished(IOperationHandle handle)

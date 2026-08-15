@@ -255,6 +255,28 @@ public partial class MainWindow : Window
         _shell.ConnectionInfoRequested += (_, info) =>
             new ConnectionWindow(info).ShowDialog(this);
 
+        // **The question that was never asked.** Copy and move have understood
+        // Overwrite, Skip and Cancel since they were written, and every caller
+        // passed KeepBoth outright — so a newer file dropped over an older one
+        // silently became "name (1)".
+        //
+        // Marshalled, because the operation runs on a background thread and is
+        // awaiting the answer: a dialog opened from there would touch the UI
+        // from the wrong thread, and awaiting it from the UI thread is what
+        // lets the copy carry on afterwards.
+        ViewModels.PaneViewModel.AskConflict = async conflict =>
+            await Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                var model = new ViewModels.ConflictViewModel(conflict);
+
+                // ShowDialog returns when the window closes; the window closes
+                // when the model answers, and closing it any other way answers
+                // Cancel. So this cannot wait forever on a dismissed dialog.
+                await new ConflictWindow(model).ShowDialog(this);
+
+                return await model.Answer;
+            });
+
         _shell.ShareDialogRequested += (_, request) =>
             new ShareWindow(request).ShowDialog(this);
 
@@ -1418,7 +1440,7 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
 
-        if (!e.DataTransfer.Formats.Contains(DataFormat.File) || PaneAt(e.Source) is not { } pane)
+        if (PaneAt(e.Source) is not { } pane)
         {
             e.DragEffects = DragDropEffects.None;
             HighlightDropTarget(null);
@@ -1442,7 +1464,7 @@ public partial class MainWindow : Window
 
         // Refuse a drop that would achieve nothing, so the cursor says so
         // before the click rather than a duplicate appearing after it.
-        if (Meaningful(e.DataTransfer, destination).Count == 0)
+        if (!Input.DroppedFileReader.Read(e.DataTransfer, destination).Any)
         {
             e.DragEffects = DragDropEffects.None;
             HighlightDropTarget(null);
@@ -1451,25 +1473,6 @@ public partial class MainWindow : Window
 
         e.DragEffects = EffectFor(e.KeyModifiers);
         HighlightDropTarget(pane);
-    }
-
-    /// <summary>
-    /// The dragged paths that would actually go somewhere. A file dropped into
-    /// the folder it already lives in is a no-op, whether copying or moving —
-    /// the previous guard only applied to copies, so a move produced "name (1)".
-    /// </summary>
-    private static List<string> Meaningful(IDataTransfer data, string destination)
-    {
-        var paths = (data.TryGetFiles() ?? [])
-            .Select(f => f.TryGetLocalPath())
-            .OfType<string>()
-            .ToList();
-
-        paths.RemoveAll(p =>
-            p == destination ||
-            string.Equals(Path.GetDirectoryName(p), destination, StringComparison.Ordinal));
-
-        return paths;
     }
 
     private DragDropEffects EffectFor(KeyModifiers modifiers)
@@ -1498,16 +1501,27 @@ public partial class MainWindow : Window
         HighlightDropTarget(null);
 
         if (PaneAt(e.Source) is not { } pane) return;
-        if (!e.DataTransfer.Formats.Contains(DataFormat.File)) return;
 
         // Dropping onto a folder row means into that folder, not into the
         // directory being listed — that is what the pointer was over.
         var target = FolderRowAt(e.Source);
         var destination = target ?? pane.CurrentPath;
 
-        var paths = Meaningful(e.DataTransfer, destination);
-        if (paths.Count == 0) return;
+        var dropped = Input.DroppedFileReader.Read(e.DataTransfer, destination);
 
+        if (!dropped.Any)
+        {
+            // **Said rather than silently ignored.** A drop that does nothing
+            // is indistinguishable from one that missed the pane, and dragging
+            // out of a zip opened in Explorer does exactly that — which reads
+            // as the application being unreliable rather than as a limit.
+            if (dropped.Refusal.Length > 0) pane.Status = dropped.Refusal;
+
+            e.Handled = true;
+            return;
+        }
+
+        var paths = dropped.Paths;
         var move = EffectFor(e.KeyModifiers) == DragDropEffects.Move;
 
         if (target is not null)

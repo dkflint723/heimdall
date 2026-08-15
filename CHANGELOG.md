@@ -11,7 +11,26 @@ should not be trusted for compatibility yet.
 
 ## [Unreleased]
 
+### Added
+
+- **You are asked before something is overwritten.** Copying or moving onto a
+  file that is already there now offers *Overwrite*, *Keep both*, *Skip* or
+  *Cancel*, with both files described — size, when each was changed, and which
+  of the two is newer — and a *do the same for the rest* for when there are many.
+
+  Until now every copy and move answered *keep both* on your behalf, so a newer
+  file dropped over an older one silently became "name (1)" and there was no way
+  to say otherwise. *Duplicate* still keeps both without asking, which is what
+  it is for.
+
 ### Fixed
+
+- **A drop that cannot be taken now says why.** Dragging files out of a zip
+  opened in Explorer did nothing at all, which is indistinguishable from a drop
+  that missed — Windows offers those files without any location on disk, and
+  Vaktari cannot copy what has no path. It now says so and suggests extracting
+  them first. Dropping a file into the folder it already lives in says that
+  too, rather than silently doing nothing.
 
 - **Some icon themes were refused outright, and needn't have been.** A theme
   may give an icon a name that points at another name rather than at a file,

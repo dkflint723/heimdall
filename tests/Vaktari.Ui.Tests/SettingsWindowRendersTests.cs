@@ -50,4 +50,59 @@ public sealed class SettingsWindowRendersTests
 
         window.Close();
     }
+
+    /// <summary>
+    /// The conflict prompt builds and lays out, with its four answers present.
+    ///
+    /// It is new markup on a path that only runs when two files clash, so it is
+    /// exactly the kind of window that ships broken and is found by somebody
+    /// mid-copy. Four buttons because there are four answers — losing one to a
+    /// typo would leave an operation that can only be cancelled.
+    /// </summary>
+    [AvaloniaFact]
+    public void The_conflict_prompt_opens_with_all_four_answers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "vaktari-render-" + Guid.NewGuid().ToString("N")[..8]);
+
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var target = Path.Combine(root, "notes.txt");
+            var source = Path.Combine(root, "incoming.txt");
+
+            File.WriteAllText(target, "old");
+            File.WriteAllText(source, "new");
+
+            var model = new ConflictViewModel(new Vaktari.Core.FileSystem.FileConflict(source, target));
+            var window = new Vaktari.Ui.ConflictWindow(model);
+
+            window.Show();
+            window.Measure(new Avalonia.Size(520, 400));
+            window.Arrange(new Avalonia.Rect(0, 0, 520, 400));
+
+            var labels = window.GetVisualDescendants()
+                .OfType<Button>()
+                .Select(b => b.Content as string)
+                .OfType<string>()
+                .ToList();
+
+            Assert.Contains("Overwrite", labels);
+            Assert.Contains("Keep both", labels);
+            Assert.Contains("Skip", labels);
+            Assert.Contains("Cancel", labels);
+
+            Assert.Contains("notes.txt", model.Question, StringComparison.Ordinal);
+
+            window.Close();
+
+            // Closing without choosing is Cancel, which the window wires and
+            // an operation on a background thread is waiting for.
+            Assert.True(model.Answer.IsCompleted);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* temp */ }
+        }
+    }
 }

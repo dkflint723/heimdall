@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Vaktari.Ui.ViewModels"
+        x:Class="Vaktari.Ui.ConflictWindow"
+        x:DataType="vm:ConflictViewModel"
+        Title="Already there"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        Width="520" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <StackPanel Margin="18" Spacing="14">
+
+    <StackPanel Spacing="4">
+      <TextBlock Text="{Binding Question}"
+                 FontSize="{DynamicResource FontSizeBase}"
+                 TextWrapping="Wrap"/>
+      <TextBlock Text="{Binding Destination}"
+                 FontFamily="monospace"
+                 FontSize="{DynamicResource FontSizeTiny}"
+                 Foreground="{DynamicResource ViewDimText}"
+                 TextTrimming="CharacterEllipsis"/>
+    </StackPanel>
+
+    <!-- Both sides, because the decision is a comparison. A prompt that names
+         only the destination makes somebody go and look at the other one. -->
+    <Border Background="{DynamicResource ViewAlternateRow}"
+            CornerRadius="4" Padding="12,10">
+      <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,6,Auto">
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Already there"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Foreground="{DynamicResource ViewDimText}"/>
+        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Existing}"
+                   FontSize="{DynamicResource FontSizeSmall}"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Arriving"
+                   FontSize="{DynamicResource FontSizeSmall}"
+                   Foreground="{DynamicResource ViewDimText}"/>
+        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Arriving}"
+                   FontSize="{DynamicResource FontSizeSmall}"/>
+      </Grid>
+    </Border>
+
+    <TextBlock Text="{Binding Verdict}"
+               IsVisible="{Binding Verdict.Length}"
+               FontSize="{DynamicResource FontSizeSmall}"
+               Foreground="{DynamicResource AccentColour}"
+               TextWrapping="Wrap"/>
+
+    <CheckBox Content="Do the same for the rest"
+              FontSize="{DynamicResource FontSizeSmall}"
+              IsChecked="{Binding ApplyToRest}"/>
+
+    <!-- Overwrite is the destructive one, so it does not sit where a reflex
+         click lands. Keep both is what the application did unasked until now,
+         and stays the default. -->
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Content="Cancel" Padding="14,5"
+              Command="{Binding CancelCommand}"/>
+      <Button Content="Overwrite" Padding="14,5"
+              Command="{Binding OverwriteCommand}"/>
+      <Button Content="Skip" Padding="14,5"
+              Command="{Binding SkipCommand}"/>
+      <Button Content="Keep both" Padding="14,5" IsDefault="True"
+              Command="{Binding KeepBothCommand}"/>
+    </StackPanel>
+
+  </StackPanel>
+</Window>

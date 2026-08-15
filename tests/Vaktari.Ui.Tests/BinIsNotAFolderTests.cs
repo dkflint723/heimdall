@@ -47,11 +47,11 @@ public sealed class BinIsNotAFolderTests
         }
 
         public IOperationHandle Copy(IReadOnlyList<string> sources, string destination,
-            Func<string, ValueTask<ConflictResolution>> onConflict)
+            Func<FileConflict, ValueTask<ConflictResolution>> onConflict)
             => Record($"copy -> {destination}", sources);
 
         public IOperationHandle Move(IReadOnlyList<string> sources, string destination,
-            Func<string, ValueTask<ConflictResolution>> onConflict)
+            Func<FileConflict, ValueTask<ConflictResolution>> onConflict)
             => Record($"move -> {destination}", sources);
 
         public IOperationHandle Trash(IReadOnlyList<string> paths) => Record("trash", paths);
