@@ -72,8 +72,17 @@ public sealed class FreedesktopIconTheme : IIconThemeProvider
     /// Papirus and you get a folder called Papirus with index.theme inside it,
     /// which is what a person will point at.
     /// </summary>
-    public static FreedesktopIconTheme? FromFolder(string folder, IIconNaming? naming = null)
+    public static FreedesktopIconTheme? FromFolder(string? folder, IIconNaming? naming = null)
     {
+        // **Nullable, and that is not defensive padding — it shipped as a
+        // crash.** A settings file written by an earlier version has no
+        // iconThemeFolder key at all, and deserialization does not run property
+        // initializers, so the string arrives null rather than empty. TrimEnd
+        // then threw a NullReferenceException, which the catch below does not
+        // cover, out of the MainWindow constructor: 0.8.0 could not start at
+        // all for anybody upgrading.
+        if (string.IsNullOrEmpty(folder)) return null;
+
         try
         {
             var trimmed = folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

@@ -184,11 +184,21 @@ public sealed class ImportedIconThemeTests : IDisposable
         Assert.Null(FreedesktopIconTheme.FromFolder(_root));
     }
 
+    /// <summary>
+    /// **The one that shipped as a crash.** A settings file written before the
+    /// iconThemeFolder key existed does not carry it, and deserialization does
+    /// not run property initializers — so the string arrives NULL rather than
+    /// empty, TrimEnd threw a NullReferenceException out of the MainWindow
+    /// constructor, and 0.8.0 could not start at all for anybody upgrading.
+    ///
+    /// The old test asserted the empty string and stopped one case short.
+    /// </summary>
     [Fact]
     public void A_folder_that_is_not_there_is_refused()
     {
         Assert.Null(FreedesktopIconTheme.FromFolder(Path.Combine(_root, "gone")));
         Assert.Null(FreedesktopIconTheme.FromFolder(""));
+        Assert.Null(FreedesktopIconTheme.FromFolder(null));
     }
 
     /// <summary>A trailing separator is what a folder picker hands back on some

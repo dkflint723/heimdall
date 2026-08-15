@@ -9,6 +9,17 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [0.8.1] — 2026-08-14
+
+### Fixed
+
+- **0.8.0 would not start if you were upgrading.** A settings file written by
+  an earlier version has no entry for the icon-theme folder, and that arrives as
+  nothing at all rather than as the empty default — which threw before the
+  window was ever created. A fresh install was unaffected, which is why it was
+  missed. Settings files are now repaired as they are read, so a key added in
+  any future version cannot do this again.
+
 ## [0.8.0] — 2026-08-14
 
 ### Added
@@ -275,7 +286,8 @@ should not be trusted for compatibility yet.
 
 First tagged releases. Linux tarball and RPM.
 
-[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/dkflint723/vaktari/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/dkflint723/vaktari/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/dkflint723/vaktari/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/dkflint723/vaktari/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dkflint723/vaktari/compare/v0.6.1...v0.7.0

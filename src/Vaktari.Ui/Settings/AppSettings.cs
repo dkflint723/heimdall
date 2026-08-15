@@ -88,7 +88,7 @@ public static class AppSettings
     /// </summary>
     private static SettingsState Normalise(SettingsState settings) => settings with
     {
-        General = ReferenceEquals(settings.General, null) ? new() : settings.General,
+        General = NormaliseGeneral(settings.General),
         Startup = ReferenceEquals(settings.Startup, null) ? new() : settings.Startup,
         Views = NormaliseViews(settings.Views),
         Vcs = ReferenceEquals(settings.Vcs, null) ? new() : settings.Vcs,
@@ -96,6 +96,30 @@ public static class AppSettings
         ContextMenu = ReferenceEquals(settings.ContextMenu, null) ? new() : settings.ContextMenu,
         Trash = ReferenceEquals(settings.Trash, null) ? new() : settings.Trash,
     };
+
+    /// <summary>
+    /// The same hazard one level down, on STRINGS rather than groups.
+    ///
+    /// **A missing key arrives as null, not as the declared default**, and the
+    /// note above says so — but the guard only ever covered whole groups. A
+    /// string property added in a later version is null for every settings file
+    /// written before it existed, which is every upgrade, and 0.8.0 shipped a
+    /// NullReferenceException out of the MainWindow constructor because of
+    /// exactly that: the application would not start.
+    ///
+    /// Coerced here rather than at each use, because "each use" is every future
+    /// caller of a property somebody adds next year.
+    /// </summary>
+    private static GeneralSettings NormaliseGeneral(GeneralSettings general)
+    {
+        if (ReferenceEquals(general, null)) return new GeneralSettings();
+
+        return general with
+        {
+            IconThemeFolder = general.IconThemeFolder ?? "",
+            PreferredTerminal = general.PreferredTerminal ?? "",
+        };
+    }
 
     /// <summary>
     /// `ViewSettings` nests three groups of its own, and they are exposed to
