@@ -442,7 +442,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         IProgress<Core.FileSystem.FetchProgress>?,
         CancellationToken,
         Task<Core.FileSystem.IconThemeArchive.Installed>> Installer { get; set; } =
-        Vaktari.Ui.Settings.IconThemeInstaller.InstallAsync;
+        Core.FileSystem.IconThemeInstaller.InstallAsync;
 
     [ObservableProperty] private bool _isFetchingIconTheme;
     [ObservableProperty] private double _iconThemeProgress;
@@ -506,7 +506,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <see cref="Installer"/>, so a test need not produce a real archive.
     /// </summary>
     public static Func<string, CancellationToken, Task<Core.FileSystem.IconThemeArchive.Installed>>
-        FileInstaller { get; set; } = Vaktari.Ui.Settings.IconThemeInstaller.InstallFromFileAsync;
+        FileInstaller { get; set; } = Core.FileSystem.IconThemeInstaller.InstallFromFileAsync;
 
     private async Task InstallAsync(
         string name,

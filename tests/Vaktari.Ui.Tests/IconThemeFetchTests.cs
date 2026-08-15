@@ -22,8 +22,8 @@ public sealed class IconThemeFetchTests : IDisposable
 
     public void Dispose()
     {
-        SettingsViewModel.Installer = Vaktari.Ui.Settings.IconThemeInstaller.InstallAsync;
-        SettingsViewModel.FileInstaller = Vaktari.Ui.Settings.IconThemeInstaller.InstallFromFileAsync;
+        SettingsViewModel.Installer = IconThemeInstaller.InstallAsync;
+        SettingsViewModel.FileInstaller = IconThemeInstaller.InstallFromFileAsync;
     }
 
     private static SettingsViewModel Model() => new(new Vaktari.Core.Settings.SettingsState());
@@ -187,18 +187,6 @@ public sealed class IconThemeFetchTests : IDisposable
         Assert.Empty(model.IconThemeFolder);
         Assert.Contains("could not be unpacked", model.IconThemeProblem, StringComparison.Ordinal);
         Assert.False(model.IsFetchingIconTheme);
-    }
-
-    /// <summary>The folder a pack lands in comes from the file's name, and the
-    /// double extension is the one that catches people out.</summary>
-    [Theory]
-    [InlineData("papirus-icon-theme-master.tar.gz", "papirus-icon-theme-master")]
-    [InlineData("Tela.tgz", "Tela")]
-    [InlineData("numix.zip", "numix")]
-    [InlineData("odd", "odd")]
-    public void The_pack_folder_is_named_after_the_file(string file, string expected)
-    {
-        Assert.Equal(expected, Vaktari.Ui.Settings.IconThemeInstaller.PackName(file));
     }
 
     /// <summary>Two fetches at once would race for the same folder, and the

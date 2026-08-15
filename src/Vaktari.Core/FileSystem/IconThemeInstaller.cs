@@ -1,7 +1,6 @@
 using System.Net.Http;
-using Vaktari.Core.FileSystem;
 
-namespace Vaktari.Ui.Settings;
+namespace Vaktari.Core.FileSystem;
 
 /// <summary>
 /// Fetches a theme and unpacks it, so that choosing one is a button rather than

@@ -9,6 +9,22 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [Unreleased]
+
+### Fixed
+
+- **Some icon themes were refused outright, and needn't have been.** A theme
+  may give an icon a name that points at another name rather than at a file,
+  several deep — Kora is built that way, and Vaktari could not see it at all,
+  while its folder icon sat there as an ordinary file that would have worked.
+  Those chains are now followed.
+
+- **The download progress bar sat at zero.** GitHub builds the Papirus archive
+  as it sends it and never says how large it will be, so there was no percentage
+  to show and nothing was shown — which reads as a stalled download rather than
+  a working one. It now counts megabytes and moves, and still shows a real
+  percentage where the server does give a size.
+
 ## [0.9.3] — 2026-08-14
 
 ### Added

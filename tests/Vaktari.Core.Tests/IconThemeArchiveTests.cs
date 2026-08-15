@@ -574,6 +574,18 @@ public sealed class IconThemeArchiveTests : IDisposable
         Assert.Empty(Directory.EnumerateFileSystemEntries(_destination));
     }
 
+    /// <summary>The folder a pack lands in comes from the file's name, and the
+    /// double extension is the one that catches people out.</summary>
+    [Theory]
+    [InlineData("papirus-icon-theme-master.tar.gz", "papirus-icon-theme-master")]
+    [InlineData("Tela.tgz", "Tela")]
+    [InlineData("numix.zip", "numix")]
+    [InlineData("odd", "odd")]
+    public void The_pack_folder_is_named_after_the_file(string file, string expected)
+    {
+        Assert.Equal(expected, IconThemeInstaller.PackName(file));
+    }
+
     /// <summary>Unpacking the same theme again replaces it rather than merging
     /// into it, or a smaller update would leave the previous version's icons
     /// lying underneath.</summary>

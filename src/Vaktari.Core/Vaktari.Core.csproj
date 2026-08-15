@@ -2,7 +2,16 @@
 
   <!-- Core must never reference System.Runtime.InteropServices, Avalonia, or
        any platform package. "Does this work on Fedora?" should be answerable
-       by reading this file rather than by grepping the codebase. -->
+       by reading this file rather than by grepping the codebase.
+
+       Core does now make network requests, which it did not before: fetching an
+       icon theme moved here from the interface assembly, because it had no UI
+       dependency and a second application was otherwise going to copy sixty
+       lines of HttpClient to call the same unpacker. HttpClient is in the
+       framework and behaves the same everywhere, so the rule above is intact —
+       but the widening is deliberate rather than accidental, and this is the
+       file where anybody would look to find that out. -->
+
 
   <PropertyGroup>
     <RootNamespace>Vaktari.Core</RootNamespace>

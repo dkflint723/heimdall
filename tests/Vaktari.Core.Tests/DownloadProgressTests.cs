@@ -1,8 +1,7 @@
 using Vaktari.Core.FileSystem;
-using Vaktari.Ui.Settings;
 using Xunit;
 
-namespace Vaktari.Ui.Tests;
+namespace Vaktari.Core.Tests;
 
 /// <summary>
 /// Reporting how far along a download is.
