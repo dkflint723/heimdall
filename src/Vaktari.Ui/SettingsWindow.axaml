@@ -331,7 +331,11 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- Indeterminate until a fraction means something: a server need
+                 not send a length, and the one theme in the catalogue is served
+                 chunked with none. A bar at zero reads as a hung download. -->
             <ProgressBar IsVisible="{Binding IsFetchingIconTheme}"
+                         IsIndeterminate="{Binding !IconThemeProgressKnown}"
                          Minimum="0" Maximum="1"
                          Height="3"
                          Value="{Binding IconThemeProgress}"/>

@@ -439,7 +439,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public static Func<
         Core.FileSystem.IconThemeSource,
-        IProgress<double>?,
+        IProgress<Core.FileSystem.FetchProgress>?,
         CancellationToken,
         Task<Core.FileSystem.IconThemeArchive.Installed>> Installer { get; set; } =
         Vaktari.Ui.Settings.IconThemeInstaller.InstallAsync;
@@ -447,6 +447,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _isFetchingIconTheme;
     [ObservableProperty] private double _iconThemeProgress;
     [ObservableProperty] private string _iconThemeStatus = "";
+
+    /// <summary>
+    /// Whether the fraction means anything yet.
+    ///
+    /// **False shows a moving indeterminate bar rather than an empty one.** A
+    /// server need not say how large a file is — GitHub does not, for the
+    /// theme in the catalogue — and a bar pinned at zero for a hundred and ten
+    /// megabytes reads as a hung download rather than as a working one.
+    /// </summary>
+    [ObservableProperty] private bool _iconThemeProgressKnown;
 
     public bool HasIconThemeStatus => IconThemeStatus.Length > 0;
 
@@ -501,21 +511,30 @@ public sealed partial class SettingsViewModel : ObservableObject
     private async Task InstallAsync(
         string name,
         string verb,
-        Func<IProgress<double>?, Task<Core.FileSystem.IconThemeArchive.Installed>> run)
+        Func<IProgress<Core.FileSystem.FetchProgress>?,
+             Task<Core.FileSystem.IconThemeArchive.Installed>> run)
     {
         if (IsFetchingIconTheme) return;
 
         IsFetchingIconTheme = true;
         IconThemeProgress = 0;
+
+        // Indeterminate until something says otherwise, which covers both a
+        // server that sends no length and unpacking a file already on disk.
+        IconThemeProgressKnown = false;
         IconThemeProblem = "";
         IconThemeStatus = $"{verb} {name}…";
 
         try
         {
-            var progress = new Progress<double>(p =>
+            var progress = new Progress<Core.FileSystem.FetchProgress>(p =>
             {
-                IconThemeProgress = p;
-                IconThemeStatus = $"{verb} {name}… {p:P0}";
+                IconThemeProgressKnown = p.Fraction is not null;
+                IconThemeProgress = p.Fraction ?? 0;
+
+                IconThemeStatus = p.Fraction is { } fraction
+                    ? $"{verb} {name}… {fraction:P0}"
+                    : $"{verb} {name}… {p.Megabytes:F0} MB";
             });
 
             var installed = await run(progress);
@@ -559,6 +578,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             IsFetchingIconTheme = false;
             IconThemeProgress = 0;
+            IconThemeProgressKnown = false;
         }
     }
 

@@ -33,7 +33,7 @@ public sealed class IconThemeFetchTests : IDisposable
     {
         SettingsViewModel.Installer = (_, progress, _) =>
         {
-            progress?.Report(0.5);
+            progress?.Report(new FetchProgress(55, 110));
 
             return Task.FromResult(new IconThemeArchive.Installed(
                 [@"C:\icons\Papirus", @"C:\icons\Papirus-Dark"], 4000, 40000, 1024));

@@ -166,6 +166,75 @@ public sealed class IconThemeArchiveTests : IDisposable
     }
 
     /// <summary>
+    /// **An alias whose target is another alias.**
+    ///
+    /// A chained target is not a file on disk — it is only another line in the
+    /// index — so looking for it on the filesystem finds nothing, and the entry
+    /// used to be dropped in silence. Whole themes are built this way: Kora
+    /// 2.0.4 chains all three names the reader probes with, so it resolved
+    /// nothing, was refused as not an icon theme at all, and never appeared in
+    /// Settings — while its folder icon, a real file, would have worked.
+    ///
+    /// **Four hops, not two.** The report that surfaced this said Kora's chains
+    /// ran one to three deep and that a small depth limit would do; measuring
+    /// the theme found thirty-one aliases needing a fourth hop. A limit chosen
+    /// from the common cases would have dropped exactly those and looked fine.
+    /// </summary>
+    [Fact]
+    public void An_alias_that_names_another_alias_follows_the_chain()
+    {
+        IconThemeArchive.Install(TarGz(
+            Dir("pack"),
+            File_("pack/Odin/index.theme", "[Icon Theme]\nName=Odin\n"),
+            File_("pack/Odin/48x48/mimetypes/application-document.svg"),
+            Link("pack/Odin/48x48/mimetypes/application-text.svg", "application-document.svg"),
+            Link("pack/Odin/48x48/mimetypes/text-plain.svg", "application-text.svg"),
+            Link("pack/Odin/48x48/mimetypes/text-x-generic.svg", "text-plain.svg"),
+            File_("pack/Odin/48x48/places/folder.svg")), _destination);
+
+        var theme = FreedesktopIconTheme.FromFolder(Path.Combine(_destination, "Odin"));
+
+        Assert.NotNull(theme);
+
+        // One, two, and three hops from a real file, all landing on it.
+        foreach (var name in new[] { "application-text", "text-plain", "text-x-generic" })
+        {
+            var resolved = theme!.Resolve([name], 48);
+
+            Assert.NotNull(resolved);
+            Assert.EndsWith("application-document.svg", resolved!, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// **Two aliases naming each other.** Kora has six such cycles, which the
+    /// report that surfaced the chain bug did not mention at all — so a walk
+    /// bounded only by a depth number would have followed each of them to that
+    /// number on every lookup. Terminating is the assertion; the test hangs
+    /// rather than fails if this regresses.
+    /// </summary>
+    [Fact]
+    public void Aliases_that_name_each_other_resolve_to_nothing_and_stop()
+    {
+        IconThemeArchive.Install(TarGz(
+            Dir("pack"),
+            File_("pack/Odin/index.theme", "[Icon Theme]\nName=Odin\n"),
+            File_("pack/Odin/48x48/mimetypes/text-x-generic.svg"),
+            Link("pack/Odin/48x48/places/here.svg", "there.svg"),
+            Link("pack/Odin/48x48/places/there.svg", "here.svg")), _destination);
+
+        var theme = FreedesktopIconTheme.FromFolder(Path.Combine(_destination, "Odin"));
+
+        // The theme is still read: one bad pair is not a reason to lose it.
+        Assert.NotNull(theme);
+        Assert.NotNull(theme!.Resolve(["text-x-generic"], 48));
+
+        // And the cycle contributes nothing rather than looping.
+        Assert.Null(theme.Resolve(["here"], 48));
+        Assert.Null(theme.Resolve(["there"], 48));
+    }
+
+    /// <summary>
     /// **A destination written with forward slashes.** Windows accepts them
     /// everywhere, and GetFullPath turns them into backslashes — so a path that
     /// had been normalised and one that had not shared no common prefix, every

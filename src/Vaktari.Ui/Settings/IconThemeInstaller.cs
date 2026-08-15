@@ -36,13 +36,16 @@ public static class IconThemeInstaller
     /// </summary>
     public static async Task<IconThemeArchive.Installed> InstallAsync(
         IconThemeSource source,
-        IProgress<double>? progress = null,
+        IProgress<FetchProgress>? progress = null,
         CancellationToken token = default)
     {
         using var http = new HttpClient { Timeout = Patience };
 
-        // GitHub redirects archive downloads to a storage host and refuses
-        // requests without one.
+        // Courtesy, not a requirement — and it was written down as a
+        // requirement, which the next person to read it would have believed.
+        // GitHub does redirect these to codeload.github.com, but it answers 200
+        // with no User-Agent header at all. Still sent, because a host that has
+        // to guess who is asking is entitled to a name.
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Vaktari");
 
         using var response = await http
@@ -114,11 +117,17 @@ public static class IconThemeInstaller
     /// Counts what passes through, so the window can show how far along a
     /// download is. Read-only and forward-only, which is all the archive reader
     /// asks for.
+    ///
+    /// Internal rather than private so the reporting can be tested without a
+    /// network. The defect it carried — reporting nothing whatsoever when the
+    /// server sends no length — is invisible from outside and is the ordinary
+    /// case for the one theme in the catalogue.
     /// </summary>
-    private sealed class CountingStream(Stream inner, long? expected, IProgress<double>? progress) : Stream
+    internal sealed class CountingStream(Stream inner, long? expected, IProgress<FetchProgress>? progress)
+        : Stream
     {
         private long _read;
-        private int _lastReported = -1;
+        private long _lastReported = -1;
 
         public override int Read(byte[] buffer, int offset, int count)
             => Report(inner.Read(buffer, offset, count));
@@ -127,19 +136,26 @@ public static class IconThemeInstaller
 
         private int Report(int read)
         {
-            if (read <= 0 || expected is not { } total || total <= 0) return read;
+            // **No early return when the length is unknown**, which is what
+            // this used to do — and GitHub, which serves the one theme in the
+            // catalogue, never sends a length. The bar sat at zero for a
+            // hundred and ten megabytes and read as a hung download.
+            if (read <= 0) return read;
 
             _read += read;
 
-            // Whole percents only. A progress bar told a hundred thousand times
-            // is a hundred thousand dispatcher posts and a slower download.
-            var percent = (int)(_read * 100 / total);
+            // Throttled either way, for the reason it always was: a bar told a
+            // hundred thousand times is a hundred thousand dispatcher posts and
+            // a slower download. Whole percents where there is a total to take
+            // a percent of, whole megabytes where there is not.
+            var step = expected is { } total && total > 0
+                ? _read * 100 / total
+                : _read / (1024 * 1024);
 
-            if (percent != _lastReported)
-            {
-                _lastReported = percent;
-                progress?.Report(Math.Clamp(percent / 100d, 0, 1));
-            }
+            if (step == _lastReported) return read;
+
+            _lastReported = step;
+            progress?.Report(new FetchProgress(_read, expected));
 
             return read;
         }
