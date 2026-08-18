@@ -165,7 +165,7 @@ public sealed partial class SearchViewModel : ObservableObject
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (generation != _generation) return;
-                Status = ex.Message;
+                Status = Vaktari.Core.FileSystem.Failures.Describe(ex, "search there");
                 IsSearching = false;
             });
         }

@@ -1792,6 +1792,14 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         if (!IsFilterVisible && FilterText.Length > 0) FilterText = "";
     }
 
+    /// <summary>
+    /// Rows whose names cannot be told apart by eye. Bound by every listing, so
+    /// a row can mark itself — see <see cref="ConfusableNames"/> for why this
+    /// exists at all.
+    /// </summary>
+    [ObservableProperty] private IReadOnlySet<string> _confusable =
+        new HashSet<string>(StringComparer.Ordinal);
+
     private void ApplyFilter()
     {
         var filtered = string.IsNullOrWhiteSpace(FilterText)
@@ -1806,6 +1814,15 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
         // Before the swap, so a row realized by ReplaceAll already has its
         // header available rather than reading a stale map.
         RecomputeGroups(sorted);
+
+        // **Names that differ only by something invisible**, so the rows can
+        // say so. Two files really can sit side by side looking identically
+        // named — one space before the extension is legal, distinct, and
+        // unreadable in any listing including Explorer's.
+        //
+        // Over the WHOLE folder rather than the filtered view: two names
+        // collide whether or not a filter happens to be showing both.
+        Confusable = ConfusableNames.Among(_all.Select(e => (e.FullPath, e.Name)));
 
         Entries.ReplaceAll(sorted);
 
@@ -2013,18 +2030,16 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
                 // not worth reporting over the one they are.
                 if (generation != _generation) return;
 
-                Status = $"{ex.GetType().Name}: {ex.Message}";
-
-                // Said in the listing as well as the status bar: the bar
-                // describes the active pane, so the other half of a split
-                // would otherwise report nothing whatsoever.
-                LoadError = ex switch
-                {
-                    DirectoryNotFoundException => "this folder is not there any more",
-                    UnauthorizedAccessException => "you do not have permission to open this folder",
-                    IOException io => io.Message,
-                    _ => ex.Message,
-                };
+                // **One sentence, said in both places.** The status bar used
+                // to report the exception's type — a fact about the code, not
+                // about the folder — while the listing behind it, from this
+                // very block, said something a person could act on.
+                //
+                // Said in the listing as well as the status bar because the bar
+                // describes the ACTIVE pane, so the other half of a split would
+                // otherwise report nothing whatsoever.
+                LoadError = Failures.Describe(ex, "open that folder");
+                Status = LoadError;
 
                 IsLoading = false;
             });

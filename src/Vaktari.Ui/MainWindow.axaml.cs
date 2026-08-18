@@ -256,6 +256,8 @@ public partial class MainWindow : Window
         _shell.ConnectionInfoRequested += (_, info) =>
             new ConnectionWindow(info).ShowDialog(this);
 
+        _shell.ShortcutsRequested += (_, _) => new ShortcutsWindow().ShowDialog(this);
+
         // **The question that was never asked.** Copy and move have understood
         // Overwrite, Skip and Cancel since they were written, and every caller
         // passed KeepBoth outright — so a newer file dropped over an older one

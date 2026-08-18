@@ -434,7 +434,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            if (pane is not null) pane.Status = ex.Message;
+            if (pane is not null) pane.Status = Vaktari.Core.FileSystem.Failures.Describe(ex);
         }
     }
 
@@ -933,6 +933,13 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenSettings() => SettingsRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Raised so the window can show the shortcut list; a view model
+    /// has no business owning a window.</summary>
+    public event EventHandler? ShortcutsRequested;
+
+    [RelayCommand]
+    private void ShowShortcuts() => ShortcutsRequested?.Invoke(this, EventArgs.Empty);
 
     public Func<WindowSession>? GeometryProvider { get; set; }
 

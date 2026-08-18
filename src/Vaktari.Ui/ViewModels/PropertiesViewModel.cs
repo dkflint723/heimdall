@@ -97,7 +97,8 @@ public sealed partial class PropertiesViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => AccessStatus = ex.Message);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                AccessStatus = Vaktari.Core.FileSystem.Failures.Describe(ex, "read that"));
         }
     }
 
@@ -187,7 +188,8 @@ public sealed partial class PropertiesViewModel : ObservableObject
         {
             // Unreadable, vanished, or a permission problem — said out loud
             // rather than leaving three empty rows and no explanation.
-            await Dispatcher.UIThread.InvokeAsync(() => HashStatus = ex.Message);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                HashStatus = Vaktari.Core.FileSystem.Failures.Describe(ex, "read that"));
         }
         finally
         {

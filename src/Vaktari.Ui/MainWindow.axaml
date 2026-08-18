@@ -1548,6 +1548,28 @@
                           <TextBlock Text="{Binding Name}" HorizontalAlignment="Left"
                                      FontSize="{DynamicResource FontSizeBase}" VerticalAlignment="Center"
                                      TextTrimming="CharacterEllipsis"/>
+
+                          <!-- **Two files can sit here looking identically
+                               named.** One space before the extension is legal,
+                               distinct to the filesystem, and unreadable in any
+                               listing including Explorer's — so the row says so
+                               rather than leaving somebody to wonder why there
+                               are two of something.
+
+                               Docked after the name, so it sits beside a short
+                               one rather than at the far edge of the column. -->
+                          <TextBlock Text="look-alike"
+                                     Margin="8,0,0,0" VerticalAlignment="Center"
+                                     FontSize="{DynamicResource FontSizeTiny}"
+                                     Foreground="{DynamicResource AccentColour}"
+                                     ToolTip.Tip="Another name here differs only by spacing or capitals.">
+                            <TextBlock.IsVisible>
+                              <MultiBinding Converter="{x:Static vm:FileConverters.Confusable}">
+                                <Binding Path="FullPath"/>
+                                <Binding Path="$parent[ListBox].((vm:PaneViewModel)DataContext).Confusable"/>
+                              </MultiBinding>
+                            </TextBlock.IsVisible>
+                          </TextBlock>
                         </DockPanel>
                         <!-- Where the row actually lives. Only in a recent
                              listing, where entries span the filesystem and the
@@ -1866,6 +1888,9 @@
     <KeyBinding Gesture="F2"             Command="{Binding ActiveTab.BeginRenameCommand}"/>
     <KeyBinding Gesture="Shift+F2"       Command="{Binding BatchRenameCommand}"/>
     <KeyBinding Gesture="F11"            Command="{Binding ToggleInfoCommand}"/>
+    <!-- Every key this application answers, in one place. It calls itself
+         keyboard-friendly and had nowhere to look them up. -->
+    <KeyBinding Gesture="F1"             Command="{Binding ShowShortcutsCommand}"/>
     <KeyBinding Gesture="F3"             Command="{Binding ToggleSplitCommand}"/>
     <KeyBinding Gesture="F8"             Command="{Binding ActiveTab.ToggleViewCommand}"/>
     <KeyBinding Gesture="Space"          Command="{Binding ActiveTab.TogglePreviewCommand}"/>

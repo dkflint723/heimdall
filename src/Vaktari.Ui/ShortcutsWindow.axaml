@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Vaktari.Ui.ViewModels"
+        x:Class="Vaktari.Ui.ShortcutsWindow"
+        Title="Keyboard shortcuts"
+        Background="{DynamicResource AppBackground}"
+        Foreground="{DynamicResource ViewText}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        Width="620" Height="620"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel>
+
+    <Border DockPanel.Dock="Bottom"
+            BorderBrush="{DynamicResource SeparatorColour}"
+            BorderThickness="0,1,0,0"
+            Padding="16,10">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Close" Padding="14,4"
+                IsCancel="True" IsDefault="True" Click="OnClose"/>
+        <TextBlock Text="Escape closes this."
+                   VerticalAlignment="Center"
+                   FontSize="{DynamicResource FontSizeTiny}"
+                   Foreground="{DynamicResource ViewDimText}"/>
+      </DockPanel>
+    </Border>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <!-- Two columns rather than a table: the keys are short and the
+           descriptions are not, so a shared grid would leave most of the width
+           empty and wrap the half that needs it. -->
+      <ItemsControl x:Name="Groups" Margin="20,16">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ShortcutGroup">
+            <StackPanel Margin="0,0,0,18" Spacing="6">
+
+              <TextBlock Text="{Binding Name}"
+                         FontSize="{DynamicResource FontSizeTiny}"
+                         Foreground="{DynamicResource ViewDimText}"/>
+
+              <ItemsControl ItemsSource="{Binding Keys}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:Shortcut">
+                    <Grid ColumnDefinitions="190,*" Margin="0,0,0,3">
+                      <!-- Monospaced, so the modifiers line up down the column
+                           and a gesture reads as something to press rather than
+                           as prose. -->
+                      <TextBlock Grid.Column="0" Text="{Binding Keys}"
+                                 FontFamily="monospace"
+                                 FontSize="{DynamicResource FontSizeSmall}"/>
+                      <TextBlock Grid.Column="1" Text="{Binding Does}"
+                                 TextWrapping="Wrap"
+                                 FontSize="{DynamicResource FontSizeSmall}"
+                                 Foreground="{DynamicResource ViewDimText}"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+</Window>

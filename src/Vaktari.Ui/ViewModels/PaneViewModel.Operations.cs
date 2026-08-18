@@ -108,7 +108,7 @@ public sealed partial class PaneViewModel
         }
         catch (Exception ex)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+            await Dispatcher.UIThread.InvokeAsync(() => Status = Failures.Describe(ex));
         }
     }
 
@@ -300,7 +300,7 @@ public sealed partial class PaneViewModel
         }
         catch (Exception ex)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+            await Dispatcher.UIThread.InvokeAsync(() => Status = Failures.Describe(ex));
         }
     }
 
@@ -316,7 +316,7 @@ public sealed partial class PaneViewModel
         }
         catch (Exception ex)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+            await Dispatcher.UIThread.InvokeAsync(() => Status = Failures.Describe(ex));
         }
     }
 
@@ -334,7 +334,7 @@ public sealed partial class PaneViewModel
         }
         catch (Exception ex)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+            await Dispatcher.UIThread.InvokeAsync(() => Status = Failures.Describe(ex));
         }
     }
 

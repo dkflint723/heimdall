@@ -158,6 +158,24 @@ public static class FileConverters
                 : 1.0;
         });
 
+    /// <summary>
+    /// Whether to mark a row as sharing its look with another.
+    ///
+    /// Same shape as CutFade and for the same reason: the row supplies its
+    /// path, the pane supplies the set, and binding the set is what makes every
+    /// visible row re-evaluate when a listing changes.
+    /// </summary>
+    public static readonly Avalonia.Data.Converters.IMultiValueConverter Confusable =
+        new Avalonia.Data.Converters.FuncMultiValueConverter<object?, bool>(values =>
+        {
+            var pair = values.ToList();
+
+            return pair.Count == 2
+                   && pair[0] is string path
+                   && pair[1] is IReadOnlySet<string> confusable
+                   && confusable.Contains(path);
+        });
+
     /// <summary>Accent along the active side's tab bar, transparent on the other.</summary>
     public static readonly IValueConverter ActiveEdge =
         new FuncValueConverter<bool, object?>(active =>
