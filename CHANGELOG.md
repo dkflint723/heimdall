@@ -29,6 +29,10 @@ should not be trusted for compatibility yet.
   type, and `notes.txt` no longer becomes whatever was typed with no extension.
   Folders are still selected whole, as are dotfiles like `.gitignore`.
 
+- **`Ctrl`+dragging onto the folder a file is already in makes a copy**, which
+  is how Explorer duplicates. Vaktari discarded those paths whatever key was
+  held, so the gesture did nothing.
+
 - **A plain drag now moves within a drive and copies between drives**, which is
   what Windows does. Vaktari moved for any drag that started inside the
   application, so dragging onto a place on another disk moved the file across

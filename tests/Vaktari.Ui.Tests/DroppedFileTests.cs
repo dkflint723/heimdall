@@ -33,7 +33,10 @@ public sealed class DroppedFileTests
     private static string At(string folder, string name) => Path.Combine(folder, name);
 
     private static DroppedFiles Read(string[] paths, params string[] formats) =>
-        DroppedFileReader.Decide(paths, formats, Destination);
+        DroppedFileReader.Decide(paths, formats, Destination, copying: false);
+
+    private static DroppedFiles Copying(params string[] paths) =>
+        DroppedFileReader.Decide(paths, ["File"], Destination, copying: true);
 
     [Fact]
     public void Ordinary_files_come_through()
@@ -95,6 +98,33 @@ public sealed class DroppedFileTests
 
         Assert.True(dropped.Any);
         Assert.Equal(At(Elsewhere, "new.txt"), Assert.Single(dropped.Paths));
+    }
+
+    /// <summary>
+    /// **Ctrl+drag onto the folder a file is already in makes a copy.** That is
+    /// how Explorer duplicates, and Vaktari discarded those paths whatever the
+    /// gesture meant — so the drag reported "that is already here" and did
+    /// nothing. Which key is held has to be decided before the filtering, not
+    /// after.
+    /// </summary>
+    [Fact]
+    public void Copying_onto_the_same_folder_duplicates_rather_than_refusing()
+    {
+        var dropped = Copying(At(Destination, "a.txt"));
+
+        Assert.True(dropped.Any);
+        Assert.Equal(At(Destination, "a.txt"), Assert.Single(dropped.Paths));
+    }
+
+    /// <summary>But a folder still cannot be copied into itself, whichever key
+    /// is held: the destination would be inside the thing being read.</summary>
+    [Fact]
+    public void A_folder_cannot_be_copied_into_itself()
+    {
+        var dropped = Copying(Destination);
+
+        Assert.False(dropped.Any);
+        Assert.Equal("a folder cannot be copied into itself", dropped.Refusal);
     }
 
     [Fact]

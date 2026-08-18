@@ -1540,16 +1540,22 @@ public partial class MainWindow : Window
 
         // Refuse a drop that would achieve nothing, so the cursor says so
         // before the click rather than a duplicate appearing after it.
-        var dragging = Input.DroppedFileReader.Read(e.DataTransfer, destination);
+        // **The effect first, from the raw paths, then what the drop means.**
+        // Copying keeps a file dropped into its own folder — that is Explorer's
+        // duplicate gesture — while moving discards it as a no-op, so the
+        // filtering cannot be decided before the intent is.
+        var offered = Input.DroppedFileReader.Offered(e.DataTransfer);
+        var effect = EffectFor(e.KeyModifiers, offered, destination);
 
-        if (!dragging.Any)
+        if (!Input.DroppedFileReader
+                .Read(e.DataTransfer, destination, effect == DragDropEffects.Copy).Any)
         {
             e.DragEffects = DragDropEffects.None;
             HighlightDropTarget(null);
             return;
         }
 
-        e.DragEffects = EffectFor(e.KeyModifiers, dragging.Paths, destination);
+        e.DragEffects = effect;
 
         // A place is its own target; highlighting a pane for it would point at
         // the wrong half of the window.
@@ -1596,7 +1602,11 @@ public partial class MainWindow : Window
         var target = place ?? FolderRowAt(e.Source);
         var destination = target ?? pane.CurrentPath;
 
-        var dropped = Input.DroppedFileReader.Read(e.DataTransfer, destination);
+        var move = EffectFor(
+            e.KeyModifiers, Input.DroppedFileReader.Offered(e.DataTransfer), destination)
+            == DragDropEffects.Move;
+
+        var dropped = Input.DroppedFileReader.Read(e.DataTransfer, destination, !move);
 
         if (!dropped.Any)
         {
@@ -1611,7 +1621,6 @@ public partial class MainWindow : Window
         }
 
         var paths = dropped.Paths;
-        var move = EffectFor(e.KeyModifiers, paths, destination) == DragDropEffects.Move;
 
         if (target is not null)
             pane.PasteIntoFolder(target, paths, move);

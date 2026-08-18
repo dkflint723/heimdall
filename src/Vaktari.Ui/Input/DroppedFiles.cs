@@ -30,15 +30,17 @@ public static class DroppedFileReader
     /// takes one cannot be tested, and burying the reasoning inside such a
     /// method would put it out of reach along with them.
     /// </summary>
-    public static DroppedFiles Read(IDataTransfer data, string destination)
+    public static DroppedFiles Read(IDataTransfer data, string destination, bool copying)
     {
-        var paths = (data.TryGetFiles() ?? [])
-            .Select(f => f.TryGetLocalPath())
-            .OfType<string>()
-            .ToList();
-
-        return Decide(paths, [.. data.Formats.Select(f => f.Identifier)], destination);
+        return Decide(Offered(data), [.. data.Formats.Select(f => f.Identifier)], destination, copying);
     }
+
+    /// <summary>The local paths a drop carries, before anything is decided about
+    /// them — which is what the copy-or-move rule needs to see.</summary>
+    public static IReadOnlyList<string> Offered(IDataTransfer data) =>
+        [.. (data.TryGetFiles() ?? [])
+            .Select(f => f.TryGetLocalPath())
+            .OfType<string>()];
 
     /// <summary>
     /// What a drop of these paths, offered in these formats, means here.
@@ -47,20 +49,32 @@ public static class DroppedFileReader
     /// even when it carried files.</param>
     /// <param name="formats">Format identifiers, which is how a drop carrying
     /// files with no paths is told from one carrying nothing.</param>
+    /// <param name="copying">Whether the drag means copy. **A file dropped into
+    /// the folder it already lives in is a no-op when moving and a duplicate
+    /// when copying** — Ctrl+drag onto the current folder is how Explorer makes
+    /// a second copy, and filtering those paths out regardless meant the
+    /// gesture did nothing at all.</param>
     internal static DroppedFiles Decide(
-        IReadOnlyList<string> offered, IReadOnlyList<string> formats, string destination)
+        IReadOnlyList<string> offered, IReadOnlyList<string> formats, string destination, bool copying)
     {
-        // A file dropped into the folder it already lives in is a no-op whether
-        // copying or moving — the guard that used to do this covered only
-        // copies, so a move produced "name (1)".
-        var usable = offered
-            .Where(p => p != destination
-                        && !string.Equals(Path.GetDirectoryName(p), destination, StringComparison.Ordinal))
-            .ToList();
+        var usable = copying
+            ? offered
+            : offered
+                .Where(p => p != destination
+                            && !string.Equals(
+                                Path.GetDirectoryName(p), destination, StringComparison.Ordinal))
+                .ToList();
+
+        // A folder cannot be copied into itself whichever key is held: the
+        // destination would be inside the thing being read.
+        usable = usable.Where(p => p != destination).ToList();
 
         if (usable.Count > 0) return new DroppedFiles(usable, "");
 
-        if (offered.Count > 0) return new DroppedFiles(usable, "that is already here");
+        if (offered.Count > 0)
+            return new DroppedFiles(usable, copying
+                ? "a folder cannot be copied into itself"
+                : "that is already here");
 
         if (HasVirtualFiles(formats))
             return new DroppedFiles(usable,
