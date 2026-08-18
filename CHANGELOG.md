@@ -9,6 +9,18 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [0.9.6] — 2026-08-17
+
+### Added
+
+- **Dragging files straight out of 7-Zip now works**, and out of Explorer's own
+  zip view. Those files have no location on disk until something asks for their
+  contents, which is why the drag appeared to do nothing — Vaktari now asks,
+  writes them out, and moves them where you dropped them.
+
+  If a future Avalonia closes the route this depends on, the drop goes back to
+  explaining that the files are inside an archive rather than failing.
+
 ## [0.9.5] — 2026-08-15
 
 ### Added
