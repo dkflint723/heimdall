@@ -9,6 +9,35 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [Unreleased]
+
+### Added
+
+- **`F1` lists every keyboard shortcut.** Vaktari calls itself keyboard-friendly
+  and had nowhere to look them up: a shortcut showed beside a right-click entry
+  when it happened to have one, and the rest — the filter, the view, redo, the
+  two spellings of the path bar — were not findable at all. A test checks the
+  list against the real bindings so it cannot fall behind, and it caught a wrong
+  key the first time it ran.
+
+- **Names that differ only by spacing or capitals are marked** in the details
+  view. Two files really can sit side by side looking identically named — one
+  space before an extension is legal, distinct, and unreadable in any listing,
+  including Explorer's.
+
+### Changed
+
+- **Vaktari no longer answers in .NET.** A folder it could not open used to
+  report `UnauthorizedAccessException: Access to the path ... is denied.` while
+  the listing behind it — from the very same place in the code — said "you do
+  not have permission to open this folder". The plain sentence is now used
+  everywhere: a full disk, a file another program has open, a missing folder and
+  a refused one all say so in words.
+
+- **A name typed while renaming is tidied**, the way Explorer tidies it. Windows
+  discards a trailing space or dot anyway, so a name typed with one asked for a
+  file and got a different one.
+
 ## [0.9.6] — 2026-08-17
 
 ### Added

@@ -36,6 +36,8 @@ go, and `Tab` cycles through them. `%ProgramFiles%`, `%SystemDrive%`, `~` and
 **Type to jump.** Start typing in any listing and the selection moves to the first
 matching name — no dialog, no search box.
 
+**`F1` lists every shortcut**, so none of the above has to be remembered.
+
 **Back, forward, up** on `Alt+←`, `Alt+→`, `Alt+↑`, and `F5` to refresh. If your
 mouse has the two buttons under the thumb, they go back and forward too — in a
 split, they move whichever half the pointer is over.
