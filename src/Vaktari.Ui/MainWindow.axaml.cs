@@ -579,6 +579,32 @@ public partial class MainWindow : Window
             return;
         }
 
+        // **Middle click, which everything else on this desktop uses for
+        // "open in a new tab" and "close this one".** A browser does it, and so
+        // does Explorer now that it has tabs.
+        //
+        // After the Ctrl+middle reset above, which keeps its own meaning.
+        if (properties.PointerUpdateKind is PointerUpdateKind.MiddleButtonPressed)
+        {
+            if (TabAt(e.Source) is { } tab)
+            {
+                _shell.CloseTabCommand.Execute(tab);
+                e.Handled = true;
+                return;
+            }
+
+            if (FolderRowAt(e.Source) is { } folder)
+            {
+                _shell.OpenInNewTab(folder);
+                e.Handled = true;
+                return;
+            }
+
+            // Anywhere else it means nothing, and is left alone rather than
+            // swallowed — a middle click on the listing background is how some
+            // desktops paste.
+        }
+
         // A click on empty listing space gives the LIST keyboard focus.
         //
         // Without this, pressing Home or End after clicking below the tiles did
@@ -1044,6 +1070,51 @@ public partial class MainWindow : Window
         return null;
     }
 
+    /// <summary>
+    /// The tab under the pointer, or null if the pointer is not on the strip.
+    ///
+    /// **Not PaneAt.** A tab and a listing both carry a PaneViewModel as their
+    /// data context — that is the whole point of the tab strip — so telling
+    /// them apart has to be done by container, or a middle-click in the listing
+    /// would close the tab it was aimed into.
+    /// </summary>
+    private static PaneViewModel? TabAt(object? source)
+    {
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            if (visual is Avalonia.Controls.Primitives.TabStripItem { DataContext: PaneViewModel pane })
+                return pane;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The sidebar place under the pointer, if a drop should go into it.
+    ///
+    /// Explorer takes a drop on the tree and on Quick access, and dragging a
+    /// file onto Downloads or a drive is how a good deal of filing gets done.
+    /// The sidebar accepted nothing, so the drag died over it with no cursor
+    /// and no explanation.
+    ///
+    /// Only where the place is a real folder: a share that is not mounted has
+    /// nowhere to put anything, and its own row already says so.
+    /// </summary>
+    private static string? PlaceAt(object? source)
+    {
+        for (var visual = source as Visual; visual is not null;
+             visual = visual.GetVisualParent())
+        {
+            if (visual is Control { DataContext: PlaceItemViewModel { IsAvailable: true } place }
+                && place.Path.Length > 0
+                && !VirtualPaths.IsVirtual(place.Path))
+                return place.Path;
+        }
+
+        return null;
+    }
+
     /// <summary>The folder row under the pointer, if the drop should go into it
     /// rather than into the directory being listed.</summary>
     private static string? FolderRowAt(object? source)
@@ -1440,14 +1511,19 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
 
-        if (PaneAt(e.Source) is not { } pane)
+        // The sidebar first: a place row has no pane above it, so asking for
+        // one would refuse the drop before the place was ever considered.
+        var place = PlaceAt(e.Source);
+
+        if (place is null && PaneAt(e.Source) is null)
         {
             e.DragEffects = DragDropEffects.None;
             HighlightDropTarget(null);
             return;
         }
 
-        var destination = FolderRowAt(e.Source) ?? pane.CurrentPath;
+        var pane = PaneAt(e.Source);
+        var destination = place ?? FolderRowAt(e.Source) ?? pane?.CurrentPath ?? "";
 
         // A virtual listing is a view, not a folder, so its background has
         // nowhere to put anything. The paste path refuses it too, but that
@@ -1464,26 +1540,34 @@ public partial class MainWindow : Window
 
         // Refuse a drop that would achieve nothing, so the cursor says so
         // before the click rather than a duplicate appearing after it.
-        if (!Input.DroppedFileReader.Read(e.DataTransfer, destination).Any)
+        var dragging = Input.DroppedFileReader.Read(e.DataTransfer, destination);
+
+        if (!dragging.Any)
         {
             e.DragEffects = DragDropEffects.None;
             HighlightDropTarget(null);
             return;
         }
 
-        e.DragEffects = EffectFor(e.KeyModifiers);
-        HighlightDropTarget(pane);
+        e.DragEffects = EffectFor(e.KeyModifiers, dragging.Paths, destination);
+
+        // A place is its own target; highlighting a pane for it would point at
+        // the wrong half of the window.
+        HighlightDropTarget(place is null ? pane : null);
     }
 
-    private DragDropEffects EffectFor(KeyModifiers modifiers)
-    {
-        // Explicit modifiers win; otherwise moving within the app and copying
-        // from outside it is what every desktop file manager does.
-        if (modifiers.HasFlag(KeyModifiers.Control)) return DragDropEffects.Copy;
-        if (modifiers.HasFlag(KeyModifiers.Shift)) return DragDropEffects.Move;
-
-        return _internalDrag ? DragDropEffects.Move : DragDropEffects.Copy;
-    }
+    /// <summary>
+    /// Copy or move. See <see cref="Input.DragEffect"/> for the rule — which is
+    /// Windows's, by volume, rather than the one this used to apply.
+    /// </summary>
+    private DragDropEffects EffectFor(
+        KeyModifiers modifiers, IReadOnlyList<string> sources, string destination) =>
+        Input.DragEffect.For(
+            modifiers.HasFlag(KeyModifiers.Control),
+            modifiers.HasFlag(KeyModifiers.Shift),
+            _internalDrag, sources, destination) == Input.DragIntent.Move
+            ? DragDropEffects.Move
+            : DragDropEffects.Copy;
 
     private void OnDragLeave(object? sender, DragEventArgs e) => HighlightDropTarget(null);
 
@@ -1500,11 +1584,16 @@ public partial class MainWindow : Window
     {
         HighlightDropTarget(null);
 
-        if (PaneAt(e.Source) is not { } pane) return;
+        // A sidebar place is a destination in its own right, and has no pane
+        // above it to ask about.
+        var place = PlaceAt(e.Source);
+        var pane = PaneAt(e.Source) ?? (place is null ? null : _shell.ActiveTab);
+
+        if (pane is null) return;
 
         // Dropping onto a folder row means into that folder, not into the
         // directory being listed — that is what the pointer was over.
-        var target = FolderRowAt(e.Source);
+        var target = place ?? FolderRowAt(e.Source);
         var destination = target ?? pane.CurrentPath;
 
         var dropped = Input.DroppedFileReader.Read(e.DataTransfer, destination);
@@ -1522,7 +1611,7 @@ public partial class MainWindow : Window
         }
 
         var paths = dropped.Paths;
-        var move = EffectFor(e.KeyModifiers) == DragDropEffects.Move;
+        var move = EffectFor(e.KeyModifiers, paths, destination) == DragDropEffects.Move;
 
         if (target is not null)
             pane.PasteIntoFolder(target, paths, move);
@@ -1877,7 +1966,12 @@ public partial class MainWindow : Window
         PromptBar.IsVisible = true;
 
         PromptInput.Focus();
-        PromptInput.SelectAll();
+
+        // **The name, not the extension** — which is what Explorer selects, and
+        // what makes "press F2 and type" replace the name rather than turn
+        // notes.txt into whatever-was-typed with no extension at all.
+        PromptInput.SelectionStart = 0;
+        PromptInput.SelectionEnd = Input.RenameSelection.LengthFor(entry.Name, entry.IsDirectory);
     }
 
     /// <summary>

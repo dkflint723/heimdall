@@ -1861,7 +1861,14 @@
     <!-- Alt rather than Ctrl for panels: Ctrl+1..9 already switches tabs,
          browser-style, and that convention is the stronger one. -->
     <KeyBinding Gesture="Ctrl+F"         Command="{Binding Sidebar.FocusSearchCommand}"/>
+    <!-- Ctrl+E is what Explorer binds search to; Ctrl+F is what
+         everything else does. Both, for the same reason as Alt+D. -->
+    <KeyBinding Gesture="Ctrl+E"         Command="{Binding Sidebar.FocusSearchCommand}"/>
     <KeyBinding Gesture="Ctrl+L"         Command="{Binding ActiveTab.BeginEditPathCommand}"/>
+    <!-- Alt+D is the other half of the same habit: Explorer and every
+         browser answer both, and which one somebody reaches for is a
+         matter of where they learned it. -->
+    <KeyBinding Gesture="Alt+D"          Command="{Binding ActiveTab.BeginEditPathCommand}"/>
     <!-- KDE's standard "Configure" gesture, so it is where a Plasma user reaches. -->
     <KeyBinding Gesture="Ctrl+Shift+OemComma" Command="{Binding OpenSettingsCommand}"/>
   </Window.KeyBindings>
@@ -1979,10 +1986,16 @@
                       <ItemsControl ItemsSource="{Binding Places}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:PlaceItemViewModel">
+                            <!-- Takes a drop, the way the tree and Quick access
+                                 do in Explorer. Dragging a file onto Downloads
+                                 or a drive is how a lot of filing gets done,
+                                 and the sidebar accepting nothing meant the
+                                 drag simply died over it. -->
                             <Button Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).GoToPlaceCommand}"
                                     CommandParameter="{Binding Path}"
                                     Background="{Binding IsCurrent, Converter={x:Static vm:FileConverters.CurrentRowFill}}"
                                     BorderThickness="0"
+                                    DragDrop.AllowDrop="True"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
                                     Padding="12,6" Opacity="{Binding Opacity}">

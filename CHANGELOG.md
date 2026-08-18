@@ -9,6 +9,32 @@ Newest first. Dates are the day the tag was cut. Versions follow
 [Status](README.md#status): there has been no stable release, and the numbers
 should not be trusted for compatibility yet.
 
+## [Unreleased]
+
+### Added
+
+- **Middle click opens a folder in a new tab, and closes a tab.** What every
+  browser does, and what Explorer does now that it has tabs.
+
+- **Drop files onto a place in the sidebar.** Downloads, a drive, anything
+  pinned. The sidebar accepted nothing at all before, so a drag simply died over
+  it.
+
+- **`Alt+D` and `Ctrl+E`** alongside `Ctrl+L` and `Ctrl+F`. Which one somebody
+  reaches for depends on where they learned it; Explorer answers both.
+
+### Changed
+
+- **Renaming selects the name and leaves the extension alone.** Press `F2` and
+  type, and `notes.txt` no longer becomes whatever was typed with no extension.
+  Folders are still selected whole, as are dotfiles like `.gitignore`.
+
+- **A plain drag now moves within a drive and copies between drives**, which is
+  what Windows does. Vaktari moved for any drag that started inside the
+  application, so dragging onto a place on another disk moved the file across
+  volumes when Explorer would have left the original alone. Holding `Ctrl` or
+  `Shift` still decides outright.
+
 ## [0.9.4] — 2026-08-15
 
 ### Added
