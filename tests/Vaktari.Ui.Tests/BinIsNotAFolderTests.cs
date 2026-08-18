@@ -64,6 +64,8 @@ public sealed class BinIsNotAFolderTests
         }
 
         public bool CanUndo => false;
+        public bool CanRedo => false;
+        public ValueTask RedoAsync(CancellationToken ct) => ValueTask.CompletedTask;
         public ValueTask UndoAsync(CancellationToken ct) => ValueTask.CompletedTask;
     }
 

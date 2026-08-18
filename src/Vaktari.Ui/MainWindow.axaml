@@ -1447,6 +1447,16 @@
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="fs:FileEntry">
                     <StackPanel>
+                      <!-- Greyed while cut and not yet pasted, as Explorer does.
+                           Binding the SET rather than a per-row flag is what
+                           makes every visible row re-evaluate the moment
+                           something is cut. -->
+                      <StackPanel.Opacity>
+                        <MultiBinding Converter="{x:Static vm:FileConverters.CutFade}">
+                          <Binding Path="FullPath"/>
+                          <Binding Path="$parent[Window].((vm:ShellViewModel)DataContext).CutPaths"/>
+                        </MultiBinding>
+                      </StackPanel.Opacity>
                       <!-- Group header, shown only on the first row of each run.
                            Part of the row rather than a separate list item, so
                            Entries stays a flat list of FileEntry and selection,
@@ -1625,6 +1635,16 @@
                     <!-- Hit-testable: see the details row. -->
                     <Panel Background="Transparent" Width="{DynamicResource CompactCellWidth}"
                            Height="{DynamicResource CompactCellHeight}">
+                      <!-- Greyed while cut and not yet pasted, as Explorer does.
+                           Binding the SET rather than a per-row flag is what
+                           makes every visible row re-evaluate the moment
+                           something is cut. -->
+                      <Panel.Opacity>
+                        <MultiBinding Converter="{x:Static vm:FileConverters.CutFade}">
+                          <Binding Path="FullPath"/>
+                          <Binding Path="$parent[Window].((vm:ShellViewModel)DataContext).CutPaths"/>
+                        </MultiBinding>
+                      </Panel.Opacity>
                       <Panel Width="{DynamicResource CompactWidth}"
                              Height="{DynamicResource CompactRowHeight}"
                              HorizontalAlignment="Left" VerticalAlignment="Top">
@@ -1719,6 +1739,16 @@
                   <DataTemplate x:DataType="fs:FileEntry">
                     <!-- Hit-testable: see the details row. -->
                     <Panel Background="Transparent" Width="{DynamicResource TileWidth}" Height="{DynamicResource TileHeight}" Margin="3">
+                      <!-- Greyed while cut and not yet pasted, as Explorer does.
+                           Binding the SET rather than a per-row flag is what
+                           makes every visible row re-evaluate the moment
+                           something is cut. -->
+                      <Panel.Opacity>
+                        <MultiBinding Converter="{x:Static vm:FileConverters.CutFade}">
+                          <Binding Path="FullPath"/>
+                          <Binding Path="$parent[Window].((vm:ShellViewModel)DataContext).CutPaths"/>
+                        </MultiBinding>
+                      </Panel.Opacity>
                       <Border Background="{DynamicResource AccentDim}" CornerRadius="6"
                               IsVisible="{Binding $parent[ListBoxItem].IsSelected}" IsHitTestVisible="False"/>
                       <!-- A tile has no left edge to bar, so selection gets an outline —
@@ -1841,6 +1871,10 @@
     <KeyBinding Gesture="Space"          Command="{Binding ActiveTab.TogglePreviewCommand}"/>
     <KeyBinding Gesture="F4"             Command="{Binding ActiveTab.OpenTerminalHereCommand}"/>
     <KeyBinding Gesture="Ctrl+Z"         Command="{Binding ActiveTab.UndoCommand}"/>
+    <!-- Both spellings of redo: Ctrl+Y is Windows', Ctrl+Shift+Z is what
+         everything with a text cursor answers. -->
+    <KeyBinding Gesture="Ctrl+Y"         Command="{Binding ActiveTab.RedoCommand}"/>
+    <KeyBinding Gesture="Ctrl+Shift+Z"   Command="{Binding ActiveTab.RedoCommand}"/>
     <KeyBinding Gesture="Ctrl+C"         Command="{Binding ActiveTab.CopySelectionToClipboardCommand}"/>
     <KeyBinding Gesture="Ctrl+X"         Command="{Binding ActiveTab.CutSelectionToClipboardCommand}"/>
     <KeyBinding Gesture="Ctrl+V"         Command="{Binding ActiveTab.PasteCommand}"/>

@@ -134,6 +134,30 @@ public static class FileConverters
                     Avalonia.Media.Color.FromArgb(18, accent.Color.R, accent.Color.G, accent.Color.B))
                 : Avalonia.Media.Brushes.Transparent);
 
+    /// <summary>
+    /// Dims a row that has been cut and not yet pasted, the way Explorer does.
+    ///
+    /// Opacity rather than a colour: it survives every theme, reads the same on
+    /// a selected row as on an unselected one, and does not have to be undone
+    /// for the icon, the name and the size columns separately.
+    ///
+    /// **Both values matter.** The path says which row this is; the set is what
+    /// changes when something is cut, and binding to it is what makes every
+    /// visible row re-evaluate at that moment.
+    /// </summary>
+    public static readonly Avalonia.Data.Converters.IMultiValueConverter CutFade =
+        new Avalonia.Data.Converters.FuncMultiValueConverter<object?, double>(values =>
+        {
+            var pair = values.ToList();
+
+            return pair.Count == 2
+                   && pair[0] is string path
+                   && pair[1] is IReadOnlySet<string> cut
+                   && cut.Contains(path)
+                ? 0.45
+                : 1.0;
+        });
+
     /// <summary>Accent along the active side's tab bar, transparent on the other.</summary>
     public static readonly IValueConverter ActiveEdge =
         new FuncValueConverter<bool, object?>(active =>

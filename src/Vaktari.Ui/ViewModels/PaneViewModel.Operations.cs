@@ -35,7 +35,18 @@ public sealed partial class PaneViewModel
             var verb = action == ClipboardAction.Cut ? "cut" : "copied";
 
             await Dispatcher.UIThread.InvokeAsync(() =>
-                Status = ok ? $"{paths.Count} item(s) {verb}" : "clipboard unavailable");
+            {
+                Status = ok ? $"{paths.Count} item(s) {verb}" : "clipboard unavailable";
+
+                // **Shown, not just remembered.** A cut used to look exactly
+                // like nothing having happened; Explorer greys what is pending.
+                // A copy clears the marks for the same reason the clipboard
+                // does — the earlier cut is no longer going to happen.
+                if (!ok) return;
+
+                if (action == ClipboardAction.Cut) CutMarks.Mark(paths);
+                else CutMarks.Clear();
+            });
         }
         catch (Exception ex)
         {
@@ -59,7 +70,16 @@ public sealed partial class PaneViewModel
             }
 
             await Dispatcher.UIThread.InvokeAsync(() =>
-                PasteInto(payload.Paths, payload.Action == ClipboardAction.Cut));
+            {
+                var moving = payload.Action == ClipboardAction.Cut;
+
+                PasteInto(payload.Paths, moving);
+
+                // The move is under way, so the marks have done their job.
+                // Left up, they would grey rows in the folder the files just
+                // left — which no longer contains them.
+                if (moving) CutMarks.Clear();
+            });
         }
         catch (Exception ex)
         {
@@ -292,6 +312,24 @@ public sealed partial class PaneViewModel
         try
         {
             await _ops.UndoAsync(CancellationToken.None).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() => _ = RefreshAsync());
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => Status = ex.Message);
+        }
+    }
+
+    /// <summary>Ctrl+Y, which every editor and file manager answers and this
+    /// one did not.</summary>
+    [RelayCommand]
+    public async Task RedoAsync()
+    {
+        if (_ops is null || !_ops.CanRedo) return;
+
+        try
+        {
+            await _ops.RedoAsync(CancellationToken.None).ConfigureAwait(false);
             await Dispatcher.UIThread.InvokeAsync(() => _ = RefreshAsync());
         }
         catch (Exception ex)

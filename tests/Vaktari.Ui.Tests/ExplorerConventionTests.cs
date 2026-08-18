@@ -156,6 +156,9 @@ public sealed class ExplorerConventionTests
     [InlineData("Alt+Up", "GoUp")]
     [InlineData("Alt+Left", "GoBack")]
     [InlineData("Alt+Right", "GoForward")]
+    [InlineData("Ctrl+Z", "Undo")]
+    [InlineData("Ctrl+Y", "Redo")]
+    [InlineData("Ctrl+Shift+Z", "Redo")]
     public void The_expected_shortcut_is_bound(string gesture, string command)
     {
         var markup = File.ReadAllText(MarkupPath("MainWindow.axaml"));

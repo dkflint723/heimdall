@@ -51,6 +51,11 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         _sharing = sharing;
 
+        // Marks are raised by a pane and shown by every listing, so the shell
+        // mirrors them rather than owning them.
+        CutMarks.Changed += (_, _) =>
+            Dispatcher.UIThread.Post(() => CutPaths = CutMarks.Paths);
+
         if (sharing is not null)
         {
             sharing.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -807,6 +812,16 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public bool ShowOpenInNewTabInMenu =>
         Menu.ShowOpenInNewTab && ActiveTab is { HasDirectorySelected: true, IsTrashListing: false };
+    /// <summary>
+    /// The files waiting to be moved by a paste, which every row binds to so a
+    /// cut one can be greyed the way Explorer greys it.
+    ///
+    /// Mirrored from <see cref="CutMarks"/> rather than owned here: cut is
+    /// raised by a pane, which has no reference to the shell, and the marks
+    /// apply to every listing rather than to the one that was cut from.
+    /// </summary>
+    [ObservableProperty] private IReadOnlySet<string> _cutPaths = CutMarks.Paths;
+
     public bool ShowAddToPlacesInMenu => Menu.ShowAddToPlaces;
 
     /// <summary>

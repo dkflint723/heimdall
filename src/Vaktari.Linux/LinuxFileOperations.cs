@@ -15,6 +15,7 @@ public sealed class LinuxFileOperations : IFileOperations
     private const int BufferSize = 1 << 20;
 
     private readonly ConcurrentStack<IUndoable> _undo = new();
+    private readonly ConcurrentStack<IUndoable> _redo = new();
 
     public bool CanUndo => !_undo.IsEmpty;
 
@@ -52,7 +53,7 @@ public sealed class LinuxFileOperations : IFileOperations
                 }
 
                 if (restored.Count > 0)
-                    _undo.Push(new UndoTrash(restored));
+                    Remember(new UndoTrash(restored));
 
                 handle.Complete();
             }
@@ -115,14 +116,32 @@ public sealed class LinuxFileOperations : IFileOperations
         if (Directory.Exists(path)) Directory.Move(path, target);
         else File.Move(path, target, overwrite: false);
 
-        _undo.Push(new UndoRename(target, path));
+        Remember(new UndoRename(target, path));
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>Records something new, and abandons the redo history — see the
+    /// Windows implementation for why.</summary>
+    private void Remember(IUndoable action)
+    {
+        _redo.Clear();
+        _undo.Push(action);
+    }
+
+    public bool CanRedo => !_redo.IsEmpty;
+
+    public async ValueTask RedoAsync(CancellationToken ct)
+    {
+        if (!_redo.TryPop(out var action)) return;
+
+        if (await action.UndoAsync(ct).ConfigureAwait(false) is { } undo) _undo.Push(undo);
     }
 
     public async ValueTask UndoAsync(CancellationToken ct)
     {
-        if (_undo.TryPop(out var action))
-            await action.UndoAsync(ct).ConfigureAwait(false);
+        if (_undo.TryPop(out var action)
+            && await action.UndoAsync(ct).ConfigureAwait(false) is { } redo)
+            _redo.Push(redo);
     }
 
     private IOperationHandle Run(
@@ -195,7 +214,7 @@ public sealed class LinuxFileOperations : IFileOperations
                 // Copies are not undoable: undoing one means deleting files,
                 // and an undo that deletes is not a safe default.
                 if (move && created.Count > 0)
-                    _undo.Push(new UndoMove(sources, destination));
+                    Remember(new UndoMove(sources, destination));
 
                 handle.Complete();
             }
@@ -263,46 +282,64 @@ public sealed class LinuxFileOperations : IFileOperations
     private readonly record struct PlannedItem(
         string Source, string Target, long Length, bool IsDirectory);
 
+    /// <summary>
+    /// Something that can be put back. Undoing returns what would redo it —
+    /// see the Windows implementation, which carries the reasoning.
+    /// </summary>
     private interface IUndoable
     {
-        ValueTask UndoAsync(CancellationToken ct);
+        ValueTask<IUndoable?> UndoAsync(CancellationToken ct);
     }
 
     private sealed class UndoRename(string current, string original) : IUndoable
     {
-        public ValueTask UndoAsync(CancellationToken ct)
+        public ValueTask<IUndoable?> UndoAsync(CancellationToken ct)
         {
             if (Directory.Exists(current)) Directory.Move(current, original);
             else if (File.Exists(current)) File.Move(current, original, overwrite: false);
-            return ValueTask.CompletedTask;
+            else return ValueTask.FromResult<IUndoable?>(null);
+
+            return ValueTask.FromResult<IUndoable?>(new UndoRename(original, current));
         }
     }
 
+    /// <summary>
+    /// **No inverse, deliberately.** Redoing a restore would mean trashing the
+    /// files again, and the trash entry they came from is gone — the redo would
+    /// create a new one, which is a different act from the one being repeated.
+    /// </summary>
     private sealed class UndoTrash(List<(string TrashName, string Original)> items) : IUndoable
     {
-        public ValueTask UndoAsync(CancellationToken ct)
+        public ValueTask<IUndoable?> UndoAsync(CancellationToken ct)
         {
             foreach (var (trashName, _) in items)
                 XdgTrash.Restore(trashName);
-            return ValueTask.CompletedTask;
+
+            return ValueTask.FromResult<IUndoable?>(null);
         }
     }
 
     private sealed class UndoMove(
         IReadOnlyList<string> sources, string destination) : IUndoable
     {
-        public ValueTask UndoAsync(CancellationToken ct)
+        public ValueTask<IUndoable?> UndoAsync(CancellationToken ct)
         {
+            var undone = new List<string>();
+
             foreach (var source in sources)
             {
                 var name = Path.GetFileName(Path.GetFullPath(source));
                 var moved = Path.Combine(destination, name);
 
-                if (File.Exists(moved) || Directory.Exists(moved))
-                    XdgTrash.MoveAcrossDevices(moved, source);
+                if (!File.Exists(moved) && !Directory.Exists(moved)) continue;
+
+                XdgTrash.MoveAcrossDevices(moved, source);
+                undone.Add(source);
             }
 
-            return ValueTask.CompletedTask;
+            // Forward again: the same sources into the same destination.
+            return ValueTask.FromResult<IUndoable?>(
+                undone.Count > 0 ? new UndoMove(undone, destination) : null);
         }
     }
 }

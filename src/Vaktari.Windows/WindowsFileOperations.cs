@@ -25,6 +25,7 @@ public sealed class WindowsFileOperations : IFileOperations
     private const int BufferSize = 1 << 20;
 
     private readonly ConcurrentStack<IUndoable> _undo = new();
+    private readonly ConcurrentStack<IUndoable> _redo = new();
 
     public bool CanUndo => !_undo.IsEmpty;
 
@@ -247,7 +248,7 @@ public sealed class WindowsFileOperations : IFileOperations
         // Before the undo entry, so a rename that is immediately undone leaves
         // the index where it started rather than one step behind.
 
-        _undo.Push(new UndoRename(target, path));
+        Remember(new UndoRename(target, path));
         return ValueTask.CompletedTask;
     }
 
@@ -293,10 +294,41 @@ public sealed class WindowsFileOperations : IFileOperations
         }
     }
 
+    /// <summary>
+    /// Records something new, and abandons the redo history.
+    ///
+    /// **Every application with an undo does this.** Once the history has been
+    /// departed from, a redo would apply to a state that no longer exists — it
+    /// would move a file that has since been renamed, or put back something
+    /// that was overwritten in the meantime.
+    /// </summary>
+    private void Remember(IUndoable action)
+    {
+        _redo.Clear();
+        _undo.Push(action);
+    }
+
+    public bool CanRedo => !_redo.IsEmpty;
+
+    /// <summary>
+    /// Puts back what an undo took away.
+    ///
+    /// The stack is emptied by any new operation, which is what every
+    /// application with an undo does: once the history has been departed from,
+    /// a redo would apply to a state that no longer exists.
+    /// </summary>
+    public async ValueTask RedoAsync(CancellationToken ct)
+    {
+        if (!_redo.TryPop(out var action)) return;
+
+        if (await action.UndoAsync(ct).ConfigureAwait(false) is { } undo) _undo.Push(undo);
+    }
+
     public async ValueTask UndoAsync(CancellationToken ct)
     {
-        if (_undo.TryPop(out var action))
-            await action.UndoAsync(ct).ConfigureAwait(false);
+        if (_undo.TryPop(out var action)
+            && await action.UndoAsync(ct).ConfigureAwait(false) is { } redo)
+            _redo.Push(redo);
     }
 
     private IOperationHandle Run(
@@ -406,7 +438,7 @@ public sealed class WindowsFileOperations : IFileOperations
                 // Copies are not undoable: undoing one means deleting files,
                 // and an undo that deletes is not a safe default.
                 if (move && landings.Count > 0)
-                    _undo.Push(new UndoMove(landings));
+                    Remember(new UndoMove(landings));
 
                 handle.Complete();
             }
@@ -640,20 +672,34 @@ public sealed class WindowsFileOperations : IFileOperations
     private readonly record struct PlannedItem(
         string Source, string Target, long Length, ItemKind Kind, bool IsRoot);
 
+    /// <summary>
+    /// Something that can be put back.
+    ///
+    /// **Undoing returns what would redo it**, rather than redo being a second
+    /// list kept in step by hand. Each of these already knows its own inverse —
+    /// a rename back is a rename, a move back is a move with the pair the other
+    /// way round — so asking the action itself is the one place that cannot
+    /// drift out of agreement with what was actually done.
+    ///
+    /// Null where there is no honest inverse. Restoring something from the bin
+    /// is the case: putting it back would mean trashing it again, and the
+    /// original trash entry is gone, so the redo would not be the same act.
+    /// </summary>
     private interface IUndoable
     {
-        ValueTask UndoAsync(CancellationToken ct);
+        ValueTask<IUndoable?> UndoAsync(CancellationToken ct);
     }
 
     private sealed class UndoRename(string current, string original) : IUndoable
     {
-        public ValueTask UndoAsync(CancellationToken ct)
+        public ValueTask<IUndoable?> UndoAsync(CancellationToken ct)
         {
             if (Directory.Exists(current)) RenameDirectory(current, original);
             else if (File.Exists(current)) File.Move(current, original, overwrite: false);
-            else return ValueTask.CompletedTask;
+            else return ValueTask.FromResult<IUndoable?>(null);
 
-            return ValueTask.CompletedTask;
+            // The same rename, the other way round.
+            return ValueTask.FromResult<IUndoable?>(new UndoRename(original, current));
         }
     }
 
@@ -669,8 +715,10 @@ public sealed class WindowsFileOperations : IFileOperations
     private sealed class UndoMove(
         IReadOnlyList<(string Source, string Target)> moved) : IUndoable
     {
-        public ValueTask UndoAsync(CancellationToken ct)
+        public ValueTask<IUndoable?> UndoAsync(CancellationToken ct)
         {
+            var undone = new List<(string Source, string Target)>();
+
             foreach (var (source, landed) in moved)
             {
 
@@ -684,9 +732,19 @@ public sealed class WindowsFileOperations : IFileOperations
                 {
                     MoveDirectory(landed, source);
                 }
+                else
+                {
+                    // Gone since the move — deleted, or moved again by hand.
+                    // Redoing it would move something that is not there.
+                    continue;
+                }
+
+                undone.Add((landed, source));
             }
 
-            return ValueTask.CompletedTask;
+            // The pairs the other way round: what was put back goes forward.
+            return ValueTask.FromResult<IUndoable?>(
+                undone.Count > 0 ? new UndoMove(undone) : null);
         }
 
         private static void MoveDirectory(string from, string to)

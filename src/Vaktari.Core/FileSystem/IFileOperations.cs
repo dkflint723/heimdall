@@ -81,4 +81,18 @@ public interface IFileOperations
 
     bool CanUndo { get; }
     ValueTask UndoAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Puts back what an undo took away — Ctrl+Y, which every editor and file
+    /// manager answers and this one did not.
+    ///
+    /// Emptied by any new operation, because once the history has been departed
+    /// from a redo would apply to a state that no longer exists. Not everything
+    /// has an honest inverse: restoring from the bin cannot be redone, because
+    /// the trash entry it came from is gone and re-trashing would not be the
+    /// same act.
+    /// </summary>
+    bool CanRedo { get; }
+
+    ValueTask RedoAsync(CancellationToken ct);
 }

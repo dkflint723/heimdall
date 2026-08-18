@@ -20,6 +20,17 @@ should not be trusted for compatibility yet.
   pinned. The sidebar accepted nothing at all before, so a drag simply died over
   it.
 
+- **Redo, on `Ctrl+Y` and `Ctrl+Shift+Z`.** Undo existed and redo did not,
+  which is half an undo: a move reversed by mistake could only be done again by
+  hand. Any new work abandons it, as it does everywhere — once the history has
+  been departed from, putting something back would apply to a state that no
+  longer exists. Restoring from the bin cannot be redone: the trash entry it
+  came from is gone, so re-trashing would not be the same act.
+
+- **Cut files are greyed until they are pasted**, the way Explorer greys them.
+  A cut used to look exactly like nothing having happened. A copy, a paste or
+  `Escape` clears the marks.
+
 - **`Alt+D` and `Ctrl+E`** alongside `Ctrl+L` and `Ctrl+F`. Which one somebody
   reaches for depends on where they learned it; Explorer answers both.
 

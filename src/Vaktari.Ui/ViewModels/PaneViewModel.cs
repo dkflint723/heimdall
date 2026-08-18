@@ -1778,6 +1778,11 @@ public sealed partial class PaneViewModel : ObservableObject, IDisposable
     {
         if (FilterText.Length > 0) FilterText = "";
         else IsFilterVisible = false;
+
+        // Escape also abandons a pending cut, as it does in Explorer. Last,
+        // so it never costs the filter its own use of the key: whichever of
+        // the two the user meant, the other is harmless.
+        CutMarks.Clear();
     }
 
     [RelayCommand]
