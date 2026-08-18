@@ -70,6 +70,14 @@ public interface IPlatform
     /// </summary>
     IShellMenuProvider? ShellMenu => null;
 
+    /// <summary>
+    /// Takes files a drop offers that are not on disk — the contents of an
+    /// archive, dragged straight out of 7-Zip or Explorer's zip view. Null
+    /// where the desktop has no such notion, which is every desktop but
+    /// Windows.
+    /// </summary>
+    IVirtualFileDrop? VirtualFileDrop => null;
+
     /// <summary>Null where the desktop exposes no readable theme.</summary>
     IThemeProvider? Theme { get; }
 

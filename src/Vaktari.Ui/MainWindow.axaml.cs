@@ -177,6 +177,7 @@ public partial class MainWindow : Window
         // context menu is entirely a platform fact, and on Linux the answer is
         // that there is no such thing.
         ViewModels.PaneViewModel.ShellMenu = platform.ShellMenu;
+        _virtualDrop = platform.VirtualFileDrop;
 
         // Logged at startup, not when the settings dialog opens. The count only
         // appeared on opening the dialog, which made "no line printed" mean two
@@ -1507,6 +1508,13 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Takes files a drop offers that are not on disk — dragged straight out of
+    /// 7-Zip, or Explorer's own zip view. Null on a platform with no such
+    /// notion, which is every one but Windows.
+    /// </summary>
+    private Vaktari.Core.FileSystem.IVirtualFileDrop? _virtualDrop;
+
     private void OnDragOver(object? sender, DragEventArgs e)
     {
         e.Handled = true;
@@ -1547,8 +1555,22 @@ public partial class MainWindow : Window
         var offered = Input.DroppedFileReader.Offered(e.DataTransfer);
         var effect = EffectFor(e.KeyModifiers, offered, destination);
 
-        if (!Input.DroppedFileReader
-                .Read(e.DataTransfer, destination, effect == DragDropEffects.Copy).Any)
+        var takeable = Input.DroppedFileReader
+            .Read(e.DataTransfer, destination, effect == DragDropEffects.Copy).Any;
+
+        // Files that live inside an archive have no paths yet, so nothing above
+        // sees them — but they can be had, and the cursor has to say so before
+        // the button is released rather than after.
+        if (!takeable && _virtualDrop?.Offers(e.DataTransfer) == true)
+        {
+            // Copy: there is no original to take away. A move out of an archive
+            // is not a thing the archive would survive.
+            e.DragEffects = DragDropEffects.Copy;
+            HighlightDropTarget(place is null ? pane : null);
+            return;
+        }
+
+        if (!takeable)
         {
             e.DragEffects = DragDropEffects.None;
             HighlightDropTarget(null);
@@ -1574,6 +1596,54 @@ public partial class MainWindow : Window
             _internalDrag, sources, destination) == Input.DragIntent.Move
             ? DragDropEffects.Move
             : DragDropEffects.Copy;
+
+    /// <summary>
+    /// Writes the drop's virtual files somewhere real and moves them into
+    /// place. False when there were none, or none could be had.
+    ///
+    /// **Moved, not copied.** What comes back was written to a temporary folder
+    /// for this drop alone and has no original to preserve, so copying would
+    /// leave a duplicate behind for nobody.
+    ///
+    /// Off the UI thread: unpacking is somebody else's code reading an archive,
+    /// and a large one would otherwise freeze the window mid-gesture.
+    /// </summary>
+    private bool TakeVirtual(IDataTransfer data, PaneViewModel pane, string destination)
+    {
+        if (_virtualDrop is not { } virtualDrop || !virtualDrop.Offers(data)) return false;
+
+        pane.Status = "taking the files out of the archive…";
+
+        _ = Task.Run(() =>
+        {
+            IReadOnlyList<string> taken;
+
+            try
+            {
+                taken = virtualDrop.Take(data);
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.UIThread.Post(() =>
+                    pane.Status = $"could not take those out of the archive: {ex.Message}");
+
+                return;
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (taken.Count == 0)
+                {
+                    pane.Status = "nothing came out of that archive";
+                    return;
+                }
+
+                pane.PasteIntoFolder(destination, taken, move: true);
+            });
+        });
+
+        return true;
+    }
 
     private void OnDragLeave(object? sender, DragEventArgs e) => HighlightDropTarget(null);
 
@@ -1610,10 +1680,18 @@ public partial class MainWindow : Window
 
         if (!dropped.Any)
         {
-            // **Said rather than silently ignored.** A drop that does nothing
-            // is indistinguishable from one that missed the pane, and dragging
-            // out of a zip opened in Explorer does exactly that — which reads
-            // as the application being unreliable rather than as a limit.
+            // **The contents of an archive, which have no paths until asked
+            // for.** This is what dragging out of 7-Zip carries, and looking
+            // only for paths saw an empty drop — so the drag did nothing at all
+            // and read as the application being unreliable.
+            if (TakeVirtual(e.DataTransfer, pane, destination))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            // Said rather than silently ignored: a drop that does nothing is
+            // indistinguishable from one that missed the pane.
             if (dropped.Refusal.Length > 0) pane.Status = dropped.Refusal;
 
             e.Handled = true;

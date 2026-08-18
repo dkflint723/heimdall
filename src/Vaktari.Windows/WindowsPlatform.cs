@@ -148,6 +148,10 @@ public sealed class WindowsPlatform : IPlatform
     /// </summary>
     public IShellMenuProvider? ShellMenu { get; } = new WindowsShellMenuProvider();
 
+    /// <summary>Takes the contents of an archive dragged straight out of
+    /// 7-Zip or Explorer's zip view, which arrive with no location on disk.</summary>
+    public IVirtualFileDrop? VirtualFileDrop { get; } = new VirtualFileDrop();
+
     /// <summary>
     /// **Was null on the grounds that the Recycle Bin needs COM, and that COM
     /// under NativeAOT would fail at runtime rather than at compile time.**
