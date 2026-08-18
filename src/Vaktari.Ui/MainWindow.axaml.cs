@@ -2091,8 +2091,15 @@ public partial class MainWindow : Window
                 _ = target?.EmptyTrashAsync();
                 break;
 
-            case PromptMode.Rename when !string.IsNullOrWhiteSpace(name) && name != entry.Name:
-                _ = target?.RenameAsync(entry, name);
+            // **Tidied first, as Explorer does.** Windows drops a trailing
+            // space or dot at the API level, so a name typed with one asks for
+            // something and gets something else — and the file it leaves behind
+            // can be awkward for other tools to open or remove. The line below
+            // has always trimmed for the same reason; renaming did not.
+            case PromptMode.Rename
+                when Vaktari.Core.FileSystem.FileNames.Clean(name) is { Length: > 0 } tidy
+                     && tidy != entry.Name:
+                _ = target?.RenameAsync(entry, tidy);
                 break;
 
             case PromptMode.Connect when !string.IsNullOrWhiteSpace(name):
