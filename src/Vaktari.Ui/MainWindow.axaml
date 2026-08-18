@@ -393,13 +393,38 @@
                        line up instead of each row sizing itself. The value is
                        the real size, not the multiplier behind it — a number
                        you can type is only useful if it means something. -->
-                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                  <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
 
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Text size"
-                               VerticalAlignment="Center" Margin="0,0,12,0"
+                    <!-- **Which pane these act on.**
+                         This flyout opens from the rightmost pane only, and
+                         opening it makes that side active — so "this pane"
+                         could only ever mean the right one, and the left half
+                         of a split had no way to be sized at all except with
+                         the wheel.
+
+                         Hidden when there is one pane: with nothing to choose
+                         between, a chooser is a question with one answer. -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Applies to"
+                               VerticalAlignment="Center" Margin="0,0,12,6"
+                               IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"
                                FontSize="{DynamicResource FontSizeSmall}"/>
 
-                    <Border Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right"
+                    <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right"
+                              Margin="0,0,0,6" MinHeight="26" Padding="8,0"
+                              FontSize="{DynamicResource FontSizeSmall}"
+                              IsVisible="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IsSplit}"
+                              AutomationProperties.Name="which pane the size controls change"
+                              SelectedIndex="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ScaleTargetIndex}">
+                      <ComboBoxItem Content="Left pane"/>
+                      <ComboBoxItem Content="Right pane"/>
+                      <ComboBoxItem Content="Both panes"/>
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Text size"
+                               VerticalAlignment="Center" Margin="0,0,12,6"
+                               FontSize="{DynamicResource FontSizeSmall}"/>
+
+                    <Border Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right"
                             CornerRadius="5" BorderThickness="1" Margin="0,0,0,6"
                             BorderBrush="{DynamicResource SeparatorColour}"
                             Background="{DynamicResource ViewBackground}">
@@ -414,7 +439,7 @@
                         <!-- LostFocus, not per keystroke: committing mid-type
                              would apply "1" on the way to "14". -->
                         <TextBox local:FocusBehavior.CommitOnEnter="True"
-                                 Text="{Binding ActiveTab.FontPoints, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 Text="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TargetFontPoints, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                  Width="48" Height="26" Padding="0" MinHeight="0"
                                  Background="Transparent" BorderThickness="0"
                                  FontSize="{DynamicResource FontSizeSmall}"
@@ -430,11 +455,11 @@
                       </StackPanel>
                     </Border>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Icon size"
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Icon size"
                                VerticalAlignment="Center" Margin="0,0,12,0"
                                FontSize="{DynamicResource FontSizeSmall}"/>
 
-                    <Border Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right"
+                    <Border Grid.Row="2" Grid.Column="1" HorizontalAlignment="Right"
                             CornerRadius="5" BorderThickness="1"
                             BorderBrush="{DynamicResource SeparatorColour}"
                             Background="{DynamicResource ViewBackground}">
@@ -447,7 +472,7 @@
                                 AutomationProperties.Name="smaller icons in this pane" ToolTip.Tip="smaller icons in this pane"
                                 Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).IconsSmallerCommand}"/>
                         <TextBox local:FocusBehavior.CommitOnEnter="True"
-                                 Text="{Binding ActiveTab.IconPixels, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 Text="{Binding $parent[Window].((vm:ShellViewModel)DataContext).TargetIconPixels, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                  Width="48" Height="26" Padding="0" MinHeight="0"
                                  Background="Transparent" BorderThickness="0"
                                  FontSize="{DynamicResource FontSizeSmall}"
@@ -469,9 +494,10 @@
                              FontSize="{DynamicResource FontSizeTiny}"
                              Foreground="{DynamicResource ViewDimText}"
                              TextWrapping="Wrap" Margin="0,2,0,4"/>
-                  <Button Content="Reset sizes  (ctrl+0)" HorizontalAlignment="Stretch"
+                  <Button Content="Reset sizes" HorizontalAlignment="Stretch"
                           FontSize="{DynamicResource FontSizeSmall}"
-                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ZoomResetCommand}"/>
+                          ToolTip.Tip="Resets whichever panes are chosen above. Ctrl+0 resets the one you are working in."
+                          Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).ResetTargetedScaleCommand}"/>
 
                   <Border Height="1" Background="{DynamicResource SeparatorColour}"/>
 

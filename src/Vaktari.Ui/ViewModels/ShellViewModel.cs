@@ -117,6 +117,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Null unless split. The XAML binds its column's visibility to this.</summary>
     [ObservableProperty] private PaneGroupViewModel? _right;
 
+
     [ObservableProperty] private PaneGroupViewModel _activeGroup = null!;
 
     [ObservableProperty] private double _splitRatio = 0.5;
@@ -163,10 +164,97 @@ public sealed partial class ShellViewModel : ObservableObject
         MarkDirty();
     }
 
-    [RelayCommand] private void FontLarger()  => ScalePane(ActiveTab, 0.1, 0);
-    [RelayCommand] private void FontSmaller() => ScalePane(ActiveTab, -0.1, 0);
-    [RelayCommand] private void IconsLarger()  => ScalePane(ActiveTab, 0, 0.15);
-    [RelayCommand] private void IconsSmaller() => ScalePane(ActiveTab, 0, -0.15);
+    // ---- which pane the menu's size controls act on ------------------------
+
+    /// <summary>
+    /// **The menu lives on the rightmost pane, and the sizes it changed were
+    /// always that pane's.** Opening the flyout makes its own side active, so
+    /// "this pane" could only ever mean the right one — leaving the left half
+    /// of a split with no way to be sized at all, by any route but the wheel.
+    ///
+    /// 0 left, 1 right, 2 both. Only meaningful while split; with one pane
+    /// there is nothing to choose between and the chooser is hidden.
+    /// </summary>
+    [ObservableProperty] private int _scaleTargetIndex = 1;
+
+    partial void OnScaleTargetIndexChanged(int value) => NotifyTargetSizes();
+
+    /// <summary>The panes the menu's controls act on.</summary>
+    private IEnumerable<PaneViewModel> ScaleTargets
+    {
+        get
+        {
+            if (!IsSplit)
+            {
+                // Nothing to choose between: whatever is showing.
+                if (ActiveTab is { } only) yield return only;
+
+                yield break;
+            }
+
+            if (ScaleTargetIndex is 0 or 2 && Left.ActiveTab is { } left) yield return left;
+            if (ScaleTargetIndex is 1 or 2 && Right?.ActiveTab is { } right) yield return right;
+        }
+    }
+
+    /// <summary>What the boxes show: the first target's size, since with both
+    /// selected there is no single answer and the left is the one read first.</summary>
+    private PaneViewModel? PrimaryTarget => ScaleTargets.FirstOrDefault();
+
+    public double TargetFontPoints
+    {
+        get => PrimaryTarget?.FontPoints ?? 14;
+        set
+        {
+            foreach (var pane in ScaleTargets.ToList()) pane.FontPoints = value;
+
+            NotifyTargetSizes();
+        }
+    }
+
+    public double TargetIconPixels
+    {
+        get => PrimaryTarget?.IconPixels ?? 16;
+        set
+        {
+            foreach (var pane in ScaleTargets.ToList()) pane.IconPixels = value;
+
+            NotifyTargetSizes();
+        }
+    }
+
+    /// <summary>The boxes follow the wheel and the buttons as well as their own
+    /// typing, or they would sit showing a size that is no longer true.</summary>
+    public void NotifyTargetSizes()
+    {
+        OnPropertyChanged(nameof(TargetFontPoints));
+        OnPropertyChanged(nameof(TargetIconPixels));
+    }
+
+    private void ScaleTargeted(double fontDelta, double iconDelta)
+    {
+        foreach (var pane in ScaleTargets.ToList()) ScalePane(pane, fontDelta, iconDelta);
+
+        NotifyTargetSizes();
+    }
+
+    [RelayCommand] private void FontLarger()  => ScaleTargeted(0.1, 0);
+    [RelayCommand] private void FontSmaller() => ScaleTargeted(-0.1, 0);
+    [RelayCommand] private void IconsLarger()  => ScaleTargeted(0, 0.15);
+    [RelayCommand] private void IconsSmaller() => ScaleTargeted(0, -0.15);
+
+    /// <summary>
+    /// The menu's reset, which follows the chooser. Ctrl+0 keeps its own
+    /// meaning — the pane being worked in — because a keystroke should not
+    /// depend on a menu setting somebody left on "both" an hour ago.
+    /// </summary>
+    [RelayCommand]
+    private void ResetTargetedScale()
+    {
+        foreach (var pane in ScaleTargets.ToList()) ResetPaneScale(pane);
+
+        NotifyTargetSizes();
+    }
 
     /// <summary>Ctrl+0 puts both back, since one control resetting only half of
     /// the sizing would be a puzzle rather than a reset.</summary>
@@ -1003,7 +1091,14 @@ public sealed partial class ShellViewModel : ObservableObject
             IconScale = ActiveTab?.IconScale ?? IconScale,
         };
 
-        pane.ScaleChanged += (_, _) => MarkDirty();
+        pane.ScaleChanged += (_, _) =>
+        {
+            MarkDirty();
+
+            // The boxes in the menu follow the wheel as well as their own
+            // typing, or they sit showing a size that is no longer true.
+            NotifyTargetSizes();
+        };
         pane.OperationStarted += OnOperationStarted;
         pane.PropertyChanged += OnPaneChanged;
         PaneCreated?.Invoke(this, pane);
@@ -1040,6 +1135,10 @@ public sealed partial class ShellViewModel : ObservableObject
 
     partial void OnRightChanged(PaneGroupViewModel? value)
     {
+        // Closing the split leaves the size chooser pointing at a pane that is
+        // no longer there, showing a number that belongs to nothing.
+        NotifyTargetSizes();
+
         OnPropertyChanged(nameof(IsSplit));
         OnPropertyChanged(nameof(OtherGroup));
         NotifySelectionMenu();

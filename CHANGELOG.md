@@ -13,6 +13,13 @@ should not be trusted for compatibility yet.
 
 ### Added
 
+- **The size controls say which pane they change.** The menu holding them lives
+  on the rightmost pane, and opening it makes that side active — so *this pane*
+  could only ever mean the right one, and the left half of a split could not be
+  sized at all except with the wheel. There is now a *left / right / both*
+  choice above them, shown only when the window is split. `Ctrl+0` still resets
+  whichever pane you are working in, whatever the menu is set to.
+
 - **`F1` lists every keyboard shortcut.** Vaktari calls itself keyboard-friendly
   and had nowhere to look them up: a shortcut showed beside a right-click entry
   when it happened to have one, and the rest — the filter, the view, redo, the
